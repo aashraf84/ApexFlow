@@ -1,0 +1,1839 @@
+     1→'use client'
+     2→
+     3→import { useNavigate } from '@/lib/use-navigate'
+     4→import { PageLayout } from '@/components/shared/page-layout'
+     5→import { useErpSystems, getErpIcon, getErpColor } from '@/lib/erp-data'
+     6→import { motion } from 'framer-motion'
+     7→import {
+     8→  ArrowRight, Zap, Globe, Shield, Layers, Code2, Monitor,
+     9→  Cpu, RefreshCw, Building2, Users,
+    10→  TrendingUp, Activity, Sparkles, Target, Rocket,
+    11→  BarChart3, Headphones, Lock, Smartphone, Check,
+    12→  Shirt, Hotel, GraduationCap, Pill, ShoppingCart,
+    13→  Factory, Truck, HardHat, HeartPulse, Palette,
+    14→  Wrench, Plane, UtensilsCrossed, TextCursorInput,
+    15→  Route as RouteIcon, Compass, Star, Clock, Database,
+    16→  ChevronLeft, ChevronRight, Play, Award, Phone,
+    17→} from 'lucide-react'
+    18→import { Button } from '@/components/ui/button'
+    19→import { InteractiveCard } from '@/components/shared/interactive-card'
+    20→import { useEffect, useRef, useState, useMemo, useCallback, useLayoutEffect } from 'react'
+    21→
+    22→/* ───────────────── Golden Gate Color Mapping ───────────────── */
+    23→const ggColorMap: Record<string, { bg: string; text: string; border: string; accent: string }> = {
+    24→  cyan:   { bg: 'bg-[var(--gg-cyan)]/10',   text: 'text-[var(--gg-cyan)]',   border: 'border-[var(--gg-cyan)]/20',   accent: 'bg-[var(--gg-cyan)]' },
+    25→  amber:  { bg: 'bg-[var(--gg-amber)]/10',  text: 'text-[var(--gg-amber)]',  border: 'border-[var(--gg-amber)]/20',  accent: 'bg-[var(--gg-amber)]' },
+    26→  violet: { bg: 'bg-[var(--gg-violet)]/10', text: 'text-[var(--gg-violet)]', border: 'border-[var(--gg-violet)]/20', accent: 'bg-[var(--gg-violet)]' },
+    27→  emerald:{ bg: 'bg-[var(--gg-green)]/10',  text: 'text-[var(--gg-green)]',  border: 'border-[var(--gg-green)]/20',  accent: 'bg-[var(--gg-green)]' },
+    28→  green:  { bg: 'bg-[var(--gg-green)]/10',  text: 'text-[var(--gg-green)]',  border: 'border-[var(--gg-green)]/20',  accent: 'bg-[var(--gg-green)]' },
+    29→  orange: { bg: 'bg-[var(--gg-amber)]/10',  text: 'text-[var(--gg-amber)]',  border: 'border-[var(--gg-amber)]/20',  accent: 'bg-[var(--gg-amber)]' },
+    30→  teal:   { bg: 'bg-[var(--gg-teal)]/10',   text: 'text-[var(--gg-teal)]',   border: 'border-[var(--gg-teal)]/20',   accent: 'bg-[var(--gg-teal)]' },
+    31→  rose:   { bg: 'bg-[var(--gg-rose)]/10',   text: 'text-[var(--gg-rose)]',   border: 'border-[var(--gg-rose)]/20',   accent: 'bg-[var(--gg-rose)]' },
+    32→  blue:   { bg: 'bg-[var(--gg-teal)]/10',   text: 'text-[var(--gg-teal)]',   border: 'border-[var(--gg-teal)]/20',   accent: 'bg-[var(--gg-teal)]' },
+    33→  pink:   { bg: 'bg-[var(--gg-rose)]/10',   text: 'text-[var(--gg-rose)]',   border: 'border-[var(--gg-rose)]/20',   accent: 'bg-[var(--gg-rose)]' },
+    34→}
+    35→
+    36→function getGgColor(colorName: string) {
+    37→  return ggColorMap[colorName] || ggColorMap['teal']
+    38→}
+    39→
+    40→/* ───────────────── Industry Data for Showcase ───────────────── */
+    41→const industryShowcase = [
+    42→  {
+    43→    name: 'Apparel & Textile', icon: Shirt, erp: 'ApparelFlow', color: 'cyan',
+    44→    desc: 'Track production orders, manage cutting/fabric inventory, and automate costing — from grey fabric to finished garment.',
+    45→    highlights: ['Production Orders', 'Fabric Inventory', 'Costing Engine', 'Shipment Tracking'],
+    46→    modules: [
+    47→      { name: 'Production Planning', desc: 'Cutting/stitching WIP tracking' },
+    48→      { name: 'Fabric Store', desc: 'Grey & finished fabric inventory' },
+    49→      { name: 'Costing Engine', desc: 'CM, fabric, trim costing' },
+    50→      { name: 'Shipment Tracker', desc: 'PO to delivery real-time' },
+    51→      { name: 'Payroll & HR', desc: 'Piece-rate & salary management' },
+    52→      { name: 'Quality Control', desc: 'Inspection at every stage' },
+    53→      { name: 'Buyer Portal', desc: 'Order status & approvals' },
+    54→      { name: 'Compliance', desc: 'BSCI, WRAP audit readiness' },
+    55→    ],
+    56→    workflow: ['Requisition → Cutting → Stitching → Washing → Packing → Shipment'],
+    57→  },
+    58→  {
+    59→    name: 'Hospitality', icon: Hotel, erp: 'HotelFlow', color: 'amber',
+    60→    desc: 'Front desk, housekeeping, F&B, and banquet management in one system. Built for hotels, guesthouses, and resorts.',
+    61→    highlights: ['Front Desk', 'Housekeeping', 'F&B Management', 'Revenue Analytics'],
+    62→    modules: [
+    63→      { name: 'Front Desk', desc: 'Check-in/out & room management' },
+    64→      { name: 'Housekeeping', desc: 'Room status & task scheduling' },
+    65→      { name: 'F&B POS', desc: 'Restaurant & room service billing' },
+    66→      { name: 'Banquet Mgmt', desc: 'Event booking & setup tracking' },
+    67→      { name: 'Revenue Mgmt', desc: 'Dynamic pricing & occupancy' },
+    68→      { name: 'Guest CRM', desc: 'Loyalty & preference tracking' },
+    69→      { name: 'Channel Mgr', desc: 'OTA sync & rate parity' },
+    70→      { name: 'Night Audit', desc: 'Auto daily closing & reports' },
+    71→    ],
+    72→    workflow: ['Reservation → Check-in → Service → Billing → Check-out → Feedback'],
+    73→  },
+    74→  {
+    75→    name: 'Education', icon: GraduationCap, erp: 'EduFlow', color: 'violet',
+    76→    desc: 'Student enrollment, fee collection, attendance, grading, and parent communication — all automated.',
+    77→    highlights: ['Enrollment', 'Fee Collection', 'Attendance', 'Grading System'],
+    78→    modules: [
+    79→      { name: 'Admissions', desc: 'Online forms & merit lists' },
+    80→      { name: 'Fee Mgmt', desc: 'Collection, scholarships & defaulters' },
+    81→      { name: 'Attendance', desc: 'Biometric & SMS alerts' },
+    82→      { name: 'Exams & Results', desc: 'GPA, transcripts & report cards' },
+    83→      { name: 'Timetable', desc: 'Auto scheduling & conflicts' },
+    84→      { name: 'LMS', desc: 'Assignments & online classes' },
+    85→      { name: 'Parent Portal', desc: 'Real-time student progress' },
+    86→      { name: 'HR & Payroll', desc: 'Staff management & salaries' },
+    87→    ],
+    88→    workflow: ['Admission → Enrollment → Attendance → Exams → Results → Certificate'],
+    89→  },
+    90→  {
+    91→    name: 'Pharmaceutical', icon: Pill, erp: 'PharmaFlow', color: 'emerald',
+    92→    desc: 'Batch tracking, expiry management, DRAP compliance, and distribution — built for Pakistan\'s pharma industry.',
+    93→    highlights: ['Batch Tracking', 'Expiry Alerts', 'DRAP Compliance', 'Distribution'],
+    94→    modules: [
+    95→      { name: 'Batch Tracking', desc: 'Lot-wise traceability end-to-end' },
+    96→      { name: 'Expiry Mgmt', desc: 'FEFO & auto expiry alerts' },
+    97→      { name: 'DRAP Compliance', desc: 'Regulatory docs & audit trails' },
+    98→      { name: 'Distribution', desc: 'Salesman routes & orders' },
+    99→      { name: 'QC Lab', desc: 'Stability & release testing' },
+   100→      { name: 'Production', desc: 'Formulation & BMR tracking' },
+   101→      { name: 'Purchase & Stores', desc: 'RM/PM inventory management' },
+   102→      { name: 'Financials', desc: 'GL, AP/AR & cost centers' },
+   103→    ],
+   104→    workflow: ['Procurement → Production → QC → Batch Release → Distribution → Returns'],
+   105→  },
+   106→  {
+   107→    name: 'Retail & POS', icon: ShoppingCart, erp: 'MartFlow', color: 'orange',
+   108→    desc: 'Multi-store POS, inventory sync, customer loyalty, and supplier management — from checkout to warehouse.',
+   109→    highlights: ['Multi-Store POS', 'Inventory Sync', 'Customer Loyalty', 'Supplier Portal'],
+   110→    modules: [
+   111→      { name: 'POS Terminal', desc: 'Fast checkout & barcode support' },
+   112→      { name: 'Inventory Sync', desc: 'Real-time multi-store stock' },
+   113→      { name: 'Loyalty Program', desc: 'Points, tiers & promotions' },
+   114→      { name: 'Supplier Portal', desc: 'Purchase orders & GRN' },
+   115→      { name: 'E-Commerce', desc: 'Online store integration' },
+   116→      { name: 'CRM', desc: 'Customer profiles & analytics' },
+   117→      { name: 'Promotions', desc: 'Discounts, bundles & coupons' },
+   118→      { name: 'Analytics', desc: 'Sales, margins & dashboards' },
+   119→    ],
+   120→    workflow: ['Purchase → Stock → POS Sale → Loyalty Points → Reorder → Analytics'],
+   121→  },
+   122→  {
+   123→    name: 'Construction', icon: HardHat, erp: 'BuildFlow', color: 'teal',
+   124→    desc: 'Project costing, contractor management, material procurement, and progress tracking for real estate developers.',
+   125→    highlights: ['Project Costing', 'Contractor Mgmt', 'Material Procurement', 'Progress Tracking'],
+   126→    modules: [
+   127→      { name: 'Project Costing', desc: 'BOQ & budget vs actual' },
+   128→      { name: 'Contractor Mgmt', desc: 'RA bills & retention tracking' },
+   129→      { name: 'Procurement', desc: 'Material requisition & PO' },
+   130→      { name: 'Site Progress', desc: 'Milestone & photo tracking' },
+   131→      { name: 'Cash Flow', desc: 'Payment schedules & forecasts' },
+   132→      { name: 'Inventory', desc: 'Site & central store control' },
+   133→      { name: 'HR & Equipment', desc: 'Labor & machinery allocation' },
+   134→      { name: 'Client Portal', desc: 'Booking & payment status' },
+   135→    ],
+   136→    workflow: ['Planning → Tender → Procurement → Construction → Inspection → Handover'],
+   137→  },
+   138→  {
+   139→    name: 'Manufacturing', icon: Factory, erp: 'FactoryFlow', color: 'orange',
+   140→    desc: 'BOM management, production scheduling, quality control, and work order tracking for factories of all sizes.',
+   141→    highlights: ['BOM Management', 'Production Scheduling', 'Quality Control', 'Work Orders'],
+   142→    modules: [
+   143→      { name: 'BOM & Recipes', desc: 'Multi-level bill of materials' },
+   144→      { name: 'Production Scheduling', desc: 'Machine & labor planning' },
+   145→      { name: 'Quality Control', desc: 'Incoming, in-process & final QC' },
+   146→      { name: 'Work Orders', desc: 'Job cards & operation tracking' },
+   147→      { name: 'Warehouse', desc: 'RM, WIP & FG management' },
+   148→      { name: 'Maintenance', desc: 'Preventive & breakdown logs' },
+   149→      { name: 'Costing', desc: 'Job costing & variance analysis' },
+   150→      { name: 'Procurement', desc: 'MRP & auto purchase suggestions' },
+   151→    ],
+   152→    workflow: ['Order → BOM → Scheduling → Production → QC → Delivery'],
+   153→  },
+   154→  {
+   155→    name: 'Food & Restaurant', icon: UtensilsCrossed, erp: 'FoodFlow', color: 'rose',
+   156→    desc: 'Recipe costing, kitchen orders, multi-branch management, and delivery integration for restaurants and chains.',
+   157→    highlights: ['Recipe Costing', 'Kitchen Display', 'Branch Sync', 'Delivery Hub'],
+   158→    modules: [
+   159→      { name: 'Recipe Costing', desc: 'Dish-wise cost & margin calc' },
+   160→      { name: 'Kitchen Display', desc: 'Order queue & prep timing' },
+   161→      { name: 'Branch Sync', desc: 'Multi-location inventory & menu' },
+   162→      { name: 'Delivery Hub', desc: 'Foodpanda, Uber Eats integration' },
+   163→      { name: 'POS', desc: 'Dine-in, takeaway & drive-thru' },
+   164→      { name: 'Purchasing', desc: 'Supplier orders & GRN tracking' },
+   165→      { name: 'Wastage Mgmt', desc: 'Spoilage tracking & reduction' },
+   166→      { name: 'Analytics', desc: 'Per-dish profitability reports' },
+   167→    ],
+   168→    workflow: ['Order → Kitchen → Prepare → Serve/Deliver → Bill → Analytics'],
+   169→  },
+   170→  {
+   171→    name: 'Healthcare', icon: HeartPulse, erp: 'HealthFlow', color: 'emerald',
+   172→    desc: 'Patient records, appointment scheduling, lab management, and billing — designed for clinics and hospitals.',
+   173→    highlights: ['Patient Records', 'Appointments', 'Lab Management', 'Billing'],
+   174→    modules: [
+   175→      { name: 'Patient EMR', desc: 'Digital medical records' },
+   176→      { name: 'Appointments', desc: 'Online booking & queue mgmt' },
+   177→      { name: 'Lab & Imaging', desc: 'Test orders & result tracking' },
+   178→      { name: 'Pharmacy', desc: 'Prescription & dispensing' },
+   179→      { name: 'Billing & Insurance', desc: 'Claims & co-pay processing' },
+   180→      { name: 'IPD Management', desc: 'Bed allocation & discharge' },
+   181→      { name: 'Doctor Portal', desc: 'Schedule & patient history' },
+   182→      { name: 'Inventory', desc: 'Medical supplies & equipment' },
+   183→    ],
+   184→    workflow: ['Registration → Consultation → Lab/Pharmacy → Billing → Follow-up'],
+   185→  },
+   186→  {
+   187→    name: 'Creative & Design', icon: Palette, erp: 'CreativeFlow', color: 'violet',
+   188→    desc: 'Project timelines, client billing, asset management, and collaboration tools for agencies and studios.',
+   189→    highlights: ['Project Timelines', 'Client Billing', 'Asset Management', 'Collaboration'],
+   190→    modules: [
+   191→      { name: 'Project Mgmt', desc: 'Kanban, Gantt & milestones' },
+   192→      { name: 'Time Tracking', desc: 'Billable hours & timesheets' },
+   193→      { name: 'Client Billing', desc: 'Retainers, milestones & invoicing' },
+   194→      { name: 'Asset Library', desc: 'Brand assets & file storage' },
+   195→      { name: 'Approvals', desc: 'Client review & feedback loop' },
+   196→      { name: 'Resource Planning', desc: 'Team capacity & allocation' },
+   197→      { name: 'CRM', desc: 'Leads, pipeline & client history' },
+   198→      { name: 'Reporting', desc: 'Profitability per project/client' },
+   199→    ],
+   200→    workflow: ['Brief → Design → Review → Approval → Delivery → Invoice'],
+   201→  },
+   202→  {
+   203→    name: 'Logistics', icon: Truck, erp: 'LogisticFlow', color: 'teal',
+   204→    desc: 'Shipment tracking, fleet management, route optimization, and warehouse operations in one platform.',
+   205→    highlights: ['Shipment Tracking', 'Fleet Management', 'Route Optimization', 'Warehouse Ops'],
+   206→    modules: [
+   207→      { name: 'Shipment Tracker', desc: 'Real-time consignment tracking' },
+   208→      { name: 'Fleet Mgmt', desc: 'Vehicle docs & mileage logs' },
+   209→      { name: 'Route Optimizer', desc: 'AI-powered delivery routes' },
+   210→      { name: 'Warehouse', desc: 'Inbound, outbound & putaway' },
+   211→      { name: 'COD Reconciliation', desc: 'Collection & deposit tracking' },
+   212→      { name: 'Client Portal', desc: 'Booking & tracking self-service' },
+   213→      { name: 'Vendor Mgmt', desc: '3PL & rider onboarding' },
+   214→      { name: 'Finance', desc: 'Revenue, costs & profitability' },
+   215→    ],
+   216→    workflow: ['Booking → Pickup → Transit → Hub → Last-Mile → POD'],
+   217→  },
+   218→  {
+   219→    name: 'Consumer Electronics', icon: Zap, erp: 'ElectroFlow', color: 'emerald',
+   220→    desc: 'Serial tracking, warranty management, installment plans, and service/repair workflows for electronics retailers.',
+   221→    highlights: ['Serial Tracking', 'Warranty Mgmt', 'Installment Plans', 'Service & Repair'],
+   222→    modules: [
+   223→      { name: 'Serial Tracking', desc: 'IMEI/serial from PO to sale' },
+   224→      { name: 'Warranty Mgr', desc: 'Claim processing & vendor RMA' },
+   225→      { name: 'Installments', desc: 'EMI plans & recovery tracking' },
+   226→      { name: 'Service Center', desc: 'Repair jobs & technician mgmt' },
+   227→      { name: 'Multi-Store POS', desc: 'Retail & wholesale billing' },
+   228→      { name: 'Purchase Mgmt', desc: 'Vendor orders & price lists' },
+   229→      { name: 'Customer CRM', desc: 'Purchase history & promotions' },
+   230→      { name: 'Stock Transfer', desc: 'Inter-branch inventory moves' },
+   231→    ],
+   232→    workflow: ['Purchase → Serial Register → Sale → Warranty → Service → Return'],
+   233→  },
+   234→  {
+   235→    name: 'Fleet & Transport', icon: Compass, erp: 'FleetFlow', color: 'cyan',
+   236→    desc: 'Vehicle tracking, fuel management, driver assignments, trip planning, and maintenance scheduling.',
+   237→    highlights: ['Vehicle Tracking', 'Fuel Management', 'Driver Assignment', 'Maintenance'],
+   238→    modules: [
+   239→      { name: 'GPS Tracking', desc: 'Live vehicle location & geofence' },
+   240→      { name: 'Fuel Mgmt', desc: 'Fill logs & consumption alerts' },
+   241→      { name: 'Driver Mgmt', desc: 'License, trips & performance' },
+   242→      { name: 'Maintenance', desc: 'Service schedules & expense logs' },
+   243→      { name: 'Trip Planner', desc: 'Route & stop management' },
+   244→      { name: 'Dispatch', desc: 'Job assignment & tracking' },
+   245→      { name: 'Compliance', desc: 'Vehicle fitness & insurance' },
+   246→      { name: 'Reporting', desc: 'Cost per km & utilization' },
+   247→    ],
+   248→    workflow: ['Assign Driver → Plan Route → Dispatch → Track → Fuel Log → Maintenance'],
+   249→  },
+   250→  {
+   251→    name: 'Travel & Tourism', icon: Plane, erp: 'TravelFlow', color: 'rose',
+   252→    desc: 'Hajj & Umrah packages, visa processing, itinerary management, and group booking automation.',
+   253→    highlights: ['Package Builder', 'Visa Processing', 'Itinerary Mgmt', 'Group Bookings'],
+   254→    modules: [
+   255→      { name: 'Package Builder', desc: 'Hajj, Umrah & tour packages' },
+   256→      { name: 'Visa Processing', desc: 'Document tracking & submission' },
+   257→      { name: 'Itinerary Mgr', desc: 'Day-wise travel planning' },
+   258→      { name: 'Group Bookings', desc: 'Batch reservations & payments' },
+   259→      { name: 'Hotel & Transport', desc: 'Vendor booking integration' },
+   260→      { name: 'CRM', desc: 'Customer profiles & follow-ups' },
+   261→      { name: 'Accounts', desc: 'Receivables, payables & margins' },
+   262→      { name: 'Agent Portal', desc: 'Sub-agent booking & commissions' },
+   263→    ],
+   264→    workflow: ['Inquiry → Package → Visa → Booking → Itinerary → Travel → Feedback'],
+   265→  },
+   266→  {
+   267→    name: 'Property Management', icon: Building2, erp: 'TenantFlow', color: 'teal',
+   268→    desc: 'Rent collection, lease management, maintenance requests, and tenant communication for property managers.',
+   269→    highlights: ['Rent Collection', 'Lease Management', 'Maintenance Requests', 'Tenant Portal'],
+   270→    modules: [
+   271→      { name: 'Rent Collection', desc: 'Auto invoices & payment tracking' },
+   272→      { name: 'Lease Mgmt', desc: 'Agreements, renewals & expiry' },
+   273→      { name: 'Maintenance', desc: 'Request tickets & vendor dispatch' },
+   274→      { name: 'Tenant Portal', desc: 'Online payments & requests' },
+   275→      { name: 'Vacancy Mgmt', desc: 'Listing & lead tracking' },
+   276→      { name: 'Utility Billing', desc: 'Electricity, gas & water split' },
+   277→      { name: 'Financials', desc: 'P&L per property & portfolio' },
+   278→      { name: 'Inspections', desc: 'Move-in/out condition reports' },
+   279→    ],
+   280→    workflow: ['Listing → Inquiry → Lease → Move-in → Rent → Maintenance → Renewal'],
+   281→  },
+   282→  {
+   283→    name: 'Distribution', icon: RouteIcon, erp: 'DistriFlow', color: 'amber',
+   284→    desc: 'Wholesale ordering, delivery routing, credit management, and multi-warehouse inventory for distributors.',
+   285→    highlights: ['Wholesale Orders', 'Delivery Routing', 'Credit Management', 'Multi-Warehouse'],
+   286→    modules: [
+   287→      { name: 'Order Mgmt', desc: 'Salesman & counter sales' },
+   288→      { name: 'Delivery Routing', desc: 'Optimized route planning' },
+   289→      { name: 'Credit Control', desc: 'Limits, aging & collections' },
+   290→      { name: 'Multi-Warehouse', desc: 'Stock across locations' },
+   291→      { name: 'Pricing Engine', desc: 'Customer & zone-wise pricing' },
+   292→      { name: 'Purchase & GRN', desc: 'Vendor orders & receiving' },
+   293→      { name: 'Sales Analytics', desc: 'Territory & brand performance' },
+   294→      { name: 'Financials', desc: 'GL, banking & reconciliation' },
+   295→    ],
+   296→    workflow: ['Order → Allocate → Pick → Route → Deliver → Invoice → Payment'],
+   297→  },
+   298→  {
+   299→    name: 'Textile', icon: TextCursorInput, erp: 'TextileFlow', color: 'rose',
+   300→    desc: 'Weaving, dyeing, and yarn tracking with production planning and quality inspection workflows.',
+   301→    highlights: ['Yarn Tracking', 'Weaving Plans', 'Dyeing Process', 'Quality Inspection'],
+   302→    modules: [
+   303→      { name: 'Yarn Store', desc: 'Lot tracking & consumption' },
+   304→      { name: 'Weaving Planner', desc: 'Loom allocation & production' },
+   305→      { name: 'Dyeing Process', desc: 'Recipe & shade management' },
+   306→      { name: 'Quality Inspection', desc: '4-point & shade checking' },
+   307→      { name: 'Finishing', desc: 'Process routing & tracking' },
+   308→      { name: 'Costing', desc: 'Per-yard cost analysis' },
+   309→      { name: 'Dispatch', desc: 'Packing & shipment management' },
+   310→      { name: 'Compliance', desc: 'Oeko-Tex & GOTS readiness' },
+   311→    ],
+   312→    workflow: ['Yarn → Warping → Weaving → Dyeing → Finishing → QC → Dispatch'],
+   313→  },
+   314→  {
+   315→    name: 'Automotive', icon: Wrench, erp: 'AutoFlow', color: 'cyan',
+   316→    desc: 'Workshop management, parts inventory, service history, and customer CRM for auto service centers.',
+   317→    highlights: ['Workshop Mgmt', 'Parts Inventory', 'Service History', 'Customer CRM'],
+   318→    modules: [
+   319→      { name: 'Job Cards', desc: 'Service booking & bay allocation' },
+   320→      { name: 'Parts Counter', desc: 'OEM & aftermarket inventory' },
+   321→      { name: 'Service History', desc: 'Vehicle maintenance timeline' },
+   322→      { name: 'Customer CRM', desc: 'Service reminders & follow-ups' },
+   323→      { name: 'Estimates', desc: 'Quotation & approval workflow' },
+   324→      { name: 'Invoicing', desc: 'Labor & parts billing' },
+   325→      { name: 'Procurement', desc: 'Vendor orders & stock alerts' },
+   326→      { name: 'Reporting', desc: 'Revenue, productivity & CSAT' },
+   327→    ],
+   328→    workflow: ['Booking → Diagnosis → Parts → Repair → QC → Delivery → Follow-up'],
+   329→  },
+   330→]
+   331→
+   332→/* ───────────────── Featured ERPs for Deep-Dive Section ───────────────── */
+   333→const featuredErps = [
+   334→  {
+   335→    name: 'ApparelFlow',
+   336→    industry: 'Apparel & Textile',
+   337→    icon: Shirt,
+   338→    color: 'cyan',
+   339→    tagline: 'From Fabric to Fashion — One System',
+   340→    details: 'ApparelFlow handles the entire garment lifecycle: fabric requisition, cutting plans, stitching WIP, washing, packing, and shipment. Track every order from PO to delivery with real-time production dashboards. Built for Pakistan\'s largest export industry.',
+   341→    modules: [
+   342→      { name: 'Production Planning', desc: 'Cutting/stitching WIP tracking' },
+   343→      { name: 'Fabric Store', desc: 'Grey & finished fabric inventory' },
+   344→      { name: 'Costing Engine', desc: 'CM, fabric, trim costing' },
+   345→      { name: 'Shipment Tracker', desc: 'PO to delivery real-time' },
+   346→      { name: 'Payroll & HR', desc: 'Piece-rate & salary management' },
+   347→      { name: 'Quality Control', desc: 'Inspection at every stage' },
+   348→      { name: 'Buyer Portal', desc: 'Order status & approvals' },
+   349→      { name: 'Compliance', desc: 'BSCI, WRAP audit readiness' },
+   350→    ],
+   351→    metrics: [
+   352→      { label: 'Production Orders', value: '40% faster processing' },
+   353→      { label: 'Fabric Waste', value: '15% reduction' },
+   354→      { label: 'Shipment Accuracy', value: '99.2% on-time' },
+   355→    ],
+   356→  },
+   357→  {
+   358→    name: 'HotelFlow',
+   359→    industry: 'Hospitality',
+   360→    icon: Hotel,
+   361→    color: 'amber',
+   362→    tagline: 'Every Guest. Every Stay. Perfect.',
+   363→    details: 'HotelFlow unifies front desk operations, housekeeping scheduling, F&B management, banquet bookings, and guest CRM into one seamless platform. From check-in to checkout, every touchpoint is managed — with real-time room availability and revenue analytics.',
+   364→    modules: [
+   365→      { name: 'Front Desk', desc: 'Check-in/out & room management' },
+   366→      { name: 'Housekeeping', desc: 'Room status & task scheduling' },
+   367→      { name: 'F&B POS', desc: 'Restaurant & room service billing' },
+   368→      { name: 'Banquet Mgmt', desc: 'Event booking & setup tracking' },
+   369→      { name: 'Revenue Mgmt', desc: 'Dynamic pricing & occupancy' },
+   370→      { name: 'Guest CRM', desc: 'Loyalty & preference tracking' },
+   371→      { name: 'Channel Mgr', desc: 'OTA sync & rate parity' },
+   372→      { name: 'Night Audit', desc: 'Auto daily closing & reports' },
+   373→    ],
+   374→    metrics: [
+   375→      { label: 'Check-in Time', value: '60% faster' },
+   376→      { label: 'Occupancy Rate', value: '+12% improvement' },
+   377→      { label: 'Guest Satisfaction', value: '4.8/5 average' },
+   378→    ],
+   379→  },
+   380→  {
+   381→    name: 'ElectroFlow',
+   382→    industry: 'Consumer Electronics',
+   383→    icon: Zap,
+   384→    color: 'emerald',
+   385→    tagline: 'Serial to Sale — Tracked End-to-End',
+   386→    details: 'ElectroFlow manages the complete electronics retail chain: serial-number tracking, warranty registration, installment plan management, supplier purchases, and service/repair workflows. Every unit is tracked from warehouse to customer to after-sales support.',
+   387→    modules: [
+   388→      { name: 'Serial Tracking', desc: 'IMEI/serial from PO to sale' },
+   389→      { name: 'Warranty Mgr', desc: 'Claim processing & vendor RMA' },
+   390→      { name: 'Installments', desc: 'EMI plans & recovery tracking' },
+   391→      { name: 'Service Center', desc: 'Repair jobs & technician mgmt' },
+   392→      { name: 'Multi-Store POS', desc: 'Retail & wholesale billing' },
+   393→      { name: 'Purchase Mgmt', desc: 'Vendor orders & price lists' },
+   394→      { name: 'Customer CRM', desc: 'Purchase history & promotions' },
+   395→      { name: 'Stock Transfer', desc: 'Inter-branch inventory moves' },
+   396→    ],
+   397→    metrics: [
+   398→      { label: 'Serial Tracking', value: '100% accuracy' },
+   399→      { label: 'Installment Recovery', value: '92% on-time' },
+   400→      { label: 'Service Turnaround', value: '35% faster' },
+   401→    ],
+   402→  },
+   403→  {
+   404→    name: 'FoodFlow',
+   405→    industry: 'Food & Restaurant',
+   406→    icon: UtensilsCrossed,
+   407→    color: 'rose',
+   408→    tagline: 'Kitchen to Customer — Without the Chaos',
+   409→    details: 'FoodFlow replaces the chaos of running restaurants with structured operations: recipe-based costing, kitchen display systems, multi-branch inventory sync, delivery partner integration, and real-time profitability tracking per dish, per branch, per day.',
+   410→    modules: [
+   411→      { name: 'Recipe Costing', desc: 'Dish-wise cost & margin calc' },
+   412→      { name: 'Kitchen Display', desc: 'Order queue & prep timing' },
+   413→      { name: 'Branch Sync', desc: 'Multi-location inventory & menu' },
+   414→      { name: 'Delivery Hub', desc: 'Foodpanda, Uber Eats integration' },
+   415→      { name: 'POS', desc: 'Dine-in, takeaway & drive-thru' },
+   416→      { name: 'Purchasing', desc: 'Supplier orders & GRN tracking' },
+   417→      { name: 'Wastage Mgmt', desc: 'Spoilage tracking & reduction' },
+   418→      { name: 'Analytics', desc: 'Per-dish profitability reports' },
+   419→    ],
+   420→    metrics: [
+   421→      { label: 'Food Cost', value: '18% reduction' },
+   422→      { label: 'Order Accuracy', value: '98.5% correct' },
+   423→      { label: 'Branch Expansion', value: '3x faster setup' },
+   424→    ],
+   425→  },
+   426→]
+   427→
+   428→/* ───────────────── Pipeline Stages Data ───────────────── */
+   429→const howItWorks = [
+   430→  {
+   431→    step: '01',
+   432→    title: 'Pick Your Industry',
+   433→    desc: 'Choose from 21 purpose-built ERP systems — each designed for a specific industry with the workflows, terminology, and reports you already know.',
+   434→    icon: <Target className="w-5 h-5" />,
+   435→  },
+   436→  {
+   437→    step: '02',
+   438→    title: 'Select Your Plan',
+   439→    desc: 'Starter for lean teams, Professional for growing businesses, Business for established operations, Enterprise for unlimited scale. Transparent pricing, no surprises.',
+   440→    icon: <BarChart3 className="w-5 h-5" />,
+   441→  },
+   442→  {
+   443→    step: '03',
+   444→    title: 'Secure Checkout',
+   445→    desc: 'Bank-grade encryption via Stripe. Pay with any major debit or credit card. Your license and invoice arrive instantly by email.',
+   446→    icon: <Lock className="w-5 h-5" />,
+   447→  },
+   448→  {
+   449→    step: '04',
+   450→    title: 'Go Live in 24 Hours',
+   451→    desc: 'Your ERP is provisioned within a day. Onboarding materials, video tutorials, and dedicated support get your team productive immediately.',
+   452→    icon: <Rocket className="w-5 h-5" />,
+   453→  },
+   454→]
+   455→
+   456→/* ═══════════════════════════════════════════════════════ */
+   457→/*  Animated Counter                                         */
+   458→/* ═══════════════════════════════════════════════════════ */
+   459→function AnimatedCounter({ target, suffix = '' }: { target: number; suffix?: string }) {
+   460→  const [display, setDisplay] = useState(0)
+   461→
+   462→  useEffect(() => {
+   463→    const duration = 1200
+   464→    const startTime = performance.now()
+   465→
+   466→    function animate(currentTime: number) {
+   467→      const elapsed = currentTime - startTime
+   468→      const progress = Math.min(elapsed / duration, 1)
+   469→      const eased = 1 - Math.pow(1 - progress, 3)
+   470→      const val = Math.round(eased * target * 10) / 10
+   471→      setDisplay(val)
+   472→      if (progress < 1) {
+   473→        requestAnimationFrame(animate)
+   474→      }
+   475→    }
+   476→    requestAnimationFrame(animate)
+   477→  }, [target])
+   478→
+   479→  return <span>{display}{suffix}</span>
+   480→}
+   481→
+   482→/* ───────────────── Spring transition presets ───────────────── */
+   483→const springSmooth = { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] as const }
+   484→const springSnappy = { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] as const }
+   485→
+   486→/* ═══════════════════════════════════════════════════════════════
+   487→   Featured ERP Showcase — Cinematic Immersive Layout
+   488→   - Horizontal tab bar with animated indicator
+   489→   - Large hero-style content card with staggered animations
+   490→   - Metrics with animated counters
+   491→   - Module badges with staggered entrance
+   492→   - Completely different visual from Industry Showcase carousel
+   493→   ═══════════════════════════════════════════════════════════════ */
+   494→
+   495→// Map color names to CSS var references
+   496→const colorVarMap: Record<string, string> = {
+   497→  cyan: 'var(--gg-cyan)',
+   498→  amber: 'var(--gg-amber)',
+   499→  violet: 'var(--gg-violet)',
+   500→  emerald: 'var(--gg-green)',
+   501→  green: 'var(--gg-green)',
+   502→  orange: 'var(--gg-amber)',
+   503→  teal: 'var(--gg-teal)',
+   504→  rose: 'var(--gg-rose)',
+   505→  blue: 'var(--gg-teal)',
+   506→  pink: 'var(--gg-rose)',
+   507→}
+   508→
+   509→function FeaturedErpShowcase() {
+   510→  const { navigate } = useNavigate()
+   511→  const [activeIdx, setActiveIdx] = useState(0)
+   512→  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 })
+   513→  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
+   514→  const containerRef = useRef<HTMLDivElement>(null)
+   515→
+   516→  const current = featuredErps[activeIdx]
+   517→  const CurrentIcon = current.icon
+   518→  const currentColorVar = colorVarMap[current.color] || 'var(--gg-teal)'
+   519→
+   520→  // Update tab indicator position
+   521→  useLayoutEffect(() => {
+   522→    const activeTab = tabRefs.current[activeIdx]
+   523→    if (activeTab && containerRef.current) {
+   524→      const containerRect = containerRef.current.getBoundingClientRect()
+   525→      const tabRect = activeTab.getBoundingClientRect()
+   526→      setTabIndicator({
+   527→        left: tabRect.left - containerRect.left,
+   528→        width: tabRect.width,
+   529→      })
+   530→    }
+   531→  }, [activeIdx])
+   532→
+   533→  return (
+   534→    <section className="py-20 sm:py-28 overflow-hidden">
+   535→      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+   536→        {/* ─── Section Header ─── */}
+   537→        <motion.div
+   538→          initial={{ opacity: 0, y: 20 }}
+   539→          whileInView={{ opacity: 1, y: 0 }}
+   540→          viewport={{ once: true }}
+   541→          transition={{ duration: 0.5 }}
+   542→          className="text-center mb-14"
+   543→        >
+   544→          <div className="gg-pill inline-flex items-center gap-2 bg-[var(--gg-amber)]/10 border border-[var(--gg-amber)]/20 px-4 py-1.5 mb-5">
+   545→            <Star className="w-3.5 h-3.5 text-[var(--gg-amber)]" />
+   546→            <span className="text-xs text-[var(--gg-amber)] font-medium tracking-wide">Featured Platforms</span>
+   547→          </div>
+   548→          <h2 className="text-3xl sm:text-5xl font-extrabold text-foreground">
+   549→            Built for <span className="text-gradient-golden">Your Industry</span>, Not Everyone Else&apos;s
+   550→          </h2>
+   551→          <p className="mt-3 text-muted-foreground max-w-2xl mx-auto text-base sm:text-lg">
+   552→            Explore four of our industry-specific platforms — each one engineered from the ground up for the sector it serves.
+   553→          </p>
+   554→        </motion.div>
+   555→
+   556→        {/* ─── Tab Bar ─── */}
+   557→        <div ref={containerRef} className="relative mb-6 sm:mb-8">
+   558→          <div className="flex gap-1 sm:gap-2 overflow-x-auto hide-scrollbar pb-1 justify-center">
+   559→            {featuredErps.map((erp, i) => {
+   560→              const Icon = erp.icon
+   561→              const isActive = i === activeIdx
+   562→              const itemColorVar = colorVarMap[erp.color] || 'var(--gg-teal)'
+   563→              return (
+   564→                <button
+   565→                  key={erp.name}
+   566→                  ref={(el) => { tabRefs.current[i] = el }}
+   567→                  onClick={() => setActiveIdx(i)}
+   568→                  className={`relative flex items-center gap-2.5 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl text-sm font-medium transition-all duration-300 shrink-0 whitespace-nowrap ${
+   569→                    isActive
+   570→                      ? 'text-foreground'
+   571→                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+   572→                  }`}
+   573→                >
+   574→                  <Icon
+   575→                    className="w-4.5 h-4.5 transition-colors duration-300"
+   576→                    style={{ color: isActive ? itemColorVar : undefined }}
+   577→                  />
+   578→                  <span>{erp.name}</span>
+   579→                </button>
+   580→              )
+   581→            })}
+   582→          </div>
+   583→          {/* Animated indicator line */}
+   584→          <motion.div
+   585→            className="absolute bottom-0 h-[3px] rounded-full"
+   586→            style={{ backgroundColor: currentColorVar }}
+   587→            animate={{ left: tabIndicator.left, width: tabIndicator.width }}
+   588→            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+   589→          />
+   590→        </div>
+   591→
+   592→        {/* ─── Content Card ─── */}
+   593→        <motion.div
+   594→          key={activeIdx}
+   595→          initial={{ opacity: 0, y: 20 }}
+   596→          animate={{ opacity: 1, y: 0 }}
+   597→          transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
+   598→        >
+   599→          <div className="relative rounded-2xl overflow-hidden">
+   600→            {/* Background ambient glow */}
+   601→            <div
+   602→              className="absolute inset-0 pointer-events-none transition-all duration-700"
+   603→              style={{
+   604→                background: `
+   605→                  radial-gradient(ellipse at 10% 20%, color-mix(in srgb, ${currentColorVar} 6%, transparent) 0%, transparent 50%),
+   606→                  radial-gradient(ellipse at 90% 80%, color-mix(in srgb, var(--gg-amber) 3%, transparent) 0%, transparent 50%)
+   607→                `,
+   608→              }}
+   609→            />
+   610→            {/* Top gradient accent line */}
+   611→            <div
+   612→              className="absolute top-0 left-0 right-0 h-[2px]"
+   613→              style={{
+   614→                background: `linear-gradient(90deg, transparent, ${currentColorVar}, transparent)`,
+   615→              }}
+   616→            />
+   617→
+   618→            <div className="relative bg-card/80 backdrop-blur-sm border border-border/50 rounded-2xl p-6 sm:p-8 lg:p-10">
+   619→              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+   620→                {/* ─── Left Column: Main Content ─── */}
+   621→                <div className="lg:col-span-7">
+   622→                  {/* Icon + Title */}
+   623→                  <div className="flex items-start gap-4 mb-6">
+   624→                    <motion.div
+   625→                      initial={{ scale: 0, rotate: -30 }}
+   626→                      animate={{ scale: 1, rotate: 0 }}
+   627→                      transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.1 }}
+   628→                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center shrink-0"
+   629→                      style={{ backgroundColor: `color-mix(in srgb, ${currentColorVar} 10%, transparent)` }}
+   630→                    >
+   631→                      <CurrentIcon
+   632→                        className="w-8 h-8 sm:w-10 sm:h-10"
+   633→                        style={{ color: currentColorVar }}
+   634→                      />
+   635→                    </motion.div>
+   636→                    <div>
+   637→                      <motion.h3
+   638→                        initial={{ opacity: 0, x: -20 }}
+   639→                        animate={{ opacity: 1, x: 0 }}
+   640→                        transition={{ duration: 0.4, delay: 0.15 }}
+   641→                        className="text-2xl sm:text-3xl font-bold text-foreground"
+   642→                      >
+   643→                        {current.name}
+   644→                      </motion.h3>
+   645→                      <motion.span
+   646→                        initial={{ opacity: 0, x: -20 }}
+   647→                        animate={{ opacity: 1, x: 0 }}
+   648→                        transition={{ duration: 0.4, delay: 0.2 }}
+   649→                        className="text-sm font-semibold"
+   650→                        style={{
+   651→                          background: `linear-gradient(135deg, ${currentColorVar}, color-mix(in srgb, ${currentColorVar} 70%, var(--gg-amber)))`,
+   652→                          WebkitBackgroundClip: 'text',
+   653→                          WebkitTextFillColor: 'transparent',
+   654→                          backgroundClip: 'text',
+   655→                        }}
+   656→                      >
+   657→                        {current.industry}
+   658→                      </motion.span>
+   659→                    </div>
+   660→                  </div>
+   661→
+   662→                  {/* Tagline */}
+   663→                  <motion.p
+   664→                    initial={{ opacity: 0, y: 10 }}
+   665→                    animate={{ opacity: 1, y: 0 }}
+   666→                    transition={{ duration: 0.4, delay: 0.25 }}
+   667→                    className="text-xl sm:text-2xl font-bold text-foreground mb-4"
+   668→                  >
+   669→                    &ldquo;{current.tagline}&rdquo;
+   670→                  </motion.p>
+   671→
+   672→                  {/* Description */}
+   673→                  <motion.p
+   674→                    initial={{ opacity: 0, y: 10 }}
+   675→                    animate={{ opacity: 1, y: 0 }}
+   676→                    transition={{ duration: 0.4, delay: 0.3 }}
+   677→                    className="text-muted-foreground leading-relaxed mb-6 text-sm sm:text-base"
+   678→                  >
+   679→                    {current.details}
+   680→                  </motion.p>
+   681→
+   682→                  {/* Module badges */}
+   683→                  {current.modules && (
+   684→                    <motion.div
+   685→                      initial={{ opacity: 0, y: 10 }}
+   686→                      animate={{ opacity: 1, y: 0 }}
+   687→                      transition={{ duration: 0.4, delay: 0.35 }}
+   688→                      className="mb-6"
+   689→                    >
+   690→                      <div className="flex items-center justify-between mb-3">
+   691→                        <div className="text-[10px] uppercase tracking-wider text-foreground/50 font-semibold">Modules</div>
+   692→                        <div
+   693→                          className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+   694→                          style={{
+   695→                            backgroundColor: `color-mix(in srgb, ${currentColorVar} 10%, transparent)`,
+   696→                            color: currentColorVar,
+   697→                          }}
+   698→                        >
+   699→                          {current.modules.length} included
+   700→                        </div>
+   701→                      </div>
+   702→                      <div className="grid grid-cols-2 gap-2">
+   703→                        {current.modules.map((mod, mi) => {
+   704→                          const modName = typeof mod === 'string' ? mod : mod.name
+   705→                          const modDesc = typeof mod === 'string' ? '' : mod.desc
+   706→                          return (
+   707→                            <motion.div
+   708→                              key={modName}
+   709→                              initial={{ opacity: 0, scale: 0.9 }}
+   710→                              animate={{ opacity: 1, scale: 1 }}
+   711→                              transition={{ duration: 0.3, delay: 0.4 + mi * 0.05 }}
+   712→                              className="rounded-xl p-3 border bg-background/30 hover:bg-background/70 transition-all duration-200 cursor-default group relative overflow-hidden"
+   713→                              style={{
+   714→                                borderColor: `color-mix(in srgb, ${currentColorVar} 15%, transparent)`,
+   715→                              }}
+   716→                            >
+   717→                              {/* Module number badge */}
+   718→                              <span
+   719→                                className="absolute top-1 right-1.5 text-[9px] font-bold opacity-20"
+   720→                                style={{ color: currentColorVar }}
+   721→                              >
+   722→                                {String(mi + 1).padStart(2, '0')}
+   723→                              </span>
+   724→                              <div className="flex items-start gap-2">
+   725→                                <div
+   726→                                  className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 mt-0.5"
+   727→                                  style={{ backgroundColor: `color-mix(in srgb, ${currentColorVar} 10%, transparent)` }}
+   728→                                >
+   729→                                  <div
+   730→                                    className="w-1.5 h-1.5 rounded-full"
+   731→                                    style={{ backgroundColor: currentColorVar }}
+   732→                                  />
+   733→                                </div>
+   734→                                <div className="min-w-0">
+   735→                                  <div className="text-xs font-semibold text-foreground leading-tight">{modName}</div>
+   736→                                  {modDesc && (
+   737→                                    <div className="text-[10px] text-foreground/60 leading-snug mt-0.5 line-clamp-2">{modDesc}</div>
+   738→                                  )}
+   739→                                </div>
+   740→                              </div>
+   741→                            </motion.div>
+   742→                          )
+   743→                        })}
+   744→                      </div>
+   745→                    </motion.div>
+   746→                  )}
+   747→
+   748→                  {/* CTA Buttons */}
+   749→                  <motion.div
+   750→                    initial={{ opacity: 0, y: 10 }}
+   751→                    animate={{ opacity: 1, y: 0 }}
+   752→                    transition={{ duration: 0.4, delay: 0.5 }}
+   753→                    className="flex flex-col sm:flex-row gap-3"
+   754→                  >
+   755→                    <Button
+   756→                      className="btn-glow bg-[var(--gg-vermillion)] text-white font-semibold rounded-xl px-6 h-11 transition-all duration-200 group hover:bg-[var(--gg-vermillion-light)]"
+   757→                      onClick={() => navigate('erp-detail', current.name.toLowerCase())}
+   758→                    >
+   759→                      Explore {current.name}
+   760→                      <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-200 group-hover:translate-x-1" />
+   761→                    </Button>
+   762→                    <Button
+   763→                      variant="outline"
+   764→                      className="border-[var(--gg-vermillion)]/30 text-[var(--gg-vermillion)] hover:bg-[var(--gg-vermillion)]/5 rounded-xl px-6 h-11"
+   765→                      onClick={() => navigate('pricing')}
+   766→                    >
+   767→                      View Pricing
+   768→                    </Button>
+   769→                  </motion.div>
+   770→                </div>
+   771→
+   772→                {/* ─── Right Column: Metrics + Visual ─── */}
+   773→                <div className="lg:col-span-5">
+   774→                  {/* Metrics Cards */}
+   775→                  <div className="space-y-3 mb-6">
+   776→                    {current.metrics.map((metric, mi) => (
+   777→                      <motion.div
+   778→                        key={metric.label}
+   779→                        initial={{ opacity: 0, x: 30 }}
+   780→                        animate={{ opacity: 1, x: 0 }}
+   781→                        transition={{ duration: 0.4, delay: 0.3 + mi * 0.1 }}
+   782→                        className="relative rounded-xl p-4 border border-border/50 bg-background/50 backdrop-blur-sm overflow-hidden group"
+   783→                      >
+   784→                        {/* Left accent bar */}
+   785→                        <div
+   786→                          className="absolute left-0 top-0 bottom-0 w-1 rounded-r-full"
+   787→                          style={{ backgroundColor: currentColorVar }}
+   788→                        />
+   789→                        <div className="flex items-center justify-between pl-3">
+   790→                          <div>
+   791→                            <div className="text-xs text-muted-foreground mb-0.5">{metric.label}</div>
+   792→                            <div
+   793→                              className="text-lg sm:text-xl font-bold"
+   794→                              style={{
+   795→                                background: `linear-gradient(135deg, ${currentColorVar}, var(--gg-amber))`,
+   796→                                WebkitBackgroundClip: 'text',
+   797→                                WebkitTextFillColor: 'transparent',
+   798→                                backgroundClip: 'text',
+   799→                              }}
+   800→                            >
+   801→                              {metric.value}
+   802→                            </div>
+   803→                          </div>
+   804→                          <div
+   805→                            className="w-10 h-10 rounded-lg flex items-center justify-center opacity-40 group-hover:opacity-70 transition-opacity duration-300"
+   806→                            style={{ backgroundColor: `color-mix(in srgb, ${currentColorVar} 10%, transparent)` }}
+   807→                          >
+   808→                            <TrendingUp className="w-5 h-5" style={{ color: currentColorVar }} />
+   809→                          </div>
+   810→                        </div>
+   811→                      </motion.div>
+   812→                    ))}
+   813→                  </div>
+   814→
+   815→                  {/* Quick Stats Footer */}
+   816→                  <motion.div
+   817→                    initial={{ opacity: 0, y: 15 }}
+   818→                    animate={{ opacity: 1, y: 0 }}
+   819→                    transition={{ duration: 0.4, delay: 0.6 }}
+   820→                    className="grid grid-cols-3 gap-3"
+   821→                  >
+   822→                    {[
+   823→                      { icon: <Clock className="w-4 h-4" />, label: 'Go Live', value: '24h' },
+   824→                      { icon: <Shield className="w-4 h-4" />, label: 'Uptime', value: '99.9%' },
+   825→                      { icon: <Headphones className="w-4 h-4" />, label: 'Support', value: '24/7' },
+   826→                    ].map((stat) => (
+   827→                      <div key={stat.label} className="text-center p-3 rounded-xl bg-muted/30 border border-border/30">
+   828→                        <div className="flex justify-center mb-1.5 text-muted-foreground">{stat.icon}</div>
+   829→                        <div className="text-sm font-bold text-foreground">{stat.value}</div>
+   830→                        <div className="text-[10px] text-muted-foreground">{stat.label}</div>
+   831→                      </div>
+   832→                    ))}
+   833→                  </motion.div>
+   834→                </div>
+   835→              </div>
+   836→            </div>
+   837→          </div>
+   838→        </motion.div>
+   839→      </div>
+   840→    </section>
+   841→  )
+   842→}
+   843→
+   844→/* ═══════════════════════════════════════════════════════════════
+   845→   Industry Showcase — Interactive Animated Section
+   846→   - Mobile: Full-screen spotlight with auto-rotating industries,
+   847→     typewriter text animation, and swipe/tap navigation
+   848→   - Desktop: Split layout with spotlight + thumbnail grid
+   849→   ═══════════════════════════════════════════════════════════════ */
+   850→const AUTO_PLAY_INTERVAL = 4000
+   851→
+   852→function IndustryShowcaseSection() {
+   853→  const { navigate } = useNavigate()
+   854→  const [activeIndex, setActiveIndex] = useState(0)
+   855→  const [isAutoPlaying, setIsAutoPlaying] = useState(true)
+   856→  const [direction, setDirection] = useState(1) // 1 = forward, -1 = backward
+   857→  const autoPlayRef = useRef<ReturnType<typeof setInterval> | null>(null)
+   858→  const touchStartX = useRef(0)
+   859→
+   860→  const current = industryShowcase[activeIndex]
+   861→  const CurrentIcon = current.icon
+   862→
+   863→  // Auto-play timer
+   864→  useEffect(() => {
+   865→    if (isAutoPlaying) {
+   866→      autoPlayRef.current = setInterval(() => {
+   867→        setDirection(1)
+   868→        setActiveIndex((prev) => (prev + 1) % industryShowcase.length)
+   869→      }, AUTO_PLAY_INTERVAL)
+   870→    }
+   871→    return () => {
+   872→      if (autoPlayRef.current) clearInterval(autoPlayRef.current)
+   873→    }
+   874→  }, [isAutoPlaying])
+   875→
+   876→  const goTo = useCallback((index: number) => {
+   877→    setDirection(index > activeIndex ? 1 : -1)
+   878→    setActiveIndex(index)
+   879→    setIsAutoPlaying(false)
+   880→    // Resume auto-play after 8s of inactivity
+   881→    if (autoPlayRef.current) clearInterval(autoPlayRef.current)
+   882→    const timeout = setTimeout(() => setIsAutoPlaying(true), 8000)
+   883→    return () => clearTimeout(timeout)
+   884→  }, [activeIndex])
+   885→
+   886→  const goNext = useCallback(() => {
+   887→    setDirection(1)
+   888→    setActiveIndex((prev) => (prev + 1) % industryShowcase.length)
+   889→    setIsAutoPlaying(false)
+   890→    if (autoPlayRef.current) clearInterval(autoPlayRef.current)
+   891→    const timeout = setTimeout(() => setIsAutoPlaying(true), 8000)
+   892→    return () => clearTimeout(timeout)
+   893→  }, [])
+   894→
+   895→  const goPrev = useCallback(() => {
+   896→    setDirection(-1)
+   897→    setActiveIndex((prev) => (prev - 1 + industryShowcase.length) % industryShowcase.length)
+   898→    setIsAutoPlaying(false)
+   899→    if (autoPlayRef.current) clearInterval(autoPlayRef.current)
+   900→    const timeout = setTimeout(() => setIsAutoPlaying(true), 8000)
+   901→    return () => clearTimeout(timeout)
+   902→  }, [])
+   903→
+   904→  // Touch handlers for swipe
+   905→  const handleTouchStart = (e: React.TouchEvent) => {
+   906→    touchStartX.current = e.touches[0].clientX
+   907→  }
+   908→  const handleTouchEnd = (e: React.TouchEvent) => {
+   909→    const diff = touchStartX.current - e.changedTouches[0].clientX
+   910→    if (Math.abs(diff) > 50) {
+   911→      if (diff > 0) goNext()
+   912→      else goPrev()
+   913→    }
+   914→  }
+   915→
+   916→  // Animation variants for the spotlight content
+   917→  const contentVariants = {
+   918→    enter: (dir: number) => ({
+   919→      x: dir > 0 ? 80 : -80,
+   920→      opacity: 0,
+   921→      scale: 0.96,
+   922→    }),
+   923→    center: {
+   924→      x: 0,
+   925→      opacity: 1,
+   926→      scale: 1,
+   927→    },
+   928→    exit: (dir: number) => ({
+   929→      x: dir > 0 ? -80 : 80,
+   930→      opacity: 0,
+   931→      scale: 0.96,
+   932→    }),
+   933→  }
+   934→
+   935→  const currentColorVar = colorVarMap[current.color] || 'var(--gg-teal)'
+   936→
+   937→  return (
+   938→    <section className="py-20 sm:py-28 bg-secondary/30 overflow-hidden">
+   939→      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+   940→        {/* Section Header */}
+   941→        <motion.div
+   942→          initial={{ opacity: 0, y: 20 }}
+   943→          whileInView={{ opacity: 1, y: 0 }}
+   944→          viewport={{ once: true }}
+   945→          transition={{ duration: 0.5 }}
+   946→          className="text-center mb-14"
+   947→        >
+   948→          <div className="gg-pill inline-flex items-center gap-2 bg-[var(--gg-vermillion)]/10 border border-[var(--gg-vermillion)]/15 px-4 py-1.5 mb-5">
+   949→            <div className="w-2 h-2 rounded-full bg-[var(--gg-vermillion)] animate-pulse" />
+   950→            <span className="text-xs text-[var(--gg-vermillion)] font-medium tracking-wide">21 Industries Served</span>
+   951→          </div>
+   952→          <h2 className="text-3xl sm:text-5xl font-extrabold text-foreground">
+   953→            An ERP for <span className="text-gradient-primary">Every Industry</span>
+   954→          </h2>
+   955→          <p className="mt-4 max-w-2xl mx-auto text-base sm:text-lg text-muted-foreground">
+   956→            Each platform is purpose-built — not adapted — for its industry. The terminology, workflows, and KPIs are yours from day one.
+   957→          </p>
+   958→        </motion.div>
+   959→
+   960→        {/* ═══════ Main Showcase Area ═══════ */}
+   961→        <div className="flex flex-col lg:flex-row gap-6 lg:items-stretch">
+   962→          {/* ─── Spotlight (left / main on mobile) ─── */}
+   963→          <div className="flex-1 min-w-0 flex">
+   964→            <div
+   965→              className="relative gg-glass rounded-2xl overflow-hidden flex-1 flex flex-col min-h-[400px] sm:min-h-[500px]"
+   966→              onTouchStart={handleTouchStart}
+   967→              onTouchEnd={handleTouchEnd}
+   968→            >
+   969→              {/* Ambient glow */}
+   970→              <div
+   971→                className="absolute inset-0 pointer-events-none transition-colors duration-700"
+   972→                style={{
+   973→                  background: `radial-gradient(ellipse at 30% 20%, color-mix(in srgb, ${currentColorVar} 8%, transparent) 0%, transparent 60%)`,
+   974→                }}
+   975→              />
+   976→
+   977→              {/* Top accent bar */}
+   978→              <div
+   979→                className="absolute top-0 left-[10%] right-[10%] h-[2px] rounded-b-full opacity-50 transition-colors duration-700"
+   980→                style={{ backgroundColor: currentColorVar }}
+   981→              />
+   982→
+   983→              <div className="relative p-6 sm:p-8 lg:p-10 flex-1 flex flex-col overflow-hidden">
+   984→                {/* Prev / Next arrows */}
+   985→                <button
+   986→                  onClick={goPrev}
+   987→                  className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-background/60 backdrop-blur-sm border border-border/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/80 transition-all duration-200 z-10"
+   988→                  aria-label="Previous industry"
+   989→                >
+   990→                  <ChevronLeft className="w-5 h-5" />
+   991→                </button>
+   992→                <button
+   993→                  onClick={goNext}
+   994→                  className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-background/60 backdrop-blur-sm border border-border/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/80 transition-all duration-200 z-10"
+   995→                  aria-label="Next industry"
+   996→                >
+   997→                  <ChevronRight className="w-5 h-5" />
+   998→                </button>
+   999→
+  1000→                {/* Animated content */}
+  1001→                <motion.div
+  1002→                  key={activeIndex}
+  1003→                  custom={direction}
+  1004→                  variants={contentVariants}
+  1005→                  initial="enter"
+  1006→                  animate="center"
+  1007→                  exit="exit"
+  1008→                  transition={{ duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
+  1009→                  className="flex-1 flex flex-col overflow-y-auto custom-scrollbar min-h-0 pr-1"
+  1010→                >
+  1011→                  {/* Icon + Industry Name */}
+  1012→                  <div className="flex items-center gap-4 mb-4">
+  1013→                    <motion.div
+  1014→                      initial={{ scale: 0.5, opacity: 0, rotate: -15 }}
+  1015→                      animate={{ scale: 1, opacity: 1, rotate: 0 }}
+  1016→                      transition={{ duration: 0.5, delay: 0.1, type: 'spring', stiffness: 200 }}
+  1017→                      className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center shrink-0"
+  1018→                      style={{ backgroundColor: `color-mix(in srgb, ${currentColorVar} 10%, transparent)` }}
+  1019→                    >
+  1020→                      <CurrentIcon
+  1021→                        className="w-6 h-6 sm:w-7 sm:h-7"
+  1022→                        style={{ color: currentColorVar }}
+  1023→                      />
+  1024→                    </motion.div>
+  1025→                    <div className="min-w-0">
+  1026→                      <motion.h3
+  1027→                        initial={{ opacity: 0, x: 20 }}
+  1028→                        animate={{ opacity: 1, x: 0 }}
+  1029→                        transition={{ duration: 0.4, delay: 0.15 }}
+  1030→                        className="text-lg sm:text-xl font-bold text-foreground truncate"
+  1031→                      >
+  1032→                        {current.name}
+  1033→                      </motion.h3>
+  1034→                      <motion.span
+  1035→                        initial={{ opacity: 0, x: 20 }}
+  1036→                        animate={{ opacity: 1, x: 0 }}
+  1037→                        transition={{ duration: 0.4, delay: 0.2 }}
+  1038→                        className="text-xs sm:text-sm font-semibold"
+  1039→                        style={{
+  1040→                          background: `linear-gradient(135deg, ${currentColorVar}, color-mix(in srgb, ${currentColorVar} 70%, var(--gg-amber)))`,
+  1041→                          WebkitBackgroundClip: 'text',
+  1042→                          WebkitTextFillColor: 'transparent',
+  1043→                          backgroundClip: 'text',
+  1044→                        }}
+  1045→                      >
+  1046→                        {current.erp}
+  1047→                      </motion.span>
+  1048→                    </div>
+  1049→                  </div>
+  1050→
+  1051→                  {/* Description */}
+  1052→                  <motion.p
+  1053→                    initial={{ opacity: 0, y: 10 }}
+  1054→                    animate={{ opacity: 1, y: 0 }}
+  1055→                    transition={{ duration: 0.5, delay: 0.25 }}
+  1056→                    className="text-sm text-muted-foreground leading-relaxed mb-4"
+  1057→                  >
+  1058→                    {current.desc}
+  1059→                  </motion.p>
+  1060→
+  1061→                  {/* Key Highlights — interactive pills */}
+  1062→                  <motion.div
+  1063→                    initial={{ opacity: 0, y: 10 }}
+  1064→                    animate={{ opacity: 1, y: 0 }}
+  1065→                    transition={{ duration: 0.4, delay: 0.3 }}
+  1066→                    className="flex flex-wrap gap-1.5 mb-4"
+  1067→                  >
+  1068→                    {current.highlights.map((h, hi) => (
+  1069→                      <motion.span
+  1070→                        key={h}
+  1071→                        initial={{ opacity: 0, scale: 0.8 }}
+  1072→                        animate={{ opacity: 1, scale: 1 }}
+  1073→                        transition={{ duration: 0.3, delay: 0.35 + hi * 0.06 }}
+  1074→                        className="gg-pill text-[11px] font-medium px-2.5 py-1 border cursor-default"
+  1075→                        style={{
+  1076→                          backgroundColor: `color-mix(in srgb, ${currentColorVar} 8%, transparent)`,
+  1077→                          color: currentColorVar,
+  1078→                          borderColor: `color-mix(in srgb, ${currentColorVar} 18%, transparent)`,
+  1079→                        }}
+  1080→                      >
+  1081→                        {h}
+  1082→                      </motion.span>
+  1083→                    ))}
+  1084→                  </motion.div>
+  1085→
+  1086→                  {/* Modules Grid — detailed features */}
+  1087→                  {current.modules && (
+  1088→                    <motion.div
+  1089→                      initial={{ opacity: 0, y: 10 }}
+  1090→                      animate={{ opacity: 1, y: 0 }}
+  1091→                      transition={{ duration: 0.4, delay: 0.35 }}
+  1092→                      className="mb-4"
+  1093→                    >
+  1094→                      <div className="flex items-center justify-between mb-2.5">
+  1095→                        <div className="text-[10px] uppercase tracking-wider text-foreground/50 font-semibold">Modules</div>
+  1096→                        <div
+  1097→                          className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+  1098→                          style={{
+  1099→                            backgroundColor: `color-mix(in srgb, ${currentColorVar} 10%, transparent)`,
+  1100→                            color: currentColorVar,
+  1101→                          }}
+  1102→                        >
+  1103→                          {current.modules.length} included
+  1104→                        </div>
+  1105→                      </div>
+  1106→                      <div className="grid grid-cols-2 gap-2 max-h-[240px] overflow-y-auto custom-scrollbar">
+  1107→                        {current.modules.map((mod, mi) => (
+  1108→                          <motion.div
+  1109→                            key={mod.name}
+  1110→                            initial={{ opacity: 0, y: 6 }}
+  1111→                            animate={{ opacity: 1, y: 0 }}
+  1112→                            transition={{ duration: 0.25, delay: 0.38 + mi * 0.04 }}
+  1113→                            className="group relative rounded-lg p-2.5 border bg-background/30 hover:bg-background/60 transition-all duration-200 cursor-default"
+  1114→                            style={{
+  1115→                              borderColor: `color-mix(in srgb, ${currentColorVar} 15%, transparent)`,
+  1116→                            }}
+  1117→                          >
+  1118→                            <div className="flex items-start gap-1.5">
+  1119→                              <div
+  1120→                                className="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5"
+  1121→                                style={{ backgroundColor: `color-mix(in srgb, ${currentColorVar} 10%, transparent)` }}
+  1122→                              >
+  1123→                                <div className="w-1 h-1 rounded-full" style={{ backgroundColor: currentColorVar }} />
+  1124→                              </div>
+  1125→                              <div className="min-w-0">
+  1126→                                <div className="text-[11px] font-semibold text-foreground leading-tight">
+  1127→                                  {mod.name}
+  1128→                                </div>
+  1129→                                <div className="text-[10px] text-foreground/60 leading-snug line-clamp-2">
+  1130→                                  {mod.desc}
+  1131→                                </div>
+  1132→                              </div>
+  1133→                            </div>
+  1134→                          </motion.div>
+  1135→                        ))}
+  1136→                      </div>
+  1137→                    </motion.div>
+  1138→                  )}
+  1139→
+  1140→                  {/* Workflow — animated pipeline */}
+  1141→                  <motion.div
+  1142→                    initial={{ opacity: 0, y: 10 }}
+  1143→                    animate={{ opacity: 1, y: 0 }}
+  1144→                    transition={{ duration: 0.4, delay: 0.45 }}
+  1145→                    className="mb-auto"
+  1146→                  >
+  1147→                    <div className="text-[10px] uppercase tracking-wider text-foreground/50 font-semibold mb-2">Workflow</div>
+  1148→                    <div className="flex flex-wrap items-center gap-1">
+  1149→                      {current.workflow[0].split(' → ').map((step, si, arr) => (
+  1150→                        <motion.span
+  1151→                          key={step}
+  1152→                          initial={{ opacity: 0, x: -8 }}
+  1153→                          animate={{ opacity: 1, x: 0 }}
+  1154→                          transition={{ duration: 0.25, delay: 0.5 + si * 0.05 }}
+  1155→                          className="inline-flex items-center gap-1"
+  1156→                        >
+  1157→                          <span
+  1158→                            className="text-[11px] font-medium px-2 py-0.5 rounded-md"
+  1159→                            style={{
+  1160→                              backgroundColor: `color-mix(in srgb, ${currentColorVar} ${si === 0 ? '12%' : '5%'}, transparent)`,
+  1161→                              color: si === 0 ? currentColorVar : 'var(--muted-foreground)',
+  1162→                            }}
+  1163→                          >
+  1164→                            {step}
+  1165→                          </span>
+  1166→                          {si < arr.length - 1 && (
+  1167→                            <ChevronRight className="w-3 h-3 text-foreground/25 shrink-0" />
+  1168→                          )}
+  1169→                        </motion.span>
+  1170→                      ))}
+  1171→                    </div>
+  1172→                  </motion.div>
+  1173→                </motion.div>
+  1174→
+  1175→                {/* Bottom bar: CTA + Navigation dots — stays fixed at bottom */}
+  1176→                <div className="shrink-0 mt-4 pt-4 border-t border-border/30">
+  1177→                  <div className="flex items-center justify-between gap-4">
+  1178→                    <Button
+  1179→                      className="btn-glow bg-[var(--gg-vermillion)] text-white font-semibold rounded-xl px-5 h-9 text-sm transition-all duration-200 group hover:bg-[var(--gg-vermillion-light)]"
+  1180→                      onClick={() => navigate('erp-detail', current.erp.toLowerCase())}
+  1181→                    >
+  1182→                      Explore {current.erp}
+  1183→                      <ArrowRight className="w-3.5 h-3.5 ml-1.5 transition-transform duration-200 group-hover:translate-x-1" />
+  1184→                    </Button>
+  1185→
+  1186→                    <div className="flex items-center gap-1.5">
+  1187→                      {industryShowcase.map((_, i) => (
+  1188→                        <button
+  1189→                          key={i}
+  1190→                          onClick={() => goTo(i)}
+  1191→                          className="relative h-2 rounded-full transition-all duration-300"
+  1192→                          style={{
+  1193→                            width: i === activeIndex ? '20px' : '7px',
+  1194→                            backgroundColor: i === activeIndex ? currentColorVar : 'color-mix(in srgb, var(--foreground) 15%, transparent)',
+  1195→                          }}
+  1196→                          aria-label={`Go to ${industryShowcase[i].name}`}
+  1197→                        />
+  1198→                      ))}
+  1199→                      <span className="ml-2 text-xs text-muted-foreground font-mono tabular-nums">
+  1200→                        {String(activeIndex + 1).padStart(2, '0')}/{String(industryShowcase.length).padStart(2, '0')}
+  1201→                      </span>
+  1202→                    </div>
+  1203→                  </div>
+  1204→                </div>
+  1205→              </div>
+  1206→            </div>
+  1207→          </div>
+  1208→
+  1209→          {/* ─── Thumbnail grid (desktop only) ─── */}
+  1210→          <div className="hidden lg:flex w-[340px] shrink-0">
+  1211→            <div className="grid grid-cols-2 gap-2.5 flex-1 content-start overflow-y-auto custom-scrollbar pr-1">
+  1212→              {industryShowcase.map((industry, i) => {
+  1213→                const Icon = industry.icon
+  1214→                const itemColorVar = colorVarMap[industry.color] || 'var(--gg-teal)'
+  1215→                const isActive = i === activeIndex
+  1216→                return (
+  1217→                  <motion.button
+  1218→                    key={industry.name}
+  1219→                    onClick={() => goTo(i)}
+  1220→                    className={`relative text-left rounded-xl p-3 transition-all duration-300 border ${
+  1221→                      isActive
+  1222→                        ? 'bg-card border-[var(--gg-vermillion)]/20 shadow-md'
+  1223→                        : 'bg-card/50 border-border/40 hover:bg-card hover:border-border/60'
+  1224→                    }`}
+  1225→                    whileHover={{ scale: 1.02 }}
+  1226→                    whileTap={{ scale: 0.98 }}
+  1227→                  >
+  1228→                    {isActive && (
+  1229→                      <div
+  1230→                        className="absolute top-0 left-[15%] right-[15%] h-[2px] rounded-b-full"
+  1231→                        style={{ backgroundColor: itemColorVar }}
+  1232→                      />
+  1233→                    )}
+  1234→                    <div className="flex items-center gap-2.5">
+  1235→                      <div
+  1236→                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : ''}`}
+  1237→                        style={{ backgroundColor: `color-mix(in srgb, ${itemColorVar} ${isActive ? '15%' : '8%'}, transparent)` }}
+  1238→                      >
+  1239→                        <Icon
+  1240→                          className="w-4 h-4"
+  1241→                          style={{ color: isActive ? itemColorVar : 'var(--muted-foreground)' }}
+  1242→                        />
+  1243→                      </div>
+  1244→                      <div className="min-w-0 flex-1">
+  1245→                        <div className={`text-xs font-semibold truncate ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
+  1246→                          {industry.name}
+  1247→                        </div>
+  1248→                        <div
+  1249→                          className="text-[10px] font-medium truncate"
+  1250→                          style={{ color: isActive ? itemColorVar : 'var(--muted-foreground)' }}
+  1251→                        >
+  1252→                          {industry.erp}
+  1253→                        </div>
+  1254→                      </div>
+  1255→                    </div>
+  1256→                  </motion.button>
+  1257→                )
+  1258→              })}
+  1259→            </div>
+  1260→          </div>
+  1261→        </div>
+  1262→
+  1263→        {/* View All CTA */}
+  1264→        <div className="mt-8 sm:mt-10 text-center">
+  1265→          <Button
+  1266→            size="lg"
+  1267→            variant="outline"
+  1268→            className="border-[var(--gg-vermillion)]/30 text-[var(--gg-vermillion)] hover:bg-[var(--gg-vermillion)]/5 rounded-xl px-8 h-12 transition-all duration-200 group"
+  1269→            onClick={() => navigate('products')}
+  1270→          >
+  1271→            View All 21 Products
+  1272→            <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-200 group-hover:translate-x-1" />
+  1273→          </Button>
+  1274→        </div>
+  1275→      </div>
+  1276→    </section>
+  1277→  )
+  1278→}
+  1279→
+  1280→/* ═══════════════════════════════════════════════════════ */
+  1281→export function LandingPage() {
+  1282→  const { navigate } = useNavigate()
+  1283→  const { activeErps, industryVerticals, loading: erpsLoading } = useErpSystems('active')
+  1284→
+  1285→  const heroStats = useMemo(() => [
+  1286→    { icon: <Layers className="w-5 h-5 text-[var(--gg-vermillion)]" />, value: activeErps.length, suffix: '', label: 'Industry ERPs' },
+  1287→    { icon: <Globe className="w-5 h-5 text-[var(--gg-teal)]" />, value: industryVerticals, suffix: '', label: 'Industry Verticals' },
+  1288→    { icon: <Shield className="w-5 h-5 text-[var(--gg-amber)]" />, value: 99.9, suffix: '%', label: 'Uptime SLA' },
+  1289→  ], [activeErps.length, industryVerticals])
+  1290→
+  1291→  return (
+  1292→    <PageLayout>
+  1293→      {/* ═══════════════════════ HERO ═══════════════════════ */}
+  1294→      <section className="relative pt-20 pb-16 sm:pt-28 sm:pb-24 overflow-hidden">
+  1295→        {/* Warm ambient background effects */}
+  1296→        <div className="absolute inset-0 bg-gradient-to-br from-background via-[var(--gg-vermillion)]/[0.03] to-background pointer-events-none" />
+  1297→        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[var(--gg-vermillion)]/[0.05] rounded-full blur-[120px] pointer-events-none" />
+  1298→        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[var(--gg-amber)]/[0.04] rounded-full blur-[100px] pointer-events-none" />
+  1299→        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[var(--gg-teal)]/[0.02] rounded-full blur-[150px] pointer-events-none" />
+  1300→
+  1301→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+  1302→          {/* Bento Grid Hero */}
+  1303→          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-stretch">
+  1304→            {/* LEFT COLUMN — Main headline + subtitle (spans 7 cols) */}
+  1305→            <motion.div
+  1306→              initial={{ opacity: 0, y: 20 }}
+  1307→              animate={{ opacity: 1, y: 0 }}
+  1308→              transition={springSmooth}
+  1309→              className="lg:col-span-7 gg-glass rounded-2xl p-8 sm:p-10 lg:p-12 flex flex-col justify-between"
+  1310→            >
+  1311→              <div>
+  1312→                {/* Status pill */}
+  1313→                <div className="gg-pill inline-flex items-center gap-2 bg-[var(--gg-green)]/10 border border-[var(--gg-green)]/20 px-4 py-1.5 mb-6">
+  1314→                  <div className="w-2 h-2 rounded-full bg-[var(--gg-green)] animate-pulse" />
+  1315→                  <span className="text-xs text-[var(--gg-green)] font-medium tracking-wide">
+  1316→                    Now serving {erpsLoading ? 'multiple' : activeErps.length} industries across Pakistan
+  1317→                  </span>
+  1318→                </div>
+  1319→
+  1320→                {/* Headline */}
+  1321→                <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-[3.75rem] font-black leading-[1.08] tracking-tight text-foreground">
+  1322→                  Software That Speaks{' '}
+  1323→                  <span className="text-gradient-golden">
+  1324→                    Your Industry&apos;s
+  1325→                  </span>
+  1326→                  <br />
+  1327→                  Language.
+  1328→                </h1>
+  1329→
+  1330→                {/* Subtitle */}
+  1331→                <p className="mt-6 text-lg sm:text-xl text-muted-foreground max-w-xl leading-relaxed">
+  1332→                  <span className="text-gradient-primary font-semibold">21 purpose-built ERPs</span>{' '}
+  1333→                  — each designed from the ground up for a specific industry.{' '}
+  1334→                  <span className="text-foreground font-semibold">No customization needed. No workarounds. No compromises.</span>
+  1335→                </p>
+  1336→              </div>
+  1337→
+  1338→              {/* CTA Buttons */}
+  1339→              <div className="mt-8 flex flex-col sm:flex-row items-start gap-4">
+  1340→                <Button
+  1341→                  size="lg"
+  1342→                  className="btn-glow bg-[var(--gg-vermillion)] text-white font-semibold rounded-xl px-8 h-12 transition-all duration-200 group hover:bg-[var(--gg-vermillion-light)]"
+  1343→                  onClick={() => navigate('pricing')}
+  1344→                >
+  1345→                  Get Started
+  1346→                  <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-200 group-hover:translate-x-1" />
+  1347→                </Button>
+  1348→                <Button
+  1349→                  size="lg"
+  1350→                  variant="outline"
+  1351→                  className="border-[var(--gg-vermillion)]/30 text-[var(--gg-vermillion)] hover:bg-[var(--gg-vermillion)]/5 rounded-xl px-8 h-12 transition-all duration-200"
+  1352→                  onClick={() => navigate('products')}
+  1353→                >
+  1354→                  Explore Products
+  1355→                </Button>
+  1356→              </div>
+  1357→            </motion.div>
+  1358→
+  1359→            {/* RIGHT COLUMN — Stacked stat cards (spans 5 cols) */}
+  1360→            <div className="lg:col-span-5 flex flex-col gap-4 lg:gap-5">
+  1361→              {heroStats.map((stat, i) => (
+  1362→                <motion.div
+  1363→                  key={stat.label}
+  1364→                  initial={{ opacity: 0, x: 30 }}
+  1365→                  animate={{ opacity: 1, x: 0 }}
+  1366→                  transition={{ delay: 0.2 + i * 0.12, ...springSmooth }}
+  1367→                  className="flex-1"
+  1368→                >
+  1369→                  <InteractiveCard variant="subtle" glowColor="var(--gg-amber)">
+  1370→                    <div className="gg-glass rounded-2xl p-6 sm:p-7 h-full flex items-center gap-5">
+  1371→                      <div className="w-14 h-14 rounded-xl bg-[var(--gg-vermillion)]/10 flex items-center justify-center shrink-0">
+  1372→                        {stat.icon}
+  1373→                      </div>
+  1374→                      <div>
+  1375→                        <div className="text-3xl sm:text-4xl font-bold text-gradient-golden">
+  1376→                          <AnimatedCounter target={stat.value} suffix={stat.suffix} />
+  1377→                        </div>
+  1378→                        <div className="text-sm text-muted-foreground mt-0.5">{stat.label}</div>
+  1379→                      </div>
+  1380→                    </div>
+  1381→                  </InteractiveCard>
+  1382→                </motion.div>
+  1383→              ))}
+  1384→
+  1385→              {/* Small accent card */}
+  1386→              <motion.div
+  1387→                initial={{ opacity: 0, y: 20 }}
+  1388→                animate={{ opacity: 1, y: 0 }}
+  1389→                transition={{ delay: 0.6, duration: 0.5 }}
+  1390→                className="gg-glass rounded-2xl p-5 flex items-center gap-3"
+  1391→                style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--gg-vermillion) 8%, var(--card)), color-mix(in srgb, var(--gg-amber) 4%, var(--card)))' }}
+  1392→              >
+  1393→                <div className="w-10 h-10 rounded-full bg-[var(--gg-vermillion)]/15 flex items-center justify-center shrink-0">
+  1394→                  <Rocket className="w-5 h-5 text-[var(--gg-vermillion)]" />
+  1395→                </div>
+  1396→                <div>
+  1397→                  <div className="text-sm font-semibold text-foreground">Go Live in 24 Hours</div>
+  1398→                  <div className="text-xs text-muted-foreground">From purchase to production — same day</div>
+  1399→                </div>
+  1400→              </motion.div>
+  1401→            </div>
+  1402→          </div>
+  1403→        </div>
+  1404→      </section>
+  1405→
+  1406→      {/* ═══════════════════════ INDUSTRY SHOWCASE ═══════════════════════ */}
+  1407→      <IndustryShowcaseSection />
+  1408→
+  1409→      {/* ═══════════════════════ THE PROBLEM ═══════════════════════ */}
+  1410→      <section className="py-20 sm:py-28">
+  1411→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+  1412→            <motion.div
+  1413→              initial={{ opacity: 0, y: 20 }}
+  1414→              whileInView={{ opacity: 1, y: 0 }}
+  1415→              viewport={{ once: true }}
+  1416→              transition={{ duration: 0.5 }}
+  1417→              className="text-center mb-14"
+  1418→            >
+  1419→              <div className="gg-pill inline-flex items-center gap-2 bg-[var(--gg-rose)]/10 border border-[var(--gg-rose)]/20 px-4 py-1.5 mb-6">
+  1420→                <div className="w-2 h-2 rounded-full bg-[var(--gg-rose)]" />
+  1421→                <span className="text-xs text-[var(--gg-rose)] font-medium tracking-wide">The Problem</span>
+  1422→              </div>
+  1423→              <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
+  1424→                The Problem with <span className="text-gradient-warm">Generic ERP</span>
+  1425→              </h2>
+  1426→              <p className="mt-3 text-muted-foreground max-w-2xl mx-auto">
+  1427→                Most ERP implementations fail — not because of the technology, but because the technology was never built for your industry.
+  1428→              </p>
+  1429→            </motion.div>
+  1430→
+  1431→            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  1432→              {[
+  1433→                {
+  1434→                  title: 'You customize everything',
+  1435→                  desc: 'Generic ERPs give you a blank canvas. You spend months — sometimes years — customizing fields, building workflows, and training teams on software that doesn\'t speak your language.',
+  1436→                  icon: <Wrench className="w-6 h-6" />,
+  1437→                  stat: '18+ months',
+  1438→                  statLabel: 'avg. implementation',
+  1439→                },
+  1440→                {
+  1441→                  title: 'You pay for what you don\'t need',
+  1442→                  desc: 'Manufacturing modules in a hotel system. HR workflows meant for offices, not construction sites. You\'re subsidizing features your industry will never use.',
+  1443→                  icon: <BarChart3 className="w-6 h-6" />,
+  1444→                  stat: '40% wasted',
+  1445→                  statLabel: 'on unused modules',
+  1446→                },
+  1447→                {
+  1448→                  title: 'You maintain fragile integrations',
+  1449→                  desc: 'When your ERP doesn\'t handle your industry natively, you bolt on third-party tools. Each integration is a failure point. Each update is a risk. Each workaround costs time and money.',
+  1450→                  icon: <Code2 className="w-6 h-6" />,
+  1451→                  stat: '5–12 tools',
+  1452→                  statLabel: 'bolted on average',
+  1453→                },
+  1454→              ].map((item, i) => (
+  1455→                <motion.div
+  1456→                  key={item.title}
+  1457→                  initial={{ opacity: 0, y: 20 }}
+  1458→                  whileInView={{ opacity: 1, y: 0 }}
+  1459→                  viewport={{ once: true }}
+  1460→                  transition={{ delay: i * 0.12, duration: 0.5 }}
+  1461→                >
+  1462→                  <InteractiveCard variant="subtle" glowColor="var(--gg-rose)" className="h-full">
+  1463→                    <div className="gg-card rounded-2xl p-6 h-full relative overflow-hidden"
+  1464→                      style={{ borderTop: '3px solid var(--gg-rose)' }}
+  1465→                    >
+  1466→                      {/* Background watermark number */}
+  1467→                      <span className="absolute top-2 right-3 text-7xl font-black text-[var(--gg-rose)]/[0.04] leading-none">{i + 1}</span>
+  1468→                      <div className="relative z-10">
+  1469→                        <div className="w-12 h-12 rounded-xl bg-[var(--gg-rose)]/10 flex items-center justify-center mb-5 text-[var(--gg-rose)]">
+  1470→                          {item.icon}
+  1471→                        </div>
+  1472→                        <h3 className="text-lg font-semibold text-foreground mb-2">{item.title}</h3>
+  1473→                        <p className="text-sm text-muted-foreground leading-relaxed mb-5">{item.desc}</p>
+  1474→                        <div className="pt-4 border-t border-border/50">
+  1475→                          <div className="flex items-baseline gap-2">
+  1476→                            <span className="text-2xl font-bold text-[var(--gg-rose)]">{item.stat}</span>
+  1477→                            <span className="text-xs text-muted-foreground">{item.statLabel}</span>
+  1478→                          </div>
+  1479→                        </div>
+  1480→                      </div>
+  1481→                    </div>
+  1482→                  </InteractiveCard>
+  1483→                </motion.div>
+  1484→              ))}
+  1485→            </div>
+  1486→
+  1487→            <motion.div
+  1488→              initial={{ opacity: 0, y: 20 }}
+  1489→              whileInView={{ opacity: 1, y: 0 }}
+  1490→              viewport={{ once: true }}
+  1491→              transition={{ delay: 0.4, duration: 0.5 }}
+  1492→              className="mt-12 text-center"
+  1493→            >
+  1494→              <div className="gg-glass rounded-2xl p-6 sm:p-8 max-w-3xl mx-auto"
+  1495→                style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--gg-amber) 6%, var(--card)), var(--card))' }}
+  1496→              >
+  1497→                <p className="text-lg sm:text-xl text-foreground leading-relaxed">
+  1498→                  We asked a different question:{' '}
+  1499→                  <span className="text-gradient-golden font-semibold">What if the software spoke your industry&apos;s language from day one?</span>
+  1500→                </p>
+  1501→              </div>
+  1502→            </motion.div>
+  1503→        </div>
+  1504→      </section>
+  1505→
+  1506→      {/* ═══════════════════════ FEATURED ERP DEEP-DIVE ═══════════════════════ */}
+  1507→      <FeaturedErpShowcase />
+  1508→
+  1509→      {/* ═══════════════════════ OUR APPROACH ═══════════════════════ */}
+  1510→      <section className="py-20 sm:py-28">
+  1511→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+  1512→          <div className="flex flex-col lg:flex-row gap-0 lg:gap-0">
+  1513→            {/* Vertical colored sidebar accent */}
+  1514→            <div className="hidden lg:block w-1.5 rounded-full bg-gradient-to-b from-[var(--gg-vermillion)] via-[var(--gg-teal)] to-[var(--gg-amber)]/30 shrink-0" />
+  1515→            <div className="lg:hidden h-1.5 w-24 rounded-full bg-gradient-to-r from-[var(--gg-vermillion)] via-[var(--gg-teal)] to-[var(--gg-amber)]/30 mb-8" />
+  1516→
+  1517→            <div className="flex-1 lg:pl-10">
+  1518→              <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-start">
+  1519→                <motion.div
+  1520→                  initial={{ opacity: 0, x: -20 }}
+  1521→                  whileInView={{ opacity: 1, x: 0 }}
+  1522→                  viewport={{ once: true }}
+  1523→                  transition={{ duration: 0.5 }}
+  1524→                >
+  1525→                  <div className="gg-pill inline-flex items-center gap-2 bg-[var(--gg-teal)]/10 border border-[var(--gg-teal)]/20 px-4 py-1.5 mb-6">
+  1526→                    <div className="w-2 h-2 rounded-full bg-[var(--gg-teal)]" />
+  1527→                    <span className="text-xs text-[var(--gg-teal)] font-medium tracking-wide">Our Approach</span>
+  1528→                  </div>
+  1529→                  <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-6">
+  1530→                    Industry-Native. <span className="text-gradient-cool">Not Industry-Adapted.</span>
+  1531→                  </h2>
+  1532→                  <div className="space-y-4 text-muted-foreground leading-relaxed">
+  1533→                    <p>
+  1534→                      We don&apos;t take a generic platform and bolt on industry modules. We start with the industry itself — its workflows, its compliance requirements, its KPIs, its language.
+  1535→                    </p>
+  1536→                    <p>
+  1537→                      Every ERP in our portfolio was built <span className="text-foreground font-semibold">by people who understand that industry</span>. ApparelFlow was built with garment manufacturers. HotelFlow was built with hotel operators. FoodFlow was built with restaurant owners.
+  1538→                    </p>
+  1539→                    <p>
+  1540→                      The result? Software that feels like it was built <span className="text-foreground font-semibold">specifically for you</span> — because it was. You don&apos;t customize. You don&apos;t adapt. You just start using it.
+  1541→                    </p>
+  1542→                  </div>
+  1543→                </motion.div>
+  1544→
+  1545→                <div className="space-y-4">
+  1546→                  {[
+  1547→                    { icon: <Target className="w-5 h-5 text-[var(--gg-vermillion)]" />, title: 'Born for Your Sector', desc: 'Each ERP starts from industry requirements — not a generic template. The terminology, workflows, and reports are yours from day one.' },
+  1548→                    { icon: <RefreshCw className="w-5 h-5 text-[var(--gg-teal)]" />, title: 'Real-Time Cross-Module Sync', desc: 'A sale in MartFlow instantly updates inventory in FactoryFlow and logistics in LogisticFlow. Every system stays in sync automatically.' },
+  1549→                    { icon: <Code2 className="w-5 h-5 text-[var(--gg-amber)]" />, title: 'API-First Architecture', desc: 'Every feature is an API endpoint. Integrate with anything, extend everything, and build custom workflows on top of a solid foundation.' },
+  1550→                    { icon: <Shield className="w-5 h-5 text-[var(--gg-green)]" />, title: 'Enterprise-Grade Security', desc: 'AES-256 encryption, SOC 2 compliance, role-based access, and complete audit trails. Your data is always protected.' },
+  1551→                    { icon: <Smartphone className="w-5 h-5 text-[var(--gg-violet)]" />, title: 'Mobile-First Design', desc: 'Native iOS and Android apps with offline sync. Your team manages operations from the warehouse floor, the hotel lobby, or the factory.' },
+  1552→                  ].map((item, i) => (
+  1553→                    <motion.div
+  1554→                      key={item.title}
+  1555→                      initial={{ opacity: 0, y: 12 }}
+  1556→                      whileInView={{ opacity: 1, y: 0 }}
+  1557→                      viewport={{ once: true }}
+  1558→                      transition={{ delay: i * 0.1, ...springSnappy }}
+  1559→                    >
+  1560→                      <InteractiveCard variant="subtle" glowColor="var(--gg-teal)" className="h-full">
+  1561→                        <div className="gg-card rounded-xl p-4 flex items-start gap-4 group">
+  1562→                          <div className="w-10 h-10 rounded-lg bg-[var(--gg-vermillion)]/8 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300">
+  1563→                            {item.icon}
+  1564→                          </div>
+  1565→                          <div>
+  1566→                            <h3 className="text-sm font-semibold text-foreground mb-1">{item.title}</h3>
+  1567→                            <p className="text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
+  1568→                          </div>
+  1569→                        </div>
+  1570→                      </InteractiveCard>
+  1571→                    </motion.div>
+  1572→                  ))}
+  1573→                </div>
+  1574→              </div>
+  1575→            </div>
+  1576→          </div>
+  1577→        </div>
+  1578→      </section>
+  1579→
+  1580→      {/* ═══════════════════════ HOW IT WORKS ═══════════════════════ */}
+  1581→      <section className="py-20 sm:py-28 bg-secondary/30">
+  1582→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+  1583→          <motion.div
+  1584→            initial={{ opacity: 0, y: 20 }}
+  1585→            whileInView={{ opacity: 1, y: 0 }}
+  1586→            viewport={{ once: true }}
+  1587→            transition={{ duration: 0.5 }}
+  1588→            className="text-center mb-14"
+  1589→          >
+  1590→            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
+  1591→              From Selection to <span className="text-gradient-primary">Production</span>
+  1592→            </h2>
+  1593→            <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
+  1594→              Four steps between you and an ERP that actually works for your industry.
+  1595→            </p>
+  1596→          </motion.div>
+  1597→
+  1598→          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+  1599→            {howItWorks.map((item, i) => (
+  1600→              <motion.div
+  1601→                key={item.step}
+  1602→                initial={{ opacity: 0, y: 20 }}
+  1603→                whileInView={{ opacity: 1, y: 0 }}
+  1604→                viewport={{ once: true }}
+  1605→                transition={{ delay: i * 0.12, duration: 0.5 }}
+  1606→              >
+  1607→                <InteractiveCard variant="subtle" glowColor="var(--gg-vermillion)" className="h-full">
+  1608→                  <div className="gg-card rounded-2xl p-6 h-full relative overflow-hidden">
+  1609→                    {/* Step number watermark */}
+  1610→                    <span className="absolute top-3 right-4 text-6xl font-black text-[var(--gg-vermillion)]/[0.05] leading-none">{item.step}</span>
+  1611→                    <div className="relative z-10">
+  1612→                      {/* Vermillion accent circle */}
+  1613→                      <div className="w-12 h-12 rounded-xl bg-[var(--gg-vermillion)]/10 flex items-center justify-center mb-4 text-[var(--gg-vermillion)]">
+  1614→                        {item.icon}
+  1615→                      </div>
+  1616→                      <h3 className="text-base font-bold text-foreground mb-2">{item.title}</h3>
+  1617→                      <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+  1618→                    </div>
+  1619→                  </div>
+  1620→                </InteractiveCard>
+  1621→              </motion.div>
+  1622→            ))}
+  1623→          </div>
+  1624→        </div>
+  1625→      </section>
+  1626→
+  1627→      {/* ═══════════════════════ WHAT SETS US APART ═══════════════════════ */}
+  1628→      <section className="py-20 sm:py-28">
+  1629→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+  1630→          <motion.div
+  1631→            initial={{ opacity: 0, y: 20 }}
+  1632→            whileInView={{ opacity: 1, y: 0 }}
+  1633→            viewport={{ once: true }}
+  1634→            transition={{ duration: 0.5 }}
+  1635→            className="mb-14"
+  1636→          >
+  1637→            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
+  1638→              What Sets Us <span className="text-gradient-primary">Apart</span>
+  1639→            </h2>
+  1640→            <p className="mt-3 text-muted-foreground max-w-xl">
+  1641→              Three principles that drive every decision we make — from architecture to pricing.
+  1642→            </p>
+  1643→          </motion.div>
+  1644→
+  1645→          <div className="space-y-5">
+  1646→            {[
+  1647→              {
+  1648→                icon: <Target className="w-7 h-7 text-[var(--gg-green)]" />,
+  1649→                title: 'Industry-Native by Default',
+  1650→                desc: 'We don\'t build generic software and hope it fits. Each of our 21 ERPs is born from deep domain expertise — speaking the language, following the workflows, and measuring the KPIs that matter to your sector. ApparelFlow talks about BOMs and cutting plans. HotelFlow talks about occupancy and RevPAR. FoodFlow talks about recipe costing and kitchen display.',
+  1651→                highlight: 'Zero customization needed on day one',
+  1652→                accentColor: 'var(--gg-green)',
+  1653→                accentBg: 'bg-[var(--gg-green)]/[0.06]',
+  1654→              },
+  1655→              {
+  1656→                icon: <Sparkles className="w-7 h-7 text-[var(--gg-amber)]" />,
+  1657→                title: 'Intelligence, Not Just Data',
+  1658→                desc: 'Our ERPs don\'t just collect data — they transform raw inputs into actionable intelligence. Anomaly detection flags suspicious inventory movements. Predictive analytics forecast demand before you ask. Automated workflows eliminate repetitive tasks so your team focuses on decisions, not data entry.',
+  1659→                highlight: 'AI-powered insights from day one',
+  1660→                accentColor: 'var(--gg-amber)',
+  1661→                accentBg: 'bg-[var(--gg-amber)]/[0.06]',
+  1662→              },
+  1663→              {
+  1664→                icon: <Rocket className="w-7 h-7 text-[var(--gg-rose)]" />,
+  1665→                title: 'Scale Without Rebuilding',
+  1666→                desc: 'Start with one ERP on the Starter plan. Expand to three ERPs across different business units. Upgrade tiers as you grow. The architecture scales horizontally and vertically without ever requiring a migration. Your data stays connected, your workflows stay intact, and your team stays productive.',
+  1667→                highlight: 'From 5 users to unlimited — same platform',
+  1668→                accentColor: 'var(--gg-rose)',
+  1669→                accentBg: 'bg-[var(--gg-rose)]/[0.06]',
+  1670→              },
+  1671→            ].map((item, i) => (
+  1672→              <motion.div
+  1673→                key={item.title}
+  1674→                initial={{ opacity: 0, x: -20 }}
+  1675→                whileInView={{ opacity: 1, x: 0 }}
+  1676→                viewport={{ once: true }}
+  1677→                transition={{ delay: i * 0.15, duration: 0.5 }}
+  1678→              >
+  1679→                <InteractiveCard variant="subtle" glowColor="var(--gg-vermillion)" className="h-full">
+  1680→                  <div className={`gg-elevated rounded-2xl p-6 sm:p-8 h-full flex flex-col sm:flex-row items-start gap-6 ${item.accentBg}`}
+  1681→                    style={{ borderLeft: `4px solid ${item.accentColor}` }}
+  1682→                  >
+  1683→                    <div className="w-16 h-16 rounded-xl bg-[var(--gg-vermillion)]/8 flex items-center justify-center shrink-0">
+  1684→                      {item.icon}
+  1685→                    </div>
+  1686→                    <div className="flex-1">
+  1687→                      <h3 className="text-xl font-semibold text-foreground mb-3">{item.title}</h3>
+  1688→                      <p className="text-sm text-muted-foreground leading-relaxed mb-4">{item.desc}</p>
+  1689→                      <div className="gg-pill inline-flex items-center gap-1.5 bg-[var(--gg-vermillion)]/5 border border-[var(--gg-vermillion)]/10 px-3 py-1.5">
+  1690→                        <Check className="w-3.5 h-3.5 text-[var(--gg-vermillion)]" />
+  1691→                        <span className="text-xs font-medium text-[var(--gg-vermillion)]">{item.highlight}</span>
+  1692→                      </div>
+  1693→                    </div>
+  1694→                  </div>
+  1695→                </InteractiveCard>
+  1696→              </motion.div>
+  1697→            ))}
+  1698→          </div>
+  1699→        </div>
+  1700→      </section>
+  1701→
+  1702→      {/* ═══════════════════════ ENTERPRISE TRUST SIGNALS ═══════════════════════ */}
+  1703→      <section className="py-20 sm:py-28 bg-secondary/30">
+  1704→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+  1705→          <motion.div
+  1706→            initial={{ opacity: 0, y: 20 }}
+  1707→            whileInView={{ opacity: 1, y: 0 }}
+  1708→            viewport={{ once: true }}
+  1709→            transition={{ duration: 0.5 }}
+  1710→            className="text-center mb-14"
+  1711→          >
+  1712→            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
+  1713→              Enterprise-Grade <span className="text-gradient-primary">Trust</span>
+  1714→            </h2>
+  1715→            <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
+  1716→              Security, reliability, and compliance built into every layer.
+  1717→            </p>
+  1718→          </motion.div>
+  1719→
+  1720→          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+  1721→            {[
+  1722→              { icon: <Lock className="w-6 h-6 text-[var(--gg-vermillion)]" />, title: 'Bank-Grade Encryption', desc: 'AES-256 encryption at rest and TLS 1.3 in transit. Your data is always protected.' },
+  1723→              { icon: <Shield className="w-6 h-6 text-[var(--gg-teal)]" />, title: 'PCI DSS Compliant', desc: 'Payments processed through Stripe with full PCI compliance and 3D Secure authentication.' },
+  1724→              { icon: <Headphones className="w-6 h-6 text-[var(--gg-amber)]" />, title: '24/7 Support', desc: 'Dedicated support teams with guaranteed response times. Business and Enterprise get account managers.' },
+  1725→              { icon: <Smartphone className="w-6 h-6 text-[var(--gg-violet)]" />, title: 'Mobile-First', desc: 'Native apps for iOS and Android with offline sync. Manage your business from anywhere.' },
+  1726→            ].map((item, i) => (
+  1727→              <motion.div
+  1728→                key={item.title}
+  1729→                initial={{ opacity: 0, y: 20 }}
+  1730→                whileInView={{ opacity: 1, y: 0 }}
+  1731→                viewport={{ once: true }}
+  1732→                transition={{ delay: i * 0.1, ...springSnappy }}
+  1733→              >
+  1734→                <InteractiveCard variant="subtle" glowColor="var(--gg-teal)" className="h-full">
+  1735→                  <div className="gg-card rounded-xl p-5 h-full group">
+  1736→                    <div className="w-11 h-11 rounded-lg bg-[var(--gg-vermillion)]/8 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+  1737→                      {item.icon}
+  1738→                    </div>
+  1739→                    <h3 className="text-sm font-semibold text-foreground mb-2">{item.title}</h3>
+  1740→                    <p className="text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
+  1741→                  </div>
+  1742→                </InteractiveCard>
+  1743→              </motion.div>
+  1744→            ))}
+  1745→          </div>
+  1746→        </div>
+  1747→      </section>
+  1748→
+  1749→      {/* ═══════════════════════ STATS BANNER ═══════════════════════ */}
+  1750→      <section className="py-16 sm:py-20">
+  1751→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+  1752→          <motion.div
+  1753→            initial={{ opacity: 0, y: 20 }}
+  1754→            whileInView={{ opacity: 1, y: 0 }}
+  1755→            viewport={{ once: true }}
+  1756→            transition={{ duration: 0.5 }}
+  1757→          >
+  1758→            <div className="gg-glass rounded-3xl p-8 sm:p-12"
+  1759→              style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--gg-vermillion) 6%, var(--card)), color-mix(in srgb, var(--gg-amber) 3%, var(--card)))' }}
+  1760→            >
+  1761→              <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 text-center">
+  1762→                {[
+  1763→                  { value: activeErps.length, suffix: '', label: 'Industry ERPs' },
+  1764→                  { value: 99.9, suffix: '%', label: 'Uptime SLA' },
+  1765→                  { value: 24, suffix: 'h', label: 'Provisioning Time' },
+  1766→                  { value: 4, suffix: '+', label: 'Pricing Tiers' },
+  1767→                ].map((stat, i) => (
+  1768→                  <motion.div
+  1769→                    key={stat.label}
+  1770→                    initial={{ opacity: 0, y: 10 }}
+  1771→                    whileInView={{ opacity: 1, y: 0 }}
+  1772→                    viewport={{ once: true }}
+  1773→                    transition={{ delay: i * 0.1, duration: 0.4 }}
+  1774→                  >
+  1775→                    <div className="text-3xl sm:text-4xl font-bold text-gradient-golden">
+  1776→                      <AnimatedCounter target={stat.value} suffix={stat.suffix} />
+  1777→                    </div>
+  1778→                    <div className="text-sm text-muted-foreground mt-1">{stat.label}</div>
+  1779→                  </motion.div>
+  1780→                ))}
+  1781→              </div>
+  1782→            </div>
+  1783→          </motion.div>
+  1784→        </div>
+  1785→      </section>
+  1786→
+  1787→      {/* ═══════════════════════ FINAL CTA ═══════════════════════ */}
+  1788→      <section className="py-20 sm:py-28 bg-secondary/30">
+  1789→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+  1790→          <motion.div
+  1791→            initial={{ opacity: 0, y: 20 }}
+  1792→            whileInView={{ opacity: 1, y: 0 }}
+  1793→            viewport={{ once: true }}
+  1794→            transition={{ duration: 0.5 }}
+  1795→            className="text-center max-w-3xl mx-auto"
+  1796→          >
+  1797→            <div className="gg-pill inline-flex items-center gap-2 bg-[var(--gg-vermillion)]/10 border border-[var(--gg-vermillion)]/15 px-4 py-1.5 mb-6">
+  1798→              <Rocket className="w-3.5 h-3.5 text-[var(--gg-vermillion)]" />
+  1799→              <span className="text-xs text-[var(--gg-vermillion)] font-medium tracking-wide">Ready to Start?</span>
+  1800→            </div>
+  1801→            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
+  1802→              Find the ERP That <span className="text-gradient-golden">Speaks Your Language</span>
+  1803→            </h2>
+  1804→            <p className="mt-4 text-lg text-muted-foreground leading-relaxed">
+  1805→              21 industries. 21 purpose-built platforms. Each one ready to run your business from day one. No customization. No workarounds. No compromises.
+  1806→            </p>
+  1807→            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+  1808→              <Button
+  1809→                size="lg"
+  1810→                className="btn-glow bg-[var(--gg-vermillion)] text-white font-semibold rounded-xl px-8 h-12 transition-all duration-200 group hover:bg-[var(--gg-vermillion-light)]"
+  1811→                onClick={() => navigate('pricing')}
+  1812→              >
+  1813→                Get Started
+  1814→                <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-200 group-hover:translate-x-1" />
+  1815→              </Button>
+  1816→              <Button
+  1817→                size="lg"
+  1818→                variant="outline"
+  1819→                className="border-[var(--gg-vermillion)]/30 text-[var(--gg-vermillion)] hover:bg-[var(--gg-vermillion)]/5 rounded-xl px-8 h-12 transition-all duration-200"
+  1820→                onClick={() => navigate('products')}
+  1821→              >
+  1822→                Browse All Products
+  1823→              </Button>
+  1824→              <Button
+  1825→                size="lg"
+  1826→                variant="outline"
+  1827→                className="border-border text-foreground hover:bg-secondary rounded-xl px-8 h-12 transition-all duration-200"
+  1828→                onClick={() => navigate('contact')}
+  1829→              >
+  1830→                Talk to Sales
+  1831→              </Button>
+  1832→            </div>
+  1833→          </motion.div>
+  1834→        </div>
+  1835→      </section>
+  1836→    </PageLayout>
+  1837→  )
+  1838→}
+  1839→

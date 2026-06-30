@@ -1,0 +1,2002 @@
+     1→/**
+     2→ * ERP Database Connector Utility
+     3→ *
+     4→ * Provides a unified interface for querying connected ERP databases.
+     5→ * Each ERP has its own Neon PostgreSQL database with different schemas.
+     6→ * This module maps ERP-specific schemas to ApexFlow's admin panel data model.
+     7→ *
+     8→ * Design: Each sub-query is wrapped in its own try/catch so that a single
+     9→ * failure (e.g. missing column) does NOT bring down the entire function.
+    10→ */
+    11→
+    12→import { neon, type NeonQueryFunction } from '@neondatabase/serverless'
+    13→import { db } from '@/lib/db'
+    14→
+    15→// ─── ERP Database URL Mapping ────────────────────────────────────────────────
+    16→const ERP_DB_URLS: Record<string, string> = {
+    17→  apparelflow: process.env.APPARELFLOW_DATABASE_URL || '',
+    18→  hotelflow: process.env.HOTELFLOW_DATABASE_URL || '',
+    19→  eduflow: process.env.EDUFLOW_DATABASE_URL || '',
+    20→  martflow: process.env.MARTFLOW_DATABASE_URL || '',
+    21→  pharmaflow: process.env.PHARMAFLOW_DATABASE_URL || '',
+    22→  buildflow: process.env.BUILDFLOW_DATABASE_URL || '',
+    23→  travelflow: process.env.TRAVELFLOW_DATABASE_URL || '',
+    24→  tenantflow: process.env.TENANTFLOW_DATABASE_URL || '',
+    25→  factoryflow: process.env.FACTORYFLOW_DATABASE_URL || '',
+    26→  foodflow: process.env.FOODFLOW_DATABASE_URL || '',
+    27→  autoflow: process.env.AUTOFLOW_DATABASE_URL || '',
+    28→  healthflow: process.env.HEALTHFLOW_DATABASE_URL || '',
+    29→  textileflow: process.env.TEXTILEFLOW_DATABASE_URL || '',
+    30→  creativeflow: process.env.CREATIVEFLOW_DATABASE_URL || '',
+    31→  logisticflow: process.env.LOGISTICFLOW_DATABASE_URL || '',
+    32→  distriflow: process.env.DISTRIFLOW_DATABASE_URL || '',
+    33→  fleetflow: process.env.FLEETFLOW_DATABASE_URL || '',
+    34→  electroflow: process.env.ELECTROFLOW_DATABASE_URL || '',
+    35→  bookflow: process.env.BOOKFLOW_DATABASE_URL || '',
+    36→  fuelflow: process.env.FUELFLOW_DATABASE_URL || '',
+    37→}
+    38→
+    39→// ─── Database URL Cache (from ErpSystem table) ──────────────────────────────
+    40→let dbUrlCache: Record<string, string> | null = null
+    41→let dbUrlCacheTs = 0
+    42→const DB_URL_CACHE_TTL = 30_000 // 30 seconds
+    43→
+    44→async function loadErpDbUrls(): Promise<Record<string, string>> {
+    45→  const now = Date.now()
+    46→  if (dbUrlCache && now - dbUrlCacheTs < DB_URL_CACHE_TTL) return dbUrlCache
+    47→
+    48→  try {
+    49→    const erps = await db.erpSystem.findMany({
+    50→      select: { slug: true, databaseUrl: true },
+    51→    })
+    52→    const urls: Record<string, string> = {}
+    53→    for (const erp of erps) {
+    54→      if (erp.databaseUrl) urls[erp.slug] = erp.databaseUrl
+    55→    }
+    56→    dbUrlCache = urls
+    57→    dbUrlCacheTs = now
+    58→    return urls
+    59→  } catch (err) {
+    60→    console.warn('[ERP-CONNECTOR] Failed to load DB URLs from database:', err)
+    61→    return dbUrlCache || {}
+    62→  }
+    63→}
+    64→
+    65→/** Get the database URL for an ERP slug — checks database first, falls back to env var */
+    66→async function getErpDbUrl(slug: string): Promise<string> {
+    67→  const dbUrls = await loadErpDbUrls()
+    68→  return dbUrls[slug] || ERP_DB_URLS[slug] || ''
+    69→}
+    70→
+    71→// ─── Types ───────────────────────────────────────────────────────────────────
+    72→export interface ErpClient {
+    73→  id: string
+    74→  companyName: string
+    75→  contactPerson: string
+    76→  email: string
+    77→  phone: string | null
+    78→  city: string | null
+    79→  country: string | null
+    80→  status: 'trial' | 'active' | 'inactive'
+    81→  industry: string | null
+    82→  erpSlug: string
+    83→  erpName: string
+    84→  licenseType: string | null
+    85→  databaseStatus: string | null
+    86→  maxUsers: number | null
+    87→  maxShops: number | null
+    88→  selectedModules: string | null
+    89→  createdAt: string
+    90→}
+    91→
+    92→export interface ErpInvoice {
+    93→  id: string
+    94→  invoiceNumber: string
+    95→  clientName: string
+    96→  clientEmail: string | null
+    97→  erpSlug: string
+    98→  erpName: string
+    99→  amount: number
+   100→  tax: number
+   101→  totalAmount: number
+   102→  status: string
+   103→  dueDate: string | null
+   104→  paidAt: string | null
+   105→  createdAt: string
+   106→}
+   107→
+   108→export interface ErpLicense {
+   109→  id: string
+   110→  serialKey: string
+   111→  clientName: string
+   112→  erpSlug: string
+   113→  erpName: string
+   114→  licenseType: string
+   115→  status: string
+   116→  deviceName: string | null
+   117→  deviceFingerprint: string | null
+   118→  activatedAt: string | null
+   119→  expiresAt: string | null
+   120→  createdAt: string
+   121→}
+   122→
+   123→export interface ErpDashboardStats {
+   124→  totalClients: number
+   125→  activeClients: number
+   126→  totalRevenue: number
+   127→  totalInvoices: number
+   128→  activeLicenses: number
+   129→  totalDevices: number
+   130→  clientCompanies: ErpClient[]
+   131→  invoices: ErpInvoice[]
+   132→  licenses: ErpLicense[]
+   133→  revenueByMonth: { month: string; revenue: number }[]
+   134→}
+   135→
+   136→// ─── Connection Test ─────────────────────────────────────────────────────────
+   137→export async function testErpConnection(slug: string): Promise<{
+   138→  connected: boolean
+   139→  latency?: number
+   140→  error?: string
+   141→  clientCount?: number
+   142→  schemaWarning?: string
+   143→}> {
+   144→  const url = await getErpDbUrl(slug)
+   145→  if (!url) {
+   146→    return { connected: false, error: 'Database URL not configured — set it in Admin Panel > Settings > Integrations > ERP' }
+   147→  }
+   148→
+   149→  try {
+   150→    const start = Date.now()
+   151→    const sql = neon(url, { fetchConnectionCache: true })
+   152→    const [result] = await withTimeout(sql`SELECT 1 as ok`, 5_000)
+   153→    const latency = Date.now() - start
+   154→
+   155→    if (result?.ok === 1) {
+   156→      // Also get client count
+   157→      let clientCount = 0
+   158→      try {
+   159→        if (slug === 'apparelflow') {
+   160→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "ClientCompany"`
+   161→          clientCount = cnt?.c ?? 0
+   162→        } else if (slug === 'hotelflow') {
+   163→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "OwnerClient"`
+   164→          clientCount = cnt?.c ?? 0
+   165→        } else if (slug === 'eduflow') {
+   166→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "Client"`
+   167→          clientCount = cnt?.c ?? 0
+   168→        } else if (slug === 'martflow') {
+   169→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "tenants"`
+   170→          clientCount = cnt?.c ?? 0
+   171→        } else if (slug === 'pharmaflow') {
+   172→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "Client"`
+   173→          clientCount = cnt?.c ?? 0
+   174→        } else if (slug === 'buildflow') {
+   175→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "ERPTenant"`
+   176→          clientCount = cnt?.c ?? 0
+   177→        } else if (slug === 'travelflow') {
+   178→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "OwnerClient"`
+   179→          clientCount = cnt?.c ?? 0
+   180→        } else if (slug === 'tenantflow') {
+   181→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "Client"`
+   182→          clientCount = cnt?.c ?? 0
+   183→        } else if (slug === 'factoryflow') {
+   184→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "OwnerClient"`
+   185→          clientCount = cnt?.c ?? 0
+   186→        } else if (slug === 'foodflow') {
+   187→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "Tenant"`
+   188→          clientCount = cnt?.c ?? 0
+   189→        } else if (slug === 'autoflow') {
+   190→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "Client"`
+   191→          clientCount = cnt?.c ?? 0
+   192→        } else if (slug === 'healthflow') {
+   193→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "Client"`
+   194→          clientCount = cnt?.c ?? 0
+   195→        } else if (slug === 'textileflow') {
+   196→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "owner_clients"`
+   197→          clientCount = cnt?.c ?? 0
+   198→        } else if (slug === 'creativeflow') {
+   199→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "erp_clients"`
+   200→          clientCount = cnt?.c ?? 0
+   201→        } else if (slug === 'distriflow') {
+   202→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "OwnerClient"`
+   203→          clientCount = cnt?.c ?? 0
+   204→        } else if (slug === 'logisticflow') {
+   205→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "Tenant"`
+   206→          clientCount = cnt?.c ?? 0
+   207→        } else if (slug === 'fleetflow') {
+   208→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "Tenant"`
+   209→          clientCount = cnt?.c ?? 0
+   210→        } else if (slug === 'electroflow') {
+   211→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "Tenant"`
+   212→          clientCount = cnt?.c ?? 0
+   213→        } else if (slug === 'bookflow') {
+   214→          const [cnt] = await sql`SELECT COUNT(*)::int AS c FROM "OwnerClient"`
+   215→          clientCount = cnt?.c ?? 0
+   216→        }
+   217→      } catch (err) {
+   218→        const msg = err instanceof Error ? err.message : String(err)
+   219→        console.warn(`[ERP-CONNECTOR] ${slug} schema warning: ${msg}`)
+   220→        // Connection IS working — just the client count table is different
+   221→        // Return connected: true with a warning instead of connected: false
+   222→      }
+   223→      return clientCount > 0
+   224→        ? { connected: true, latency, clientCount }
+   225→        : { connected: true, latency, clientCount: 0, schemaWarning: `Schema mismatch: could not count clients — table may differ from expected schema` }
+   226→    }
+   227→    return { connected: false, error: 'Unexpected response' }
+   228→  } catch (err) {
+   229→    return {
+   230→      connected: false,
+   231→      error: err instanceof Error ? err.message : 'Connection failed',
+   232→    }
+   233→  }
+   234→}
+   235→
+   236→// ─── Timeout helper ──────────────────────────────────────────────────────────
+   237→function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+   238→  return Promise.race([
+   239→    promise,
+   240→    new Promise<never>((_, reject) =>
+   241→      setTimeout(() => reject(new Error(`Connection timeout after ${ms}ms`)), ms)
+   242→    ),
+   243→  ])
+   244→}
+   245→
+   246→// ─── Get SQL for an ERP ──────────────────────────────────────────────────────
+   247→async function getErpSql(slug: string): Promise<NeonQueryFunction<false, false> | null> {
+   248→  const url = await getErpDbUrl(slug)
+   249→  if (!url) return null
+   250→  return neon(url, { fetchConnectionCache: true })
+   251→}
+   252→
+   253→// ─── Connection cache (avoids re-testing recently-failed connections) ──────────
+   254→const connectionCache = new Map<string, { ok: boolean; ts: number }>()
+   255→const CACHE_TTL_MS = 60_000 // 1 minute for successful connections
+   256→const FAILED_CACHE_TTL_MS = 30_000 // 30 seconds for failed connections (retry sooner)
+   257→
+   258→/** Quick connectivity check — returns true if the ERP database is reachable.
+   259→ *  Caches successful results for 1 minute, failed results for 30 seconds
+   260→ *  so we retry unreachable databases sooner. Uses a 5-second timeout to avoid
+   261→ *  long waits on unresponsive hosts. */
+   262→async function isErpReachable(slug: string): Promise<boolean> {
+   263→  const cached = connectionCache.get(slug)
+   264→  const ttl = cached?.ok ? CACHE_TTL_MS : FAILED_CACHE_TTL_MS
+   265→  if (cached && Date.now() - cached.ts < ttl) return cached.ok
+   266→
+   267→  const url = await getErpDbUrl(slug)
+   268→  if (!url) {
+   269→    connectionCache.set(slug, { ok: false, ts: Date.now() })
+   270→    return false
+   271→  }
+   272→
+   273→  try {
+   274→    const sql = neon(url, { fetchConnectionCache: true })
+   275→    const [result] = await withTimeout(sql`SELECT 1 as ok`, 5_000)
+   276→    const ok = result?.ok === 1
+   277→    connectionCache.set(slug, { ok, ts: Date.now() })
+   278→    return ok
+   279→  } catch {
+   280→    connectionCache.set(slug, { ok: false, ts: Date.now() })
+   281→    return false
+   282→  }
+   283→}
+   284→
+   285→// ─── Get list of active ERP slugs ────────────────────────────────────────────
+   286→export async function getActiveErpSlugs(): Promise<string[]> {
+   287→  const dbUrls = await loadErpDbUrls()
+   288→  const allUrls = { ...ERP_DB_URLS, ...dbUrls }
+   289→  return Object.entries(allUrls)
+   290→    .filter(([, url]) => url && url.startsWith('postgresql://'))
+   291→    .map(([slug]) => slug)
+   292→}
+   293→
+   294→/** Invalidate the URL cache — call this after admin updates an ERP database URL */
+   295→export function invalidateErpUrlCache(): void {
+   296→  dbUrlCache = null
+   297→  dbUrlCacheTs = 0
+   298→}
+   299→
+   300→// ─── Safe query helper ───────────────────────────────────────────────────────
+   301→async function safeQuery<T>(
+   302→  label: string,
+   303→  fn: () => Promise<T[]>,
+   304→  fallback: T[] = []
+   305→): Promise<T[]> {
+   306→  try {
+   307→    return await fn()
+   308→  } catch (error) {
+   309→    console.error(`[ERP-CONNECTOR] ${label} query failed:`, error instanceof Error ? error.message : error)
+   310→    return fallback
+   311→  }
+   312→}
+   313→
+   314→async function safeQuerySingle<T>(
+   315→  label: string,
+   316→  fn: () => Promise<T[]>,
+   317→  fallback: T
+   318→): Promise<T> {
+   319→  try {
+   320→    const result = await fn()
+   321→    return result[0] ?? fallback
+   322→  } catch (error) {
+   323→    console.error(`[ERP-CONNECTOR] ${label} query failed:`, error instanceof Error ? error.message : error)
+   324→    return fallback
+   325→  }
+   326→}
+   327→
+   328→/** Safely extract a prefix from a potentially null/undefined id value */
+   329→function safeIdPrefix(val: any, len: number): string {
+   330→  if (val && typeof val === 'string') return val.slice(0, len)
+   331→  if (val != null) return String(val).slice(0, len)
+   332→  return 'UNKNOWN'
+   333→}
+   334→
+   335→// ─── ApparelFlow Data Queries ────────────────────────────────────────────────
+   336→async function getApparelFlowStats(): Promise<ErpDashboardStats | null> {
+   337→  const sql = await getErpSql('apparelflow')
+   338→  if (!sql) return null
+   339→
+   340→  try {
+   341→    // ── Client companies (resilient) ──
+   342→    const clients = await safeQuery('AF-Clients', () =>
+   343→      sql`
+   344→        SELECT
+   345→          id, "companyName", "contactPerson", "email", "phone",
+   346→          "city", "country", "adminEmail", "licenseType", "licenseStatus",
+   347→          "serialKey", "isActive", "databaseStatus", "industry",
+   348→          "maxUsers", "maxShops", "selectedModules", "businessType",
+   349→          "createdAt"
+   350→        FROM "ClientCompany"
+   351→        ORDER BY "createdAt" DESC
+   352→      `
+   353→    )
+   354→
+   355→    // ── Active clients count ──
+   356→    const activeResult = await safeQuerySingle('AF-ActiveClients', () =>
+   357→      sql`SELECT COUNT(*)::int AS c FROM "ClientCompany" WHERE "isActive" = true`,
+   358→      { c: 0 }
+   359→    )
+   360→
+   361→    // ── Revenue from paid invoices (resilient) ──
+   362→    const revenueResult = await safeQuerySingle('AF-Revenue', () =>
+   363→      sql`SELECT COALESCE(SUM("totalAmount"), 0)::float AS r FROM "ClientInvoice" WHERE "paymentStatus" = 'paid'`,
+   364→      { r: 0 }
+   365→    )
+   366→
+   367→    // ── Total invoices count (resilient) ──
+   368→    const invoiceCountResult = await safeQuerySingle('AF-InvoiceCount', () =>
+   369→      sql`SELECT COUNT(*)::int AS c FROM "ClientInvoice"`,
+   370→      { c: 0 }
+   371→    )
+   372→
+   373→    // ── Client invoices (resilient) ──
+   374→    const invoices = await safeQuery('AF-Invoices', () =>
+   375→      sql`
+   376→        SELECT
+   377→          ci.id, ci."invoiceNo", ci."serialKey", ci."licenseType",
+   378→          ci."licensePeriod", ci."subtotal", ci."taxAmount", ci."discountAmount",
+   379→          ci."totalAmount", ci."paidAmount", ci."paymentStatus",
+   380→          ci."startDate", ci."expiryDate", ci."createdAt",
+   381→          cc."companyName", cc."adminEmail"
+   382→        FROM "ClientInvoice" ci
+   383→        LEFT JOIN "ClientCompany" cc ON ci."clientCompanyId" = cc.id
+   384→        ORDER BY ci."createdAt" DESC
+   385→      `
+   386→    )
+   387→
+   388→    // ── License activations (resilient) ──
+   389→    const licenseActivations = await safeQuery('AF-Licenses', () =>
+   390→      sql`
+   391→        SELECT
+   392→          la.id, la."serialKey", la."machineId", la."machineLabel",
+   393→          la."ipAddress", la."isActive", la."activatedAt", la."lastCheckedAt",
+   394→          cc."companyName", cc."licenseType"
+   395→        FROM "LicenseActivation" la
+   396→        LEFT JOIN "ClientCompany" cc ON la."clientCompanyId" = cc.id
+   397→        ORDER BY la."activatedAt" DESC
+   398→      `
+   399→    )
+   400→
+   401→    // ── Revenue by month (last 6 months, resilient) ──
+   402→    const revenueByMonth = await safeQuery('AF-RevenueByMonth', () =>
+   403→      sql`
+   404→        SELECT
+   405→          TO_CHAR("createdAt", 'Mon') AS month,
+   406→          COALESCE(SUM("totalAmount"), 0)::float AS revenue
+   407→        FROM "ClientInvoice"
+   408→        WHERE "createdAt" >= NOW() - INTERVAL '6 months'
+   409→        GROUP BY TO_CHAR("createdAt", 'Mon'), DATE_TRUNC('month', "createdAt")
+   410→        ORDER BY DATE_TRUNC('month', "createdAt") ASC
+   411→        LIMIT 6
+   412→      `
+   413→    )
+   414→
+   415→    // Map clients to ErpClient format
+   416→    const mappedClients: ErpClient[] = clients.map((c: any) => ({
+   417→      id: c.id,
+   418→      companyName: c.companyName || 'Unknown',
+   419→      contactPerson: c.contactPerson || c.adminEmail || '—',
+   420→      email: c.email || c.adminEmail || '',
+   421→      phone: c.phone || null,
+   422→      city: c.city || null,
+   423→      country: c.country || 'Pakistan',
+   424→      status: c.isActive ? 'active' : 'inactive',
+   425→      industry: c.industry || c.businessType || null,
+   426→      erpSlug: 'apparelflow',
+   427→      erpName: 'ApparelFlow',
+   428→      licenseType: c.licenseType || null,
+   429→      databaseStatus: c.databaseStatus || null,
+   430→      maxUsers: c.maxUsers || null,
+   431→      maxShops: c.maxShops || null,
+   432→      selectedModules: c.selectedModules || null,
+   433→      createdAt: c.createdAt,
+   434→    }))
+   435→
+   436→    // Map invoices
+   437→    const mappedInvoices: ErpInvoice[] = invoices.map((inv: any) => ({
+   438→      id: inv.id,
+   439→      invoiceNumber: inv.invoiceNo || `INV-${safeIdPrefix(inv.id, 8)}`,
+   440→      clientName: inv.companyName || 'Unknown',
+   441→      clientEmail: inv.adminEmail || null,
+   442→      erpSlug: 'apparelflow',
+   443→      erpName: 'ApparelFlow',
+   444→      amount: inv.subtotal || 0,
+   445→      tax: inv.taxAmount || 0,
+   446→      totalAmount: inv.totalAmount || 0,
+   447→      status: inv.paymentStatus || 'pending',
+   448→      dueDate: inv.expiryDate,
+   449→      paidAt: inv.paymentStatus === 'paid' ? inv.createdAt : null,
+   450→      createdAt: inv.createdAt,
+   451→    }))
+   452→
+   453→    // Map licenses
+   454→    const mappedLicenses: ErpLicense[] = licenseActivations.map((lic: any) => ({
+   455→      id: lic.id,
+   456→      serialKey: lic.serialKey || safeIdPrefix(lic.id, 12).toUpperCase(),
+   457→      clientName: lic.companyName || 'Unknown',
+   458→      erpSlug: 'apparelflow',
+   459→      erpName: 'ApparelFlow',
+   460→      licenseType: lic.licenseType || 'standard',
+   461→      status: lic.isActive ? 'active' : 'expired',
+   462→      deviceName: lic.machineLabel || lic.machineId || null,
+   463→      deviceFingerprint: lic.machineId || null,
+   464→      activatedAt: lic.activatedAt,
+   465→      expiresAt: null,
+   466→      createdAt: lic.activatedAt,
+   467→    }))
+   468→
+   469→    return {
+   470→      totalClients: clients.length,
+   471→      activeClients: activeResult?.c ?? 0,
+   472→      totalRevenue: revenueResult?.r ?? 0,
+   473→      totalInvoices: invoiceCountResult?.c ?? 0,
+   474→      activeLicenses: licenseActivations.length,
+   475→      totalDevices: licenseActivations.length,
+   476→      clientCompanies: mappedClients,
+   477→      invoices: mappedInvoices,
+   478→      licenses: mappedLicenses,
+   479→      revenueByMonth: revenueByMonth.map((r: any) => ({
+   480→        month: r.month,
+   481→        revenue: r.revenue,
+   482→      })),
+   483→    }
+   484→  } catch (error) {
+   485→    console.error('[ERP-CONNECTOR] ApparelFlow stats failed completely:', error)
+   486→    return null
+   487→  }
+   488→}
+   489→
+   490→// ─── HotelFlow Data Queries ──────────────────────────────────────────────────
+   491→async function getHotelFlowStats(): Promise<ErpDashboardStats | null> {
+   492→  const sql = await getErpSql('hotelflow')
+   493→  if (!sql) return null
+   494→
+   495→  try {
+   496→    // ── Owner clients (resilient) ──
+   497→    const clients = await safeQuery('HF-Clients', () =>
+   498→      sql`
+   499→        SELECT
+   500→          id, "companyName", "contactPerson", "email", "phone",
+   501→          "city", "country", "serialKey", "plan", "status",
+   502→          "monthlyFee", "maxProperties", "maxRooms", "maxUsers",
+   503→          "createdAt"
+   504→        FROM "OwnerClient"
+   505→        ORDER BY "createdAt" DESC
+   506→      `
+   507→    )
+   508→
+   509→    // ── Active clients count ──
+   510→    const activeResult = await safeQuerySingle('HF-ActiveClients', () =>
+   511→      sql`SELECT COUNT(*)::int AS c FROM "OwnerClient" WHERE status = 'active'`,
+   512→      { c: 0 }
+   513→    )
+   514→
+   515→    // ── Revenue from paid invoices (resilient) ──
+   516→    const revenueResult = await safeQuerySingle('HF-Revenue', () =>
+   517→      sql`SELECT COALESCE(SUM("totalAmount"), 0)::float AS r FROM "OwnerInvoice" WHERE status = 'paid'`,
+   518→      { r: 0 }
+   519→    )
+   520→
+   521→    // ── Total invoices count (resilient) ──
+   522→    const invoiceCountResult = await safeQuerySingle('HF-InvoiceCount', () =>
+   523→      sql`SELECT COUNT(*)::int AS c FROM "OwnerInvoice"`,
+   524→      { c: 0 }
+   525→    )
+   526→
+   527→    // ── Client invoices (resilient) ──
+   528→    const invoices = await safeQuery('HF-Invoices', () =>
+   529→      sql`
+   530→        SELECT
+   531→          oi.id, oi."invoiceNumber",
+   532→          oi."subtotal", oi."discountAmount", oi."taxAmount",
+   533→          oi."totalAmount", oi."paidAmount", oi."status",
+   534→          oi."issueDate", oi."dueDate", oi."paidDate", oi."createdAt",
+   535→          oc."companyName", oc."email" AS "clientEmail"
+   536→        FROM "OwnerInvoice" oi
+   537→        LEFT JOIN "OwnerClient" oc ON oi."clientId" = oc.id
+   538→        ORDER BY oi."createdAt" DESC
+   539→      `
+   540→    )
+   541→
+   542→    // ── Owner devices (resilient) ──
+   543→    const devices = await safeQuery('HF-Devices', () =>
+   544→      sql`
+   545→        SELECT
+   546→          od.id, od."deviceName", od."deviceType", od."ipAddress",
+   547→          od."isActive", od."registeredAt", od."lastActive",
+   548→          oc."companyName", oc."serialKey", oc."plan"
+   549→        FROM "OwnerDevice" od
+   550→        LEFT JOIN "OwnerClient" oc ON od."clientId" = oc.id
+   551→        ORDER BY od."registeredAt" DESC
+   552→      `
+   553→    )
+   554→
+   555→    // ── Revenue by month (last 6 months, resilient) ──
+   556→    const revenueByMonth = await safeQuery('HF-RevenueByMonth', () =>
+   557→      sql`
+   558→        SELECT
+   559→          TO_CHAR("createdAt", 'Mon') AS month,
+   560→          COALESCE(SUM("totalAmount"), 0)::float AS revenue
+   561→        FROM "OwnerInvoice"
+   562→        WHERE "createdAt" >= NOW() - INTERVAL '6 months'
+   563→        GROUP BY TO_CHAR("createdAt", 'Mon'), DATE_TRUNC('month', "createdAt")
+   564→        ORDER BY DATE_TRUNC('month', "createdAt") ASC
+   565→        LIMIT 6
+   566→      `
+   567→    )
+   568→
+   569→    // Map clients to ErpClient format
+   570→    const mappedClients: ErpClient[] = clients.map((c: any) => ({
+   571→      id: c.id,
+   572→      companyName: c.companyName || 'Unknown',
+   573→      contactPerson: c.contactPerson || '—',
+   574→      email: c.email || '',
+   575→      phone: c.phone || null,
+   576→      city: c.city || null,
+   577→      country: c.country || null,
+   578→      status: c.status === 'active' ? 'active' : c.status === 'trial' ? 'trial' : 'inactive',
+   579→      industry: 'Hospitality',
+   580→      erpSlug: 'hotelflow',
+   581→      erpName: 'HotelFlow',
+   582→      licenseType: c.plan || null,
+   583→      databaseStatus: c.status || null,
+   584→      maxUsers: c.maxUsers || null,
+   585→      maxShops: c.maxProperties || null,
+   586→      selectedModules: null,
+   587→      createdAt: c.createdAt,
+   588→    }))
+   589→
+   590→    // Map invoices
+   591→    const mappedInvoices: ErpInvoice[] = invoices.map((inv: any) => ({
+   592→      id: inv.id,
+   593→      invoiceNumber: inv.invoiceNumber || `INV-${safeIdPrefix(inv.id, 8)}`,
+   594→      clientName: inv.companyName || 'Unknown',
+   595→      clientEmail: inv.clientEmail || null,
+   596→      erpSlug: 'hotelflow',
+   597→      erpName: 'HotelFlow',
+   598→      amount: inv.subtotal || 0,
+   599→      tax: inv.taxAmount || 0,
+   600→      totalAmount: inv.totalAmount || 0,
+   601→      status: inv.status || 'pending',
+   602→      dueDate: inv.dueDate,
+   603→      paidAt: inv.status === 'paid' ? inv.paidDate || inv.createdAt : null,
+   604→      createdAt: inv.createdAt,
+   605→    }))
+   606→
+   607→    // Map devices as licenses
+   608→    const mappedLicenses: ErpLicense[] = devices.map((dev: any) => ({
+   609→      id: dev.id,
+   610→      serialKey: dev.serialKey || safeIdPrefix(dev.id, 12).toUpperCase(),
+   611→      clientName: dev.companyName || 'Unknown',
+   612→      erpSlug: 'hotelflow',
+   613→      erpName: 'HotelFlow',
+   614→      licenseType: dev.plan || 'standard',
+   615→      status: dev.isActive ? 'active' : 'expired',
+   616→      deviceName: dev.deviceName || null,
+   617→      deviceFingerprint: dev.ipAddress || null,
+   618→      activatedAt: dev.registeredAt,
+   619→      expiresAt: null,
+   620→      createdAt: dev.registeredAt,
+   621→    }))
+   622→
+   623→    return {
+   624→      totalClients: clients.length,
+   625→      activeClients: activeResult?.c ?? 0,
+   626→      totalRevenue: revenueResult?.r ?? 0,
+   627→      totalInvoices: invoiceCountResult?.c ?? 0,
+   628→      activeLicenses: devices.filter((d: any) => d.isActive).length,
+   629→      totalDevices: devices.length,
+   630→      clientCompanies: mappedClients,
+   631→      invoices: mappedInvoices,
+   632→      licenses: mappedLicenses,
+   633→      revenueByMonth: revenueByMonth.map((r: any) => ({
+   634→        month: r.month,
+   635→        revenue: r.revenue,
+   636→      })),
+   637→    }
+   638→  } catch (error) {
+   639→    console.error('[ERP-CONNECTOR] HotelFlow stats failed completely:', error)
+   640→    return null
+   641→  }
+   642→}
+   643→
+   644→// ─── EduFlow Data Queries ────────────────────────────────────────────────────
+   645→async function getEduFlowStats(): Promise<ErpDashboardStats | null> {
+   646→  const sql = await getErpSql('eduflow')
+   647→  if (!sql) return null
+   648→
+   649→  try {
+   650→    // ── Client companies (schools/institutions) ──
+   651→    const clients = await safeQuery('EF-Clients', () =>
+   652→      sql`
+   653→        SELECT
+   654→          id, "companyName", "contactPerson", "email", "phone",
+   655→          "city", "country", "status", "notes",
+   656→          "createdAt"
+   657→        FROM "Client"
+   658→        ORDER BY "createdAt" DESC
+   659→      `
+   660→    )
+   661→
+   662→    // ── Active clients count ──
+   663→    const activeResult = await safeQuerySingle('EF-ActiveClients', () =>
+   664→      sql`SELECT COUNT(*)::int AS c FROM "Client" WHERE status = 'active'`,
+   665→      { c: 0 }
+   666→    )
+   667→
+   668→    // ── Revenue from paid invoices ──
+   669→    const revenueResult = await safeQuerySingle('EF-Revenue', () =>
+   670→      sql`SELECT COALESCE(SUM("total"), 0)::float AS r FROM "Invoice" WHERE status = 'paid'`,
+   671→      { r: 0 }
+   672→    )
+   673→
+   674→    // ── Total invoices count ──
+   675→    const invoiceCountResult = await safeQuerySingle('EF-InvoiceCount', () =>
+   676→      sql`SELECT COUNT(*)::int AS c FROM "Invoice"`,
+   677→      { c: 0 }
+   678→    )
+   679→
+   680→    // ── Client invoices ──
+   681→    const invoices = await safeQuery('EF-Invoices', () =>
+   682→      sql`
+   683→        SELECT
+   684→          i.id, i."invoiceNumber",
+   685→          i."subtotal", i."taxAmount", i."discount",
+   686→          i."total", i."status",
+   687→          i."issueDate", i."dueDate", i."paidDate", i."createdAt",
+   688→          c."companyName", c."email" AS "clientEmail"
+   689→        FROM "Invoice" i
+   690→        LEFT JOIN "Client" c ON i."clientId" = c.id
+   691→        ORDER BY i."createdAt" DESC
+   692→      `
+   693→    )
+   694→
+   695→    // ── Serial keys (licenses) ──
+   696→    const serialKeys = await safeQuery('EF-Licenses', () =>
+   697→      sql`
+   698→        SELECT
+   699→          sk.id, sk.key, sk.plan, sk.status, sk."maxDevices", sk."maxStudents",
+   700→          sk."activatedAt", sk."expiresAt", sk."createdAt",
+   701→          c."companyName"
+   702→        FROM "SerialKey" sk
+   703→        LEFT JOIN "Client" c ON sk."clientId" = c.id
+   704→        ORDER BY sk."createdAt" DESC
+   705→      `
+   706→    )
+   707→
+   708→    // ── Revenue by month (last 6 months) ──
+   709→    const revenueByMonth = await safeQuery('EF-RevenueByMonth', () =>
+   710→      sql`
+   711→        SELECT
+   712→          TO_CHAR("createdAt", 'Mon') AS month,
+   713→          COALESCE(SUM("total"), 0)::float AS revenue
+   714→        FROM "Invoice"
+   715→        WHERE "createdAt" >= NOW() - INTERVAL '6 months'
+   716→        GROUP BY TO_CHAR("createdAt", 'Mon'), DATE_TRUNC('month', "createdAt")
+   717→        ORDER BY DATE_TRUNC('month', "createdAt") ASC
+   718→        LIMIT 6
+   719→      `
+   720→    )
+   721→
+   722→    // Map clients to ErpClient format
+   723→    const mappedClients: ErpClient[] = clients.map((c: any) => ({
+   724→      id: c.id,
+   725→      companyName: c.companyName || 'Unknown',
+   726→      contactPerson: c.contactPerson || '—',
+   727→      email: c.email || '',
+   728→      phone: c.phone || null,
+   729→      city: c.city || null,
+   730→      country: c.country || null,
+   731→      status: c.status === 'active' ? 'active' : c.status === 'trial' ? 'trial' : 'inactive',
+   732→      industry: 'Education',
+   733→      erpSlug: 'eduflow',
+   734→      erpName: 'EduFlow',
+   735→      licenseType: null,
+   736→      databaseStatus: c.status || null,
+   737→      maxUsers: null,
+   738→      maxShops: null,
+   739→      selectedModules: null,
+   740→      createdAt: c.createdAt,
+   741→    }))
+   742→
+   743→    // Map invoices
+   744→    const mappedInvoices: ErpInvoice[] = invoices.map((inv: any) => ({
+   745→      id: inv.id,
+   746→      invoiceNumber: inv.invoiceNumber || `INV-${safeIdPrefix(inv.id, 8)}`,
+   747→      clientName: inv.companyName || 'Unknown',
+   748→      clientEmail: inv.clientEmail || null,
+   749→      erpSlug: 'eduflow',
+   750→      erpName: 'EduFlow',
+   751→      amount: inv.subtotal || 0,
+   752→      tax: inv.taxAmount || 0,
+   753→      totalAmount: inv.total || 0,
+   754→      status: inv.status || 'pending',
+   755→      dueDate: inv.dueDate,
+   756→      paidAt: inv.status === 'paid' ? inv.paidDate || inv.createdAt : null,
+   757→      createdAt: inv.createdAt,
+   758→    }))
+   759→
+   760→    // Map serial keys as licenses
+   761→    const mappedLicenses: ErpLicense[] = serialKeys.map((sk: any) => ({
+   762→      id: sk.id,
+   763→      serialKey: sk.key || safeIdPrefix(sk.id, 12).toUpperCase(),
+   764→      clientName: sk.companyName || 'Unknown',
+   765→      erpSlug: 'eduflow',
+   766→      erpName: 'EduFlow',
+   767→      licenseType: sk.plan || 'standard',
+   768→      status: sk.status === 'active' ? 'active' : 'expired',
+   769→      deviceName: null,
+   770→      deviceFingerprint: null,
+   771→      activatedAt: sk.activatedAt,
+   772→      expiresAt: sk.expiresAt,
+   773→      createdAt: sk.createdAt,
+   774→    }))
+   775→
+   776→    return {
+   777→      totalClients: clients.length,
+   778→      activeClients: activeResult?.c ?? 0,
+   779→      totalRevenue: revenueResult?.r ?? 0,
+   780→      totalInvoices: invoiceCountResult?.c ?? 0,
+   781→      activeLicenses: serialKeys.filter((sk: any) => sk.status === 'active').length,
+   782→      totalDevices: 0,
+   783→      clientCompanies: mappedClients,
+   784→      invoices: mappedInvoices,
+   785→      licenses: mappedLicenses,
+   786→      revenueByMonth: revenueByMonth.map((r: any) => ({
+   787→        month: r.month,
+   788→        revenue: r.revenue,
+   789→      })),
+   790→    }
+   791→  } catch (error) {
+   792→    console.error('[ERP-CONNECTOR] EduFlow stats failed completely:', error)
+   793→    return null
+   794→  }
+   795→}
+   796→
+   797→// ─── MartFlow Data Queries ────────────────────────────────────────────────────
+   798→async function getMartFlowStats(): Promise<ErpDashboardStats | null> {
+   799→  const sql = await getErpSql('martflow')
+   800→  if (!sql) return null
+   801→
+   802→  try {
+   803→    // ── Tenants (client companies / retail stores) ──
+   804→    const clients = await safeQuery('MF-Clients', () =>
+   805→      sql`
+   806→        SELECT
+   807→          id, name, slug, status, plan, email, phone, city, country,
+   808→          "businessType", "maxBranches", "maxUsers", "maxProducts",
+   809→          "dbStatus", "totalPaid", "outstandingAmount",
+   810→          "contactPerson", "contactEmail",
+   811→          "createdAt"
+   812→        FROM tenants
+   813→        ORDER BY "createdAt" DESC
+   814→      `
+   815→    )
+   816→
+   817→    // ── Active tenants count ──
+   818→    const activeResult = await safeQuerySingle('MF-ActiveClients', () =>
+   819→      sql`SELECT COUNT(*)::int AS c FROM tenants WHERE status = 'ACTIVE'`,
+   820→      { c: 0 }
+   821→    )
+   822→
+   823→    // ── Revenue from paid invoices ──
+   824→    const revenueResult = await safeQuerySingle('MF-Revenue', () =>
+   825→      sql`SELECT COALESCE(SUM("totalPaid"), 0)::float AS r FROM tenants`,
+   826→      { r: 0 }
+   827→    )
+   828→
+   829→    // ── Total invoices count ──
+   830→    const invoiceCountResult = await safeQuerySingle('MF-InvoiceCount', () =>
+   831→      sql`SELECT COUNT(*)::int AS c FROM invoices`,
+   832→      { c: 0 }
+   833→    )
+   834→
+   835→    // ── Client invoices ──
+   836→    const invoices = await safeQuery('MF-Invoices', () =>
+   837→      sql`
+   838→        SELECT
+   839→          i.id, i."invoiceNumber", i."clientName", i."clientEmail",
+   840→          i.subtotal, i."taxAmount", i."discountAmount", i."totalAmount",
+   841→          i.status, i."issueDate", i."dueDate", i."paidAt", i."createdAt"
+   842→        FROM invoices i
+   843→        ORDER BY i."createdAt" DESC
+   844→      `
+   845→    )
+   846→
+   847→    // ── Serial keys (licenses) ──
+   848→    const serialKeys = await safeQuery('MF-Licenses', () =>
+   849→      sql`
+   850→        SELECT
+   851→          sk.id, sk.key, sk.status, sk.type, sk."packageName",
+   852→          sk."maxActivations", sk."currentActivations",
+   853→          sk."activatedAt", sk."expiresAt", sk."createdAt"
+   854→        FROM serial_keys sk
+   855→        ORDER BY sk."createdAt" DESC
+   856→      `
+   857→    )
+   858→
+   859→    // ── Devices ──
+   860→    const devices = await safeQuery('MF-Devices', () =>
+   861→      sql`
+   862→        SELECT
+   863→          d.id, d."deviceName", d."deviceType", d."ipAddress",
+   864→          d.status, d."registeredAt", d."lastActiveAt"
+   865→        FROM devices d
+   866→        ORDER BY d."registeredAt" DESC
+   867→      `
+   868→    )
+   869→
+   870→    // ── Revenue by month (last 6 months) ──
+   871→    const revenueByMonth = await safeQuery('MF-RevenueByMonth', () =>
+   872→      sql`
+   873→        SELECT
+   874→          TO_CHAR("createdAt", 'Mon') AS month,
+   875→          COALESCE(SUM("totalAmount"), 0)::float AS revenue
+   876→        FROM invoices
+   877→        WHERE "createdAt" >= NOW() - INTERVAL '6 months'
+   878→        GROUP BY TO_CHAR("createdAt", 'Mon'), DATE_TRUNC('month', "createdAt")
+   879→        ORDER BY DATE_TRUNC('month', "createdAt") ASC
+   880→        LIMIT 6
+   881→      `
+   882→    )
+   883→
+   884→    // Map tenants to ErpClient format
+   885→    const mappedClients: ErpClient[] = clients.map((c: any) => ({
+   886→      id: c.id,
+   887→      companyName: c.name || 'Unknown',
+   888→      contactPerson: c.contactPerson || '—',
+   889→      email: c.contactEmail || c.email || '',
+   890→      phone: c.phone || null,
+   891→      city: c.city || null,
+   892→      country: c.country || null,
+   893→      status: c.status === 'ACTIVE' ? 'active' : c.status === 'TRIAL' ? 'trial' : 'inactive',
+   894→      industry: c.businessType || 'Retail',
+   895→      erpSlug: 'martflow',
+   896→      erpName: 'MartFlow',
+   897→      licenseType: c.plan || null,
+   898→      databaseStatus: c.dbStatus || null,
+   899→      maxUsers: c.maxUsers || null,
+   900→      maxShops: c.maxBranches || null,
+   901→      selectedModules: null,
+   902→      createdAt: c.createdAt,
+   903→    }))
+   904→
+   905→    // Map invoices
+   906→    const mappedInvoices: ErpInvoice[] = invoices.map((inv: any) => ({
+   907→      id: inv.id,
+   908→      invoiceNumber: inv.invoiceNumber || `INV-${safeIdPrefix(inv.id, 8)}`,
+   909→      clientName: inv.clientName || 'Unknown',
+   910→      clientEmail: inv.clientEmail || null,
+   911→      erpSlug: 'martflow',
+   912→      erpName: 'MartFlow',
+   913→      amount: inv.subtotal || 0,
+   914→      tax: inv.taxAmount || 0,
+   915→      totalAmount: inv.totalAmount || 0,
+   916→      status: inv.status?.toLowerCase() || 'pending',
+   917→      dueDate: inv.dueDate,
+   918→      paidAt: inv.paidAt || null,
+   919→      createdAt: inv.createdAt,
+   920→    }))
+   921→
+   922→    // Map serial keys as licenses
+   923→    const mappedLicenses: ErpLicense[] = serialKeys.map((sk: any) => ({
+   924→      id: sk.id,
+   925→      serialKey: sk.key || safeIdPrefix(sk.id, 12).toUpperCase(),
+   926→      clientName: sk.packageName || 'Unknown',
+   927→      erpSlug: 'martflow',
+   928→      erpName: 'MartFlow',
+   929→      licenseType: sk.type?.toLowerCase() || 'standard',
+   930→      status: sk.status?.toLowerCase() === 'active' ? 'active' : 'expired',
+   931→      deviceName: null,
+   932→      deviceFingerprint: null,
+   933→      activatedAt: sk.activatedAt,
+   934→      expiresAt: sk.expiresAt,
+   935→      createdAt: sk.createdAt,
+   936→    }))
+   937→
+   938→    return {
+   939→      totalClients: clients.length,
+   940→      activeClients: activeResult?.c ?? 0,
+   941→      totalRevenue: revenueResult?.r ?? 0,
+   942→      totalInvoices: invoiceCountResult?.c ?? 0,
+   943→      activeLicenses: serialKeys.filter((sk: any) => sk.status === 'ACTIVE').length,
+   944→      totalDevices: devices.length,
+   945→      clientCompanies: mappedClients,
+   946→      invoices: mappedInvoices,
+   947→      licenses: mappedLicenses,
+   948→      revenueByMonth: revenueByMonth.map((r: any) => ({
+   949→        month: r.month,
+   950→        revenue: r.revenue,
+   951→      })),
+   952→    }
+   953→  } catch (error) {
+   954→    console.error('[ERP-CONNECTOR] MartFlow stats failed completely:', error)
+   955→    return null
+   956→  }
+   957→}
+   958→
+   959→// ─── PharmaFlow Data Queries ─────────────────────────────────────────────────
+   960→async function getPharmaFlowStats(): Promise<ErpDashboardStats | null> {
+   961→  const sql = await getErpSql('pharmaflow')
+   962→  if (!sql) return null
+   963→
+   964→  try {
+   965→    // ── Client companies (pharmacies / clinics / businesses) ──
+   966→    const clients = await safeQuery('PF-Clients', () =>
+   967→      sql`
+   968→        SELECT
+   969→          id, "businessName", "contactPerson", "contactEmail", "contactPhone",
+   970→          city, country, status, "businessType",
+   971→          "maxBranches", "maxUsers", "maxDevices", "maxProducts",
+   972→          "verificationStatus", "createdAt"
+   973→        FROM "Client"
+   974→        ORDER BY "createdAt" DESC
+   975→      `
+   976→    )
+   977→
+   978→    // ── Active clients count ──
+   979→    const activeResult = await safeQuerySingle('PF-ActiveClients', () =>
+   980→      sql`SELECT COUNT(*)::int AS c FROM "Client" WHERE status = 'active'`,
+   981→      { c: 0 }
+   982→    )
+   983→
+   984→    // ── Revenue from paid invoices ──
+   985→    const revenueResult = await safeQuerySingle('PF-Revenue', () =>
+   986→      sql`SELECT COALESCE(SUM("totalAmount"), 0)::float AS r FROM "OwnerInvoice" WHERE status = 'paid'`,
+   987→      { r: 0 }
+   988→    )
+   989→
+   990→    // ── Total invoices count ──
+   991→    const invoiceCountResult = await safeQuerySingle('PF-InvoiceCount', () =>
+   992→      sql`SELECT COUNT(*)::int AS c FROM "OwnerInvoice"`,
+   993→      { c: 0 }
+   994→    )
+   995→
+   996→    // ── Client invoices ──
+   997→    const invoices = await safeQuery('PF-Invoices', () =>
+   998→      sql`
+   999→        SELECT
+  1000→          oi.id, oi."invoiceNumber",
+  1001→          oi.subtotal, oi."taxAmount", oi."discountAmount",
+  1002→          oi."totalAmount", oi.status,
+  1003→          oi."invoiceDate", oi."dueDate", oi."paidAt", oi."createdAt",
+  1004→          c."businessName", c."contactEmail" AS "clientEmail"
+  1005→        FROM "OwnerInvoice" oi
+  1006→        LEFT JOIN "Client" c ON oi."clientId" = c.id
+  1007→        ORDER BY oi."createdAt" DESC
+  1008→      `
+  1009→    )
+  1010→
+  1011→    // ── Serial keys (licenses) ──
+  1012→    const serialKeys = await safeQuery('PF-Licenses', () =>
+  1013→      sql`
+  1014→        SELECT
+  1015→          sk.id, sk.key, sk."keyType", sk.status,
+  1016→          sk."maxActivations", sk."activationCount",
+  1017→          sk."activatedAt", sk."expiresAt", sk."createdAt",
+  1018→          c."businessName"
+  1019→        FROM "SerialKey" sk
+  1020→        LEFT JOIN "Client" c ON sk."clientId" = c.id
+  1021→        ORDER BY sk."createdAt" DESC
+  1022→      `
+  1023→    )
+  1024→
+  1025→    // ── Client devices ──
+  1026→    const devices = await safeQuery('PF-Devices', () =>
+  1027→      sql`
+  1028→        SELECT
+  1029→          d.id, d."deviceName", d."deviceType", d."ipAddress",
+  1030→          d.status, d."firstSeenAt", d."lastSeenAt",
+  1031→          c."businessName"
+  1032→        FROM "ClientDevice" d
+  1033→        LEFT JOIN "Client" c ON d."clientId" = c.id
+  1034→        ORDER BY d."firstSeenAt" DESC
+  1035→      `
+  1036→    )
+  1037→
+  1038→    // ── Revenue by month (last 6 months) ──
+  1039→    const revenueByMonth = await safeQuery('PF-RevenueByMonth', () =>
+  1040→      sql`
+  1041→        SELECT
+  1042→          TO_CHAR("createdAt", 'Mon') AS month,
+  1043→          COALESCE(SUM("totalAmount"), 0)::float AS revenue
+  1044→        FROM "OwnerInvoice"
+  1045→        WHERE "createdAt" >= NOW() - INTERVAL '6 months'
+  1046→        GROUP BY TO_CHAR("createdAt", 'Mon'), DATE_TRUNC('month', "createdAt")
+  1047→        ORDER BY DATE_TRUNC('month', "createdAt") ASC
+  1048→        LIMIT 6
+  1049→      `
+  1050→    )
+  1051→
+  1052→    // Map clients to ErpClient format
+  1053→    const mappedClients: ErpClient[] = clients.map((c: any) => ({
+  1054→      id: c.id,
+  1055→      companyName: c.businessName || 'Unknown',
+  1056→      contactPerson: c.contactPerson || '—',
+  1057→      email: c.contactEmail || '',
+  1058→      phone: c.contactPhone || null,
+  1059→      city: c.city || null,
+  1060→      country: c.country || null,
+  1061→      status: c.status === 'active' ? 'active' : c.status === 'trial' ? 'trial' : 'inactive',
+  1062→      industry: c.businessType || 'Pharmaceutical',
+  1063→      erpSlug: 'pharmaflow',
+  1064→      erpName: 'PharmaFlow',
+  1065→      licenseType: null,
+  1066→      databaseStatus: c.verificationStatus || null,
+  1067→      maxUsers: c.maxUsers || null,
+  1068→      maxShops: c.maxBranches || null,
+  1069→      selectedModules: null,
+  1070→      createdAt: c.createdAt,
+  1071→    }))
+  1072→
+  1073→    // Map invoices
+  1074→    const mappedInvoices: ErpInvoice[] = invoices.map((inv: any) => ({
+  1075→      id: inv.id,
+  1076→      invoiceNumber: inv.invoiceNumber || `INV-${safeIdPrefix(inv.id, 8)}`,
+  1077→      clientName: inv.businessName || 'Unknown',
+  1078→      clientEmail: inv.clientEmail || null,
+  1079→      erpSlug: 'pharmaflow',
+  1080→      erpName: 'PharmaFlow',
+  1081→      amount: inv.subtotal || 0,
+  1082→      tax: inv.taxAmount || 0,
+  1083→      totalAmount: inv.totalAmount || 0,
+  1084→      status: inv.status?.toLowerCase() || 'pending',
+  1085→      dueDate: inv.dueDate,
+  1086→      paidAt: inv.paidAt || null,
+  1087→      createdAt: inv.createdAt,
+  1088→    }))
+  1089→
+  1090→    // Map serial keys as licenses
+  1091→    const mappedLicenses: ErpLicense[] = serialKeys.map((sk: any) => ({
+  1092→      id: sk.id,
+  1093→      serialKey: sk.key || safeIdPrefix(sk.id, 12).toUpperCase(),
+  1094→      clientName: sk.businessName || 'Unknown',
+  1095→      erpSlug: 'pharmaflow',
+  1096→      erpName: 'PharmaFlow',
+  1097→      licenseType: sk.keyType?.toLowerCase() || 'standard',
+  1098→      status: sk.status?.toLowerCase() === 'active' ? 'active' : 'expired',
+  1099→      deviceName: null,
+  1100→      deviceFingerprint: null,
+  1101→      activatedAt: sk.activatedAt,
+  1102→      expiresAt: sk.expiresAt,
+  1103→      createdAt: sk.createdAt,
+  1104→    }))
+  1105→
+  1106→    return {
+  1107→      totalClients: clients.length,
+  1108→      activeClients: activeResult?.c ?? 0,
+  1109→      totalRevenue: revenueResult?.r ?? 0,
+  1110→      totalInvoices: invoiceCountResult?.c ?? 0,
+  1111→      activeLicenses: serialKeys.filter((sk: any) => sk.status?.toLowerCase() === 'active').length,
+  1112→      totalDevices: devices.length,
+  1113→      clientCompanies: mappedClients,
+  1114→      invoices: mappedInvoices,
+  1115→      licenses: mappedLicenses,
+  1116→      revenueByMonth: revenueByMonth.map((r: any) => ({
+  1117→        month: r.month,
+  1118→        revenue: r.revenue,
+  1119→      })),
+  1120→    }
+  1121→  } catch (error) {
+  1122→    console.error('[ERP-CONNECTOR] PharmaFlow stats failed completely:', error)
+  1123→    return null
+  1124→  }
+  1125→}
+  1126→
+  1127→// ─── BuildFlow Data Queries ──────────────────────────────────────────────────
+  1128→async function getBuildFlowStats(): Promise<ErpDashboardStats | null> {
+  1129→  const sql = await getErpSql('buildflow')
+  1130→  if (!sql) return null
+  1131→
+  1132→  try {
+  1133→    // ── ERPTenant (client companies — construction firms / developers) ──
+  1134→    const clients = await safeQuery('BF-Clients', () =>
+  1135→      sql`
+  1136→        SELECT
+  1137→          id, "serialNumber", "companyName", "contactName", "contactEmail", "contactPhone",
+  1138→          "city", "country", "planType", "status", "isActive",
+  1139→          "maxUsers", "maxProjects", "currentUsers", "currentProjects",
+  1140→          "databaseStatus", "adminEmail",
+  1141→          "createdAt"
+  1142→        FROM "ERPTenant"
+  1143→        ORDER BY "createdAt" DESC
+  1144→      `
+  1145→    )
+  1146→
+  1147→    // ── Active clients count ──
+  1148→    const activeResult = await safeQuerySingle('BF-ActiveClients', () =>
+  1149→      sql`SELECT COUNT(*)::int AS c FROM "ERPTenant" WHERE "isActive" = true`,
+  1150→      { c: 0 }
+  1151→    )
+  1152→
+  1153→    // ── Revenue from paid invoices ──
+  1154→    const revenueResult = await safeQuerySingle('BF-Revenue', () =>
+  1155→      sql`SELECT COALESCE(SUM("totalAmount"), 0)::float AS r FROM "ERPOwnerInvoice" WHERE status = 'paid'`,
+  1156→      { r: 0 }
+  1157→    )
+  1158→
+  1159→    // ── Total invoices count ──
+  1160→    const invoiceCountResult = await safeQuerySingle('BF-InvoiceCount', () =>
+  1161→      sql`SELECT COUNT(*)::int AS c FROM "ERPOwnerInvoice"`,
+  1162→      { c: 0 }
+  1163→    )
+  1164→
+  1165→    // ── Client invoices ──
+  1166→    const invoices = await safeQuery('BF-Invoices', () =>
+  1167→      sql`
+  1168→        SELECT
+  1169→          oi.id, oi."invoiceNumber", oi.status,
+  1170→          oi.subtotal, oi."taxRate", oi."taxAmount", oi."totalAmount",
+  1171→          oi."dueDate", oi."paidAt", oi."createdAt",
+  1172→          t."companyName", t."contactEmail"
+  1173→        FROM "ERPOwnerInvoice" oi
+  1174→        LEFT JOIN "ERPTenant" t ON oi."tenantId" = t.id
+  1175→        ORDER BY oi."createdAt" DESC
+  1176→      `
+  1177→    )
+  1178→
+  1179→    // ── Serial keys (licenses) ──
+  1180→    const licenseKeys = await safeQuery('BF-Licenses', () =>
+  1181→      sql`
+  1182→        SELECT
+  1183→          sk.id, sk.key, sk.status,
+  1184→          sk."issuedAt", sk."expiresAt", sk."createdAt",
+  1185→          t."companyName"
+  1186→        FROM "ERPSerialKey" sk
+  1187→        LEFT JOIN "ERPTenant" t ON sk."tenantId" = t.id
+  1188→        ORDER BY sk."createdAt" DESC
+  1189→      `
+  1190→    )
+  1191→
+  1192→    // ── Devices ──
+  1193→    const devices = await safeQuery('BF-Devices', () =>
+  1194→      sql`
+  1195→        SELECT
+  1196→          d.id, d."deviceName", d."deviceType", d.status,
+  1197→          d."registeredAt", d."lastActiveAt",
+  1198→          t."companyName"
+  1199→        FROM "ERPDevice" d
+  1200→        LEFT JOIN "ERPTenant" t ON d."tenantId" = t.id
+  1201→        ORDER BY d."registeredAt" DESC
+  1202→      `
+  1203→    )
+  1204→
+  1205→    // ── Revenue by month (last 6 months) ──
+  1206→    const revenueByMonth = await safeQuery('BF-RevenueByMonth', () =>
+  1207→      sql`
+  1208→        SELECT
+  1209→          TO_CHAR("createdAt", 'Mon') AS month,
+  1210→          COALESCE(SUM("totalAmount"), 0)::float AS revenue
+  1211→        FROM "ERPOwnerInvoice"
+  1212→        WHERE "createdAt" >= NOW() - INTERVAL '6 months'
+  1213→        GROUP BY TO_CHAR("createdAt", 'Mon'), DATE_TRUNC('month', "createdAt")
+  1214→        ORDER BY DATE_TRUNC('month', "createdAt") ASC
+  1215→        LIMIT 6
+  1216→      `
+  1217→    )
+  1218→
+  1219→    // Map clients to ErpClient format
+  1220→    const mappedClients: ErpClient[] = clients.map((c: any) => ({
+  1221→      id: c.id,
+  1222→      companyName: c.companyName || 'Unknown',
+  1223→      contactPerson: c.contactName || '—',
+  1224→      email: c.contactEmail || c.adminEmail || '',
+  1225→      phone: c.contactPhone || null,
+  1226→      city: c.city || null,
+  1227→      country: c.country || null,
+  1228→      status: c.isActive ? 'active' : c.status === 'trial' ? 'trial' : 'inactive',
+  1229→      industry: 'Construction & Real Estate',
+  1230→      erpSlug: 'buildflow',
+  1231→      erpName: 'BuildFlow',
+  1232→      licenseType: c.planType || null,
+  1233→      databaseStatus: c.databaseStatus || null,
+  1234→      maxUsers: c.maxUsers || null,
+  1235→      maxShops: c.maxProjects || null,
+  1236→      selectedModules: null,
+  1237→      createdAt: c.createdAt,
+  1238→    }))
+  1239→
+  1240→    // Map invoices
+  1241→    const mappedInvoices: ErpInvoice[] = invoices.map((inv: any) => ({
+  1242→      id: inv.id,
+  1243→      invoiceNumber: inv.invoiceNumber || `INV-${safeIdPrefix(inv.id, 8)}`,
+  1244→      clientName: inv.companyName || 'Unknown',
+  1245→      clientEmail: inv.contactEmail || null,
+  1246→      erpSlug: 'buildflow',
+  1247→      erpName: 'BuildFlow',
+  1248→      amount: inv.subtotal || 0,
+  1249→      tax: inv.taxAmount || 0,
+  1250→      totalAmount: inv.totalAmount || 0,
+  1251→      status: inv.status?.toLowerCase() || 'pending',
+  1252→      dueDate: inv.dueDate,
+  1253→      paidAt: inv.status === 'paid' ? inv.paidAt : null,
+  1254→      createdAt: inv.createdAt,
+  1255→    }))
+  1256→
+  1257→    // Map serial keys as licenses
+  1258→    const mappedLicenses: ErpLicense[] = licenseKeys.map((sk: any) => ({
+  1259→      id: sk.id,
+  1260→      serialKey: sk.key || safeIdPrefix(sk.id, 12).toUpperCase(),
+  1261→      clientName: sk.companyName || 'Unknown',
+  1262→      erpSlug: 'buildflow',
+  1263→      erpName: 'BuildFlow',
+  1264→      licenseType: 'standard',
+  1265→      status: sk.status?.toLowerCase() === 'active' ? 'active' : 'expired',
+  1266→      deviceName: null,
+  1267→      deviceFingerprint: null,
+  1268→      activatedAt: sk.issuedAt,
+  1269→      expiresAt: sk.expiresAt,
+  1270→      createdAt: sk.createdAt,
+  1271→    }))
+  1272→
+  1273→    return {
+  1274→      totalClients: clients.length,
+  1275→      activeClients: activeResult?.c ?? 0,
+  1276→      totalRevenue: revenueResult?.r ?? 0,
+  1277→      totalInvoices: invoiceCountResult?.c ?? 0,
+  1278→      activeLicenses: licenseKeys.filter((sk: any) => sk.status?.toLowerCase() === 'active').length,
+  1279→      totalDevices: devices.length,
+  1280→      clientCompanies: mappedClients,
+  1281→      invoices: mappedInvoices,
+  1282→      licenses: mappedLicenses,
+  1283→      revenueByMonth: revenueByMonth.map((r: any) => ({
+  1284→        month: r.month,
+  1285→        revenue: r.revenue,
+  1286→      })),
+  1287→    }
+  1288→  } catch (error) {
+  1289→    console.error('[ERP-CONNECTOR] BuildFlow stats failed completely:', error)
+  1290→    return null
+  1291→  }
+  1292→}
+  1293→
+  1294→// ─── TravelFlow Data Queries ──────────────────────────────────────────────────
+  1295→async function getTravelFlowStats(): Promise<ErpDashboardStats | null> {
+  1296→  const sql = await getErpSql('travelflow')
+  1297→  if (!sql) return null
+  1298→
+  1299→  try {
+  1300→    // ── Owner clients (travel agencies) ──
+  1301→    const clients = await safeQuery('TF-Clients', () =>
+  1302→      sql`
+  1303→        SELECT
+  1304→          id, "companyName", "contactName", "email", "phone",
+  1305→          "city", "country", "licenseType", "licenseStatus", "status",
+  1306→          "maxPilgrims", "maxBranches", "maxStaff", "features",
+  1307→          "salePrice", "currency", "paymentStatus",
+  1308→          "licenseIssuedAt", "licenseExpiresAt",
+  1309→          "createdAt"
+  1310→        FROM "OwnerClient"
+  1311→        ORDER BY "createdAt" DESC
+  1312→      `
+  1313→    )
+  1314→
+  1315→    // ── Active clients count ──
+  1316→    const activeResult = await safeQuerySingle('TF-ActiveClients', () =>
+  1317→      sql`SELECT COUNT(*)::int AS c FROM "OwnerClient" WHERE status = 'active'`,
+  1318→      { c: 0 }
+  1319→    )
+  1320→
+  1321→    // ── Revenue from paid invoices ──
+  1322→    const revenueResult = await safeQuerySingle('TF-Revenue', () =>
+  1323→      sql`SELECT COALESCE(SUM("totalAmount"), 0)::float AS r FROM "Invoice" WHERE "paymentStatus" = 'paid'`,
+  1324→      { r: 0 }
+  1325→    )
+  1326→
+  1327→    // ── Total invoices count ──
+  1328→    const invoiceCountResult = await safeQuerySingle('TF-InvoiceCount', () =>
+  1329→      sql`SELECT COUNT(*)::int AS c FROM "Invoice"`,
+  1330→      { c: 0 }
+  1331→    )
+  1332→
+  1333→    // ── Client invoices with OwnerClient join ──
+  1334→    const invoices = await safeQuery('TF-Invoices', () =>
+  1335→      sql`
+  1336→        SELECT
+  1337→          i.id, i."invoiceNumber",
+  1338→          i."billTo", i."billToEmail",
+  1339→          i.subtotal, i."taxAmount", i."totalAmount",
+  1340→          i."paymentStatus", i."dueDate", i."paidDate", i."createdAt",
+  1341→          oc."companyName"
+  1342→        FROM "Invoice" i
+  1343→        LEFT JOIN "OwnerClient" oc ON i."ownerId" = oc.id
+  1344→        ORDER BY i."createdAt" DESC
+  1345→      `
+  1346→    )
+  1347→
+  1348→    // ── Serial keys (licenses) ──
+  1349→    const serialKeys = await safeQuery('TF-Licenses', () =>
+  1350→      sql`
+  1351→        SELECT
+  1352→          sk.id, sk.key, sk."keyType", sk.status,
+  1353→          sk."maxDevices", sk."expiresAt", sk."createdAt",
+  1354→          oc."companyName"
+  1355→        FROM "SerialKey" sk
+  1356→        LEFT JOIN "OwnerClient" oc ON sk."ownerId" = oc.id
+  1357→        ORDER BY sk."createdAt" DESC
+  1358→      `
+  1359→    )
+  1360→
+  1361→    // ── Devices with OwnerClient join ──
+  1362→    const devices = await safeQuery('TF-Devices', () =>
+  1363→      sql`
+  1364→        SELECT
+  1365→          d.id, d."deviceName", d."deviceType", d."ipAddress",
+  1366→          d.status, d."isVerified", d."verifiedAt", d."lastAccessedAt", d."createdAt",
+  1367→          oc."companyName"
+  1368→        FROM "Device" d
+  1369→        LEFT JOIN "OwnerClient" oc ON d."ownerId" = oc.id
+  1370→        ORDER BY d."createdAt" DESC
+  1371→      `
+  1372→    )
+  1373→
+  1374→    // ── Revenue by month (last 6 months) ──
+  1375→    const revenueByMonth = await safeQuery('TF-RevenueByMonth', () =>
+  1376→      sql`
+  1377→        SELECT
+  1378→          TO_CHAR("createdAt", 'Mon') AS month,
+  1379→          COALESCE(SUM("totalAmount"), 0)::float AS revenue
+  1380→        FROM "Invoice"
+  1381→        WHERE "createdAt" >= NOW() - INTERVAL '6 months'
+  1382→        GROUP BY TO_CHAR("createdAt", 'Mon'), DATE_TRUNC('month', "createdAt")
+  1383→        ORDER BY DATE_TRUNC('month', "createdAt") ASC
+  1384→        LIMIT 6
+  1385→      `
+  1386→    )
+  1387→
+  1388→    // ── Operational counts ──
+  1389→    const pilgrimCount = await safeQuerySingle('TF-Pilgrims', () =>
+  1390→      sql`SELECT COUNT(*)::int AS c FROM "Pilgrim"`,
+  1391→      { c: 0 }
+  1392→    )
+  1393→    const bookingCount = await safeQuerySingle('TF-Bookings', () =>
+  1394→      sql`SELECT COUNT(*)::int AS c FROM "Booking"`,
+  1395→      { c: 0 }
+  1396→    )
+  1397→    const packageCount = await safeQuerySingle('TF-Packages', () =>
+  1398→      sql`SELECT COUNT(*)::int AS c FROM "Package"`,
+  1399→      { c: 0 }
+  1400→    )
+  1401→    const flightBookingCount = await safeQuerySingle('TF-FlightBookings', () =>
+  1402→      sql`SELECT COUNT(*)::int AS c FROM "FlightBooking"`,
+  1403→      { c: 0 }
+  1404→    )
+  1405→    const hotelCount = await safeQuerySingle('TF-Hotels', () =>
+  1406→      sql`SELECT COUNT(*)::int AS c FROM "Hotel"`,
+  1407→      { c: 0 }
+  1408→    )
+  1409→    const groupCount = await safeQuerySingle('TF-Groups', () =>
+  1410→      sql`SELECT COUNT(*)::int AS c FROM "Group"`,
+  1411→      { c: 0 }
+  1412→    )
+  1413→    const intlTravelCount = await safeQuerySingle('TF-IntlTravel', () =>
+  1414→      sql`SELECT COUNT(*)::int AS c FROM "InternationalTravel"`,
+  1415→      { c: 0 }
+  1416→    )
+  1417→    const supplierCount = await safeQuerySingle('TF-Suppliers', () =>
+  1418→      sql`SELECT COUNT(*)::int AS c FROM "Supplier"`,
+  1419→      { c: 0 }
+  1420→    )
+  1421→    const transportCount = await safeQuerySingle('TF-Transport', () =>
+  1422→      sql`SELECT COUNT(*)::int AS c FROM "Transport"`,
+  1423→      { c: 0 }
+  1424→    )
+  1425→    const visaCount = await safeQuerySingle('TF-Visa', () =>
+  1426→      sql`SELECT COUNT(*)::int AS c FROM "VisaApplication"`,
+  1427→      { c: 0 }
+  1428→    )
+  1429→    const crmLeadCount = await safeQuerySingle('TF-CRMLeads', () =>
+  1430→      sql`SELECT COUNT(*)::int AS c FROM "CRMLead"`,
+  1431→      { c: 0 }
+  1432→    )
+  1433→    const branchCount = await safeQuerySingle('TF-Branches', () =>
+  1434→      sql`SELECT COUNT(*)::int AS c FROM "Branch"`,
+  1435→      { c: 0 }
+  1436→    )
+  1437→    const staffCount = await safeQuerySingle('TF-Staff', () =>
+  1438→      sql`SELECT COUNT(*)::int AS c FROM "Staff"`,
+  1439→      { c: 0 }
+  1440→    )
+  1441→    const tenantCount = await safeQuerySingle('TF-Tenants', () =>
+  1442→      sql`SELECT COUNT(*)::int AS c FROM "Tenant"`,
+  1443→      { c: 0 }
+  1444→    )
+  1445→    const subPlanCount = await safeQuerySingle('TF-SubPlans', () =>
+  1446→      sql`SELECT COUNT(*)::int AS c FROM "SubscriptionPlan"`,
+  1447→      { c: 0 }
+  1448→    )
+  1449→
+  1450→    // Map clients to ErpClient format
+  1451→    const mappedClients: ErpClient[] = clients.map((c: any) => ({
+  1452→      id: c.id,
+  1453→      companyName: c.companyName || 'Unknown',
+  1454→      contactPerson: c.contactName || '—',
+  1455→      email: c.email || '',
+  1456→      phone: c.phone || null,
+  1457→      city: c.city || null,
+  1458→      country: c.country || null,
+  1459→      status: c.status === 'active' ? 'active' : c.status === 'trial' ? 'trial' : 'inactive',
+  1460→      industry: 'Travel & Tourism',
+  1461→      erpSlug: 'travelflow',
+  1462→      erpName: 'TravelFlow',
+  1463→      licenseType: c.licenseType || null,
+  1464→      databaseStatus: c.licenseStatus || null,
+  1465→      maxUsers: c.maxStaff || null,
+  1466→      maxShops: c.maxBranches || null,
+  1467→      selectedModules: c.features || null,
+  1468→      createdAt: c.createdAt,
+  1469→    }))
+  1470→
+  1471→    // Map invoices
+  1472→    const mappedInvoices: ErpInvoice[] = invoices.map((inv: any) => ({
+  1473→      id: inv.id,
+  1474→      invoiceNumber: inv.invoiceNumber || `INV-${safeIdPrefix(inv.id, 8)}`,
+  1475→      clientName: inv.billTo || inv.companyName || 'Unknown',
+  1476→      clientEmail: inv.billToEmail || null,
+  1477→      erpSlug: 'travelflow',
+  1478→      erpName: 'TravelFlow',
+  1479→      amount: inv.subtotal || 0,
+  1480→      tax: inv.taxAmount || 0,
+  1481→      totalAmount: inv.totalAmount || 0,
+  1482→      status: inv.paymentStatus || 'pending',
+  1483→      dueDate: inv.dueDate,
+  1484→      paidAt: inv.paymentStatus === 'paid' ? inv.paidDate : null,
+  1485→      createdAt: inv.createdAt,
+  1486→    }))
+  1487→
+  1488→    // Map serial keys as licenses
+  1489→    const mappedLicenses: ErpLicense[] = serialKeys.map((sk: any) => ({
+  1490→      id: sk.id,
+  1491→      serialKey: sk.key || safeIdPrefix(sk.id, 12).toUpperCase(),
+  1492→      clientName: sk.companyName || 'Unknown',
+  1493→      erpSlug: 'travelflow',
+  1494→      erpName: 'TravelFlow',
+  1495→      licenseType: sk.keyType || 'standard',
+  1496→      status: sk.status?.toLowerCase() === 'active' ? 'active' : 'expired',
+  1497→      deviceName: null,
+  1498→      deviceFingerprint: null,
+  1499→      activatedAt: sk.createdAt,
+  1500→      expiresAt: sk.expiresAt,
+  1501→      createdAt: sk.createdAt,
+  1502→    }))
+  1503→
+  1504→    return {
+  1505→      totalClients: clients.length,
+  1506→      activeClients: activeResult?.c ?? 0,
+  1507→      totalRevenue: revenueResult?.r ?? 0,
+  1508→      totalInvoices: invoiceCountResult?.c ?? 0,
+  1509→      activeLicenses: serialKeys.filter((sk: any) => sk.status?.toLowerCase() === 'active').length,
+  1510→      totalDevices: devices.length,
+  1511→      clientCompanies: mappedClients,
+  1512→      invoices: mappedInvoices,
+  1513→      licenses: mappedLicenses,
+  1514→      revenueByMonth: revenueByMonth.map((r: any) => ({
+  1515→        month: r.month,
+  1516→        revenue: r.revenue,
+  1517→      })),
+  1518→    }
+  1519→  } catch (error) {
+  1520→    console.error('[ERP-CONNECTOR] TravelFlow stats failed completely:', error)
+  1521→    return null
+  1522→  }
+  1523→}
+  1524→
+  1525→// ─── TenantFlow Data Queries ─────────────────────────────────────────────────
+  1526→async function getTenantFlowStats(): Promise<ErpDashboardStats | null> {
+  1527→  const sql = await getErpSql('tenantflow')
+  1528→  if (!sql) return null
+  1529→
+  1530→  try {
+  1531→    // ── Client companies (property management companies) ──
+  1532→    const clients = await safeQuery('TNF-Clients', () =>
+  1533→      sql`
+  1534→        SELECT
+  1535→          id, "companyName", "contactName", "email", "phone",
+  1536→          "address", "city", "state", "zipCode", "country",
+  1537→          "status", "plan", "billingCycle", "monthlyFee", "setupFee",
+  1538→          "maxProperties", "maxUsers", "maxDevices",
+  1539→          "dbStatus", "features", "industry", "companySize",
+  1540→          "createdAt"
+  1541→        FROM "Client"
+  1542→        ORDER BY "createdAt" DESC
+  1543→      `
+  1544→    )
+  1545→
+  1546→    // ── Active clients count ──
+  1547→    const activeResult = await safeQuerySingle('TNF-ActiveClients', () =>
+  1548→      sql`SELECT COUNT(*)::int AS c FROM "Client" WHERE status = 'active'`,
+  1549→      { c: 0 }
+  1550→    )
+  1551→
+  1552→    // ── Revenue from paid invoices ──
+  1553→    const revenueResult = await safeQuerySingle('TNF-Revenue', () =>
+  1554→      sql`SELECT COALESCE(SUM("total"), 0)::float AS r FROM "Invoice" WHERE status = 'paid'`,
+  1555→      { r: 0 }
+  1556→    )
+  1557→
+  1558→    // ── Total invoices count ──
+  1559→    const invoiceCountResult = await safeQuerySingle('TNF-InvoiceCount', () =>
+  1560→      sql`SELECT COUNT(*)::int AS c FROM "Invoice"`,
+  1561→      { c: 0 }
+  1562→    )
+  1563→
+  1564→    // ── Client invoices ──
+  1565→    const invoices = await safeQuery('TNF-Invoices', () =>
+  1566→      sql`
+  1567→        SELECT
+  1568→          i.id, i."invoiceNumber",
+  1569→          i.subtotal, i."taxRate", i."taxAmount", i."discount",
+  1570→          i."total", i."paidAmount", i."status",
+  1571→          i."issueDate", i."dueDate", i."paidDate", i."createdAt",
+  1572→          c."companyName", c."email" AS "clientEmail"
+  1573→        FROM "Invoice" i
+  1574→        LEFT JOIN "Client" c ON i."clientId" = c.id
+  1575→        ORDER BY i."createdAt" DESC
+  1576→      `
+  1577→    )
+  1578→
+  1579→    // ── License keys ──
+  1580→    const licenseKeys = await safeQuery('TNF-Licenses', () =>
+  1581→      sql`
+  1582→        SELECT
+  1583→          lk.id, lk.key, lk.type, lk.plan, lk.status,
+  1584→          lk."maxDevices", lk."maxUsers",
+  1585→          lk."activatedAt", lk."expiresAt", lk."createdAt",
+  1586→          c."companyName"
+  1587→        FROM "LicenseKey" lk
+  1588→        LEFT JOIN "Client" c ON lk."clientId" = c.id
+  1589→        ORDER BY lk."createdAt" DESC
+  1590→      `
+  1591→    )
+  1592→
+  1593→    // ── Devices ──
+  1594→    const devices = await safeQuery('TNF-Devices', () =>
+  1595→      sql`
+  1596→        SELECT
+  1597→          d.id, d."serialKey", d."deviceName", d."deviceType",
+  1598→          d."ipAddress", d.status, d."activatedAt", d."lastSeenAt",
+  1599→          d."createdAt"
+  1600→        FROM "Device" d
+  1601→        ORDER BY d."createdAt" DESC
+  1602→      `
+  1603→    )
+  1604→
+  1605→    // ── Revenue by month (last 6 months) ──
+  1606→    const revenueByMonth = await safeQuery('TNF-RevenueByMonth', () =>
+  1607→      sql`
+  1608→        SELECT
+  1609→          TO_CHAR("createdAt", 'Mon') AS month,
+  1610→          COALESCE(SUM("total"), 0)::float AS revenue
+  1611→        FROM "Invoice"
+  1612→        WHERE "createdAt" >= NOW() - INTERVAL '6 months'
+  1613→        GROUP BY TO_CHAR("createdAt", 'Mon'), DATE_TRUNC('month', "createdAt")
+  1614→        ORDER BY DATE_TRUNC('month', "createdAt") ASC
+  1615→        LIMIT 6
+  1616→      `
+  1617→    )
+  1618→
+  1619→    // Map clients to ErpClient format
+  1620→    const mappedClients: ErpClient[] = clients.map((c: any) => ({
+  1621→      id: c.id,
+  1622→      companyName: c.companyName || 'Unknown',
+  1623→      contactPerson: c.contactName || '—',
+  1624→      email: c.email || '',
+  1625→      phone: c.phone || null,
+  1626→      city: c.city || null,
+  1627→      country: c.country || null,
+  1628→      status: c.status === 'active' ? 'active' : c.status === 'trial' ? 'trial' : 'inactive',
+  1629→      industry: c.industry || 'Property Management',
+  1630→      erpSlug: 'tenantflow',
+  1631→      erpName: 'TenantFlow',
+  1632→      licenseType: c.plan || null,
+  1633→      databaseStatus: c.dbStatus || null,
+  1634→      maxUsers: c.maxUsers || null,
+  1635→      maxShops: c.maxProperties || null,
+  1636→      selectedModules: c.features || null,
+  1637→      createdAt: c.createdAt,
+  1638→    }))
+  1639→
+  1640→    // Map invoices
+  1641→    const mappedInvoices: ErpInvoice[] = invoices.map((inv: any) => ({
+  1642→      id: inv.id,
+  1643→      invoiceNumber: inv.invoiceNumber || `INV-${safeIdPrefix(inv.id, 8)}`,
+  1644→      clientName: inv.companyName || 'Unknown',
+  1645→      clientEmail: inv.clientEmail || null,
+  1646→      erpSlug: 'tenantflow',
+  1647→      erpName: 'TenantFlow',
+  1648→      amount: inv.subtotal || 0,
+  1649→      tax: inv.taxAmount || 0,
+  1650→      totalAmount: inv.total || 0,
+  1651→      status: inv.status?.toLowerCase() || 'pending',
+  1652→      dueDate: inv.dueDate,
+  1653→      paidAt: inv.status === 'paid' ? inv.paidDate || inv.createdAt : null,
+  1654→      createdAt: inv.createdAt,
+  1655→    }))
+  1656→
+  1657→    // Map license keys as licenses
+  1658→    const mappedLicenses: ErpLicense[] = licenseKeys.map((lk: any) => ({
+  1659→      id: lk.id,
+  1660→      serialKey: lk.key || safeIdPrefix(lk.id, 12).toUpperCase(),
+  1661→      clientName: lk.companyName || 'Unknown',
+  1662→      erpSlug: 'tenantflow',
+  1663→      erpName: 'TenantFlow',
+  1664→      licenseType: lk.type?.toLowerCase() || lk.plan?.toLowerCase() || 'standard',
+  1665→      status: lk.status?.toLowerCase() === 'active' ? 'active' : lk.status?.toLowerCase() === 'activated' ? 'active' : 'expired',
+  1666→      deviceName: null,
+  1667→      deviceFingerprint: null,
+  1668→      activatedAt: lk.activatedAt,
+  1669→      expiresAt: lk.expiresAt,
+  1670→      createdAt: lk.createdAt,
+  1671→    }))
+  1672→
+  1673→    return {
+  1674→      totalClients: clients.length,
+  1675→      activeClients: activeResult?.c ?? 0,
+  1676→      totalRevenue: revenueResult?.r ?? 0,
+  1677→      totalInvoices: invoiceCountResult?.c ?? 0,
+  1678→      activeLicenses: licenseKeys.filter((lk: any) => lk.status?.toLowerCase() === 'active' || lk.status?.toLowerCase() === 'activated').length,
+  1679→      totalDevices: devices.length,
+  1680→      clientCompanies: mappedClients,
+  1681→      invoices: mappedInvoices,
+  1682→      licenses: mappedLicenses,
+  1683→      revenueByMonth: revenueByMonth.map((r: any) => ({
+  1684→        month: r.month,
+  1685→        revenue: r.revenue,
+  1686→      })),
+  1687→    }
+  1688→  } catch (error) {
+  1689→    console.error('[ERP-CONNECTOR] TenantFlow stats failed completely:', error)
+  1690→    return null
+  1691→  }
+  1692→}
+  1693→
+  1694→// ─── FactoryFlow Data Queries ─────────────────────────────────────────────────
+  1695→async function getFactoryFlowStats(): Promise<ErpDashboardStats | null> {
+  1696→  const sql = await getErpSql('factoryflow')
+  1697→  if (!sql) return null
+  1698→
+  1699→  try {
+  1700→    // ── Owner clients (factories / manufacturing businesses) ──
+  1701→    const clients = await safeQuery('FF-Clients', () =>
+  1702→      sql`
+  1703→        SELECT
+  1704→          id, "companyName", "contactPerson", "email", "phone",
+  1705→          "city", "country", "status", "billingCycle", "serialKey",
+  1706→          "maxDevices", "maxUsers", "activatedAt", "notes",
+  1707→          "createdAt"
+  1708→        FROM "OwnerClient"
+  1709→        ORDER BY "createdAt" DESC
+  1710→      `
+  1711→    )
+  1712→
+  1713→    // ── Active clients count ──
+  1714→    const activeResult = await safeQuerySingle('FF-ActiveClients', () =>
+  1715→      sql`SELECT COUNT(*)::int AS c FROM "OwnerClient" WHERE status = 'active'`,
+  1716→      { c: 0 }
+  1717→    )
+  1718→
+  1719→    // ── Revenue from paid invoices ──
+  1720→    const revenueResult = await safeQuerySingle('FF-Revenue', () =>
+  1721→      sql`SELECT COALESCE(SUM("totalAmount"), 0)::float AS r FROM "OwnerInvoice" WHERE status = 'paid'`,
+  1722→      { r: 0 }
+  1723→    )
+  1724→
+  1725→    // ── Total invoices count ──
+  1726→    const invoiceCountResult = await safeQuerySingle('FF-InvoiceCount', () =>
+  1727→      sql`SELECT COUNT(*)::int AS c FROM "OwnerInvoice"`,
+  1728→      { c: 0 }
+  1729→    )
+  1730→
+  1731→    // ── Client invoices ──
+  1732→    const invoices = await safeQuery('FF-Invoices', () =>
+  1733→      sql`
+  1734→        SELECT
+  1735→          oi.id, oi."invoiceNumber",
+  1736→          oi.subtotal, oi."discountAmount", oi."taxAmount",
+  1737→          oi."totalAmount", oi.status,
+  1738→          oi."invoiceDate", oi."dueDate", oi."paidDate", oi."createdAt",
+  1739→          oc."companyName", oc."email" AS "clientEmail"
+  1740→        FROM "OwnerInvoice" oi
+  1741→        LEFT JOIN "OwnerClient" oc ON oi."clientId" = oc.id
+  1742→        ORDER BY oi."createdAt" DESC
+  1743→      `
+  1744→    )
+  1745→
+  1746→    // ── Serial keys (licenses) ──
+  1747→    const serialKeys = await safeQuery('FF-Licenses', () =>
+  1748→      sql`
+  1749→        SELECT
+  1750→          sk.id, sk.key, sk.status, sk."maxDevices", sk."activatedDevices",
+  1751→          sk."activatedAt", sk."expiresAt", sk."createdAt",
+  1752→          oc."companyName"
+  1753→        FROM "OwnerSerialKey" sk
+  1754→        LEFT JOIN "OwnerClient" oc ON sk."clientId" = oc.id
+  1755→        ORDER BY sk."createdAt" DESC
+  1756→      `
+  1757→    )
+  1758→
+  1759→    // ── Owner devices ──
+  1760→    const devices = await safeQuery('FF-Devices', () =>
+  1761→      sql`
+  1762→        SELECT
+  1763→          d.id, d."deviceName", d."deviceFingerprint", d."ipAddress",
+  1764→          d.status, d."registeredAt", d."lastAccessedAt",
+  1765→          oc."companyName", oc."serialKey"
+  1766→        FROM "OwnerDevice" d
+  1767→        LEFT JOIN "OwnerClient" oc ON d."clientId" = oc.id
+  1768→        ORDER BY d."registeredAt" DESC
+  1769→      `
+  1770→    )
+  1771→
+  1772→    // ── Revenue by month (last 6 months) ──
+  1773→    const revenueByMonth = await safeQuery('FF-RevenueByMonth', () =>
+  1774→      sql`
+  1775→        SELECT
+  1776→          TO_CHAR("createdAt", 'Mon') AS month,
+  1777→          COALESCE(SUM("totalAmount"), 0)::float AS revenue
+  1778→        FROM "OwnerInvoice"
+  1779→        WHERE "createdAt" >= NOW() - INTERVAL '6 months'
+  1780→        GROUP BY TO_CHAR("createdAt", 'Mon'), DATE_TRUNC('month', "createdAt")
+  1781→        ORDER BY DATE_TRUNC('month', "createdAt") ASC
+  1782→        LIMIT 6
+  1783→      `
+  1784→    )
+  1785→
+  1786→    // Map clients to ErpClient format
+  1787→    const mappedClients: ErpClient[] = clients.map((c: any) => ({
+  1788→      id: c.id,
+  1789→      companyName: c.companyName || 'Unknown',
+  1790→      contactPerson: c.contactPerson || '—',
+  1791→      email: c.email || '',
+  1792→      phone: c.phone || null,
+  1793→      city: c.city || null,
+  1794→      country: c.country || null,
+  1795→      status: c.status === 'active' ? 'active' : c.status === 'trial' ? 'trial' : 'inactive',
+  1796→      industry: 'Manufacturing',
+  1797→      erpSlug: 'factoryflow',
+  1798→      erpName: 'FactoryFlow',
+  1799→      licenseType: c.billingCycle || null,
+  1800→      databaseStatus: c.status || null,
+  1801→      maxUsers: c.maxUsers || null,
+  1802→      maxShops: c.maxDevices || null,
+  1803→      selectedModules: c.notes || null,
+  1804→      createdAt: c.createdAt,
+  1805→    }))
+  1806→
+  1807→    // Map invoices
+  1808→    const mappedInvoices: ErpInvoice[] = invoices.map((inv: any) => ({
+  1809→      id: inv.id,
+  1810→      invoiceNumber: inv.invoiceNumber || `INV-${safeIdPrefix(inv.id, 8)}`,
+  1811→      clientName: inv.companyName || 'Unknown',
+  1812→      clientEmail: inv.clientEmail || null,
+  1813→      erpSlug: 'factoryflow',
+  1814→      erpName: 'FactoryFlow',
+  1815→      amount: inv.subtotal || 0,
+  1816→      tax: inv.taxAmount || 0,
+  1817→      totalAmount: inv.totalAmount || 0,
+  1818→      status: inv.status?.toLowerCase() || 'pending',
+  1819→      dueDate: inv.dueDate,
+  1820→      paidAt: inv.paidDate || null,
+  1821→      createdAt: inv.createdAt,
+  1822→    }))
+  1823→
+  1824→    // Map serial keys as licenses
+  1825→    const mappedLicenses: ErpLicense[] = serialKeys.map((sk: any) => ({
+  1826→      id: sk.id,
+  1827→      serialKey: sk.key || safeIdPrefix(sk.id, 12).toUpperCase(),
+  1828→      clientName: sk.companyName || 'Unknown',
+  1829→      erpSlug: 'factoryflow',
+  1830→      erpName: 'FactoryFlow',
+  1831→      licenseType: 'standard',
+  1832→      status: sk.status?.toLowerCase() === 'active' ? 'active' : 'expired',
+  1833→      deviceName: null,
+  1834→      deviceFingerprint: null,
+  1835→      activatedAt: sk.activatedAt,
+  1836→      expiresAt: sk.expiresAt,
+  1837→      createdAt: sk.createdAt,
+  1838→    }))
+  1839→
+  1840→    return {
+  1841→      totalClients: clients.length,
+  1842→      activeClients: activeResult?.c ?? 0,
+  1843→      totalRevenue: revenueResult?.r ?? 0,
+  1844→      totalInvoices: invoiceCountResult?.c ?? 0,
+  1845→      activeLicenses: serialKeys.filter((sk: any) => sk.status?.toLowerCase() === 'active').length,
+  1846→      totalDevices: devices.length,
+  1847→      clientCompanies: mappedClients,
+  1848→      invoices: mappedInvoices,
+  1849→      licenses: mappedLicenses,
+  1850→      revenueByMonth: revenueByMonth.map((r: any) => ({
+  1851→        month: r.month,
+  1852→        revenue: r.revenue,
+  1853→      })),
+  1854→    }
+  1855→  } catch (error) {
+  1856→    console.error('[ERP-CONNECTOR] FactoryFlow stats failed completely:', error)
+  1857→    return null
+  1858→  }
+  1859→}
+  1860→
+  1861→// ─── FoodFlow Data Queries ──────────────────────────────────────────────────
+  1862→async function getFoodFlowStats(): Promise<ErpDashboardStats | null> {
+  1863→  const sql = await getErpSql('foodflow')
+  1864→  if (!sql) return null
+  1865→
+  1866→  try {
+  1867→    // ── Tenants (restaurants / food businesses) ──
+  1868→    const clients = await safeQuery('FdF-Clients', () =>
+  1869→      sql`
+  1870→        SELECT
+  1871→          id, "businessName", "ownerName", "ownerEmail", "ownerPhone",
+  1872→          city, country, status, "isActive",
+  1873→          "maxBranches", "maxUsers", "billingCycle",
+  1874→          "createdAt"
+  1875→        FROM "Tenant"
+  1876→        ORDER BY "createdAt" DESC
+  1877→      `
+  1878→    )
+  1879→
+  1880→    // ── Active clients count ──
+  1881→    const activeResult = await safeQuerySingle('FdF-ActiveClients', () =>
+  1882→      sql`SELECT COUNT(*)::int AS c FROM "Tenant" WHERE "isActive" = true`,
+  1883→      { c: 0 }
+  1884→    )
+  1885→
+  1886→    // ── Revenue from paid invoices ──
+  1887→    const revenueResult = await safeQuerySingle('FdF-Revenue', () =>
+  1888→      sql`SELECT COALESCE(SUM("totalAmount"), 0)::float AS r FROM "Invoice" WHERE status = 'paid'`,
+  1889→      { r: 0 }
+  1890→    )
+  1891→
+  1892→    // ── Total invoices count ──
+  1893→    const invoiceCountResult = await safeQuerySingle('FdF-InvoiceCount', () =>
+  1894→      sql`SELECT COUNT(*)::int AS c FROM "Invoice"`,
+  1895→      { c: 0 }
+  1896→    )
+  1897→
+  1898→    // ── Client invoices ──
+  1899→    const invoices = await safeQuery('FdF-Invoices', () =>
+  1900→      sql`
+  1901→        SELECT
+  1902→          i.id, i."invoiceNumber",
+  1903→          i.subtotal, i."discountAmount", i."taxAmount",
+  1904→          i."totalAmount", i."paidAmount", i.status,
+  1905→          i."issueDate", i."dueDate", i."paidAt", i."createdAt",
+  1906→          t."businessName", t."ownerEmail"
+  1907→        FROM "Invoice" i
+  1908→        LEFT JOIN "Tenant" t ON i."tenantId" = t.id
+  1909→        ORDER BY i."createdAt" DESC
+  1910→      `
+  1911→    )
+  1912→
+  1913→    // ── Serial keys (licenses) ──
+  1914→    const serialKeys = await safeQuery('FdF-Licenses', () =>
+  1915→      sql`
+  1916→        SELECT
+  1917→          sk.id, sk.key, sk.status, sk."maxActivations", sk."currentActivations",
+  1918→          sk."activatedAt", sk."expiresAt", sk."createdAt",
+  1919→          t."businessName"
+  1920→        FROM "SerialKey" sk
+  1921→        LEFT JOIN "Tenant" t ON sk."tenantId" = t.id
+  1922→        ORDER BY sk."createdAt" DESC
+  1923→      `
+  1924→    )
+  1925→
+  1926→    // ── Devices ──
+  1927→    const devices = await safeQuery('FdF-Devices', () =>
+  1928→      sql`
+  1929→        SELECT
+  1930→          d.id, d."deviceName", d."deviceType", d."hardwareId", d."ipAddress",
+  1931→          d.status, d."registeredAt", d."lastActiveAt",
+  1932→          t."businessName"
+  1933→        FROM "Device" d
+  1934→        LEFT JOIN "Tenant" t ON d."tenantId" = t.id
+  1935→        ORDER BY d."registeredAt" DESC
+  1936→      `
+  1937→    )
+  1938→
+  1939→    // ── Revenue by month (last 6 months) ──
+  1940→    const revenueByMonth = await safeQuery('FdF-RevenueByMonth', () =>
+  1941→      sql`
+  1942→        SELECT
+  1943→          TO_CHAR("createdAt", 'Mon') AS month,
+  1944→          COALESCE(SUM("totalAmount"), 0)::float AS revenue
+  1945→        FROM "Invoice"
+  1946→        WHERE "createdAt" >= NOW() - INTERVAL '6 months'
+  1947→        GROUP BY TO_CHAR("createdAt", 'Mon'), DATE_TRUNC('month', "createdAt")
+  1948→        ORDER BY DATE_TRUNC('month', "createdAt") ASC
+  1949→        LIMIT 6
+  1950→      `
+  1951→    )
+  1952→
+  1953→    // Map tenants to ErpClient format
+  1954→    const mappedClients: ErpClient[] = clients.map((c: any) => ({
+  1955→      id: c.id,
+  1956→      companyName: c.businessName || 'Unknown',
+  1957→      contactPerson: c.ownerName || '—',
+  1958→      email: c.ownerEmail || '',
+  1959→      phone: c.ownerPhone || null,
+  1960→      city: c.city || null,
+  1961→      country: c.country || null,
+  1962→      status: c.isActive ? 'active' : c.status === 'trial' ? 'trial' : 'inactive',
+  1963→      industry: 'Food & Restaurant',
+  1964→      erpSlug: 'foodflow',
+  1965→      erpName: 'FoodFlow',
+  1966→      licenseType: c.billingCycle || null,
+  1967→      databaseStatus: c.status || null,
+  1968→      maxUsers: c.maxUsers || null,
+  1969→      maxShops: c.maxBranches || null,
+  1970→      selectedModules: null,
+  1971→      createdAt: c.createdAt,
+  1972→    }))
+  1973→
+  1974→    // Map invoices
+  1975→    const mappedInvoices: ErpInvoice[] = invoices.map((inv: any) => ({
+  1976→      id: inv.id,
+  1977→      invoiceNumber: inv.invoiceNumber || `INV-${safeIdPrefix(inv.id, 8)}`,
+  1978→      clientName: inv.businessName || 'Unknown',
+  1979→      clientEmail: inv.ownerEmail || null,
+  1980→      erpSlug: 'foodflow',
+  1981→      erpName: 'FoodFlow',
+  1982→      amount: inv.subtotal || 0,
+  1983→      tax: inv.taxAmount || 0,
+  1984→      totalAmount: inv.totalAmount || 0,
+  1985→      status: inv.status?.toLowerCase() || 'pending',
+  1986→      dueDate: inv.dueDate,
+  1987→      paidAt: inv.paidAt || null,
+  1988→      createdAt: inv.createdAt,
+  1989→    }))
+  1990→
+  1991→    // Map serial keys as licenses
+  1992→    const mappedLicenses: ErpLicense[] = serialKeys.map((sk: any) => ({
+  1993→      id: sk.id,
+  1994→      serialKey: sk.key || safeIdPrefix(sk.id, 12).toUpperCase(),
+  1995→      clientName: sk.businessName || 'Unknown',
+  1996→      erpSlug: 'foodflow',
+  1997→      erpName: 'FoodFlow',
+  1998→      licenseType: 'standard',
+  1999→      status: sk.status?.toLowerCase() === 'active' ? 'active' : 'expired',
+  2000→      deviceName: null,
+
+[showing lines 1-2000 of 3705; use offset=2001 with limit to continue reading]
