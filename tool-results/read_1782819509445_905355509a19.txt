@@ -1,0 +1,1446 @@
+     1→'use client'
+     2→
+     3→import { PageLayout } from '@/components/shared/page-layout'
+     4→import { useNavigate } from '@/lib/use-navigate'
+     5→import { useErpSystems, getErpIcon, getErpColor } from '@/lib/erp-data'
+     6→import { motion, AnimatePresence } from 'framer-motion'
+     7→import {
+     8→  Check,
+     9→  ArrowRight,
+    10→  Users,
+    11→  BarChart3,
+    12→  Settings2,
+    13→  Plug,
+    14→  Headphones,
+    15→  HelpCircle,
+    16→  Shield,
+    17→  Smartphone,
+    18→  RefreshCw,
+    19→  Cpu,
+    20→  Lock,
+    21→  Globe,
+    22→  Zap,
+    23→  ChevronDown,
+    24→  ChevronRight,
+    25→  Star,
+    26→  Compass,
+    27→  CheckCircle2,
+    28→  XCircle,
+    29→  X,
+    30→  CreditCard,
+    31→} from 'lucide-react'
+    32→import { Button } from '@/components/ui/button'
+    33→import { useState, useEffect, useRef } from 'react'
+    34→import { InteractiveCard } from '@/components/shared/interactive-card'
+    35→import { CheckoutModal } from '@/components/checkout/checkout-modal'
+    36→import type { PlanId } from '@/lib/pricing-config'
+    37→
+    38→/* ------------------------------------------------------------------ */
+    39→/*  macOS 27 Golden Gate Animation Easing                              */
+    40→/* ------------------------------------------------------------------ */
+    41→
+    42→const GG_EASE = [0.25, 0.46, 0.45, 0.94] as const
+    43→
+    44→/* ------------------------------------------------------------------ */
+    45→/*  Currency Config                                                    */
+    46→/* ------------------------------------------------------------------ */
+    47→
+    48→type CurrencyCode = 'PKR' | 'USD' | 'EUR' | 'GBP' | 'SAR' | 'AED'
+    49→
+    50→const CURRENCIES: Record<CurrencyCode, { symbol: string; label: string; rate: number }> = {
+    51→  PKR: { symbol: 'PKR', label: 'Pakistani Rupee', rate: 1 },
+    52→  USD: { symbol: '$', label: 'US Dollar', rate: 0.0036 },
+    53→  EUR: { symbol: '€', label: 'Euro', rate: 0.0033 },
+    54→  GBP: { symbol: '£', label: 'British Pound', rate: 0.0028 },
+    55→  SAR: { symbol: 'SAR', label: 'Saudi Riyal', rate: 0.0135 },
+    56→  AED: { symbol: 'AED', label: 'UAE Dirham', rate: 0.0132 },
+    57→}
+    58→
+    59→function formatPrice(pkrPrice: number, currency: CurrencyCode): string {
+    60→  const c = CURRENCIES[currency]
+    61→  const converted = Math.round(pkrPrice * c.rate)
+    62→  if (currency === 'PKR') {
+    63→    return converted.toLocaleString('en-PK')
+    64→  }
+    65→  return converted.toLocaleString('en-US')
+    66→}
+    67→
+    68→/* ------------------------------------------------------------------ */
+    69→/*  Pricing Tiers                                                      */
+    70→/* ------------------------------------------------------------------ */
+    71→
+    72→const PRICING_TIERS = [
+    73→  {
+    74→    id: 'starter',
+    75→    name: 'Starter',
+    76→    pkrMonthly: 15000,
+    77→    description: 'Perfect for small teams getting started with a single ERP.',
+    78→    accentVar: '--gg-teal',
+    79→    color: '#0E8FA0',
+    80→    popular: false,
+    81→    features: [
+    82→      '1 ERP platform of your choice',
+    83→      'Up to 5 users',
+    84→      '1 business location',
+    85→      '1,000 items / SKUs',
+    86→      'Email support (48hr response)',
+    87→      'Basic reporting & dashboards',
+    88→      '5 custom fields',
+    89→      'Mobile app access',
+    90→      'Daily data backups',
+    91→    ],
+    92→    cta: 'Get Started',
+    93→  },
+    94→  {
+    95→    id: 'professional',
+    96→    name: 'Professional',
+    97→    pkrMonthly: 35000,
+    98→    description: 'For growing businesses that need advanced capabilities per ERP.',
+    99→    accentVar: '--gg-vermillion',
+   100→    color: '#E2532F',
+   101→    popular: true,
+   102→    features: [
+   103→      '1 ERP platform of your choice',
+   104→      'Up to 25 users',
+   105→      '5 business locations',
+   106→      '10,000 items / SKUs',
+   107→      'Priority support (4hr response)',
+   108→      'Advanced reporting & analytics',
+   109→      '50 custom fields',
+   110→      'API access & webhooks',
+   111→      'Custom workflows',
+   112→      'SSO / SAML authentication',
+   113→      'Real-time data sync',
+   114→      '30-day audit logs',
+   115→    ],
+   116→    cta: 'Get Started',
+   117→  },
+   118→  {
+   119→    id: 'business',
+   120→    name: 'Business',
+   121→    pkrMonthly: 55000,
+   122→    description: 'For established organizations needing premium features per ERP.',
+   123→    accentVar: '--gg-amber',
+   124→    color: '#D4860B',
+   125→    popular: false,
+   126→    features: [
+   127→      '1 ERP platform of your choice',
+   128→      'Up to 75 users',
+   129→      '20 business locations',
+   130→      '100,000 items / SKUs',
+   131→      'Dedicated support manager',
+   132→      'Custom reporting & BI tools',
+   133→      'Unlimited custom fields',
+   134→      'Full API access (unlimited rate)',
+   135→      'Advanced workflow automation',
+   136→      'Multi-currency & multi-language',
+   137→      '1-year audit logs',
+   138→      'Data export & migration tools',
+   139→      'Quarterly business reviews',
+   140→    ],
+   141→    cta: 'Get Started',
+   142→  },
+   143→  {
+   144→    id: 'enterprise',
+   145→    name: 'Enterprise',
+   146→    pkrMonthly: 80000,
+   147→    description: 'For large organizations that demand everything — unlimited scale, priority, and control per ERP.',
+   148→    accentVar: '--gg-violet',
+   149→    color: '#7C3AED',
+   150→    popular: false,
+   151→    features: [
+   152→      '1 ERP platform of your choice',
+   153→      'Unlimited users',
+   154→      'Unlimited locations',
+   155→      'Unlimited items / SKUs',
+   156→      '24/7 dedicated support + SLA',
+   157→      'Custom reporting engine',
+   158→      'Unlimited custom fields',
+   159→      'Full API + custom integrations',
+   160→      'White-label branding',
+   161→      'On-premise deployment option',
+   162→      '99.9% uptime SLA guarantee',
+   163→      'Unlimited audit logs',
+   164→      'Custom module development',
+   165→      'Dedicated account manager',
+   166→      'Priority feature requests',
+   167→      'Data residency options',
+   168→    ],
+   169→    cta: 'Contact Sales',
+   170→  },
+   171→]
+   172→
+   173→/* ------------------------------------------------------------------ */
+   174→/*  Tier Accent Colors — Golden Gate palette                           */
+   175→/* ------------------------------------------------------------------ */
+   176→
+   177→const TIER_ACCENTS: Record<string, {
+   178→  stripe: string
+   179→  check: string
+   180→  headerBg: string
+   181→  headerText: string
+   182→  glow?: string
+   183→  cardBg: string
+   184→  priceText: string
+   185→  badgeBg: string
+   186→  badgeText: string
+   187→  btnClass: string
+   188→  iconBg: string
+   189→  savingsText: string
+   190→}> = {
+   191→  starter: {
+   192→    stripe: 'from-[#0E8FA0] to-[#14B8A6]',
+   193→    check: 'text-[#0E8FA0]',
+   194→    headerBg: 'bg-[#0E8FA0]/[0.06]',
+   195→    headerText: 'text-[#0E8FA0]',
+   196→    cardBg: 'bg-[#0E8FA0]/[0.02]',
+   197→    priceText: 'text-[#0E8FA0]',
+   198→    badgeBg: 'bg-[#0E8FA0]/10',
+   199→    badgeText: 'text-[#0E8FA0]',
+   200→    btnClass: 'bg-[#0E8FA0] hover:bg-[#0B7A8C] text-white',
+   201→    iconBg: 'bg-[#0E8FA0]/10',
+   202→    savingsText: 'text-[#0E8FA0]',
+   203→  },
+   204→  professional: {
+   205→    stripe: 'from-[#E2532F] to-[#F59E0B]',
+   206→    check: 'text-[#E2532F]',
+   207→    headerBg: 'bg-[#E2532F]/[0.06]',
+   208→    headerText: 'text-[#E2532F]',
+   209→    glow: 'shadow-[var(--gg-shadow-glow)]',
+   210→    cardBg: 'bg-[#E2532F]/[0.02]',
+   211→    priceText: 'text-gradient-primary',
+   212→    badgeBg: 'bg-[#E2532F]/10',
+   213→    badgeText: 'text-[#E2532F]',
+   214→    btnClass: 'bg-[#E2532F] hover:bg-[#C94527] text-white btn-glow',
+   215→    iconBg: 'bg-[#E2532F]/10',
+   216→    savingsText: 'text-[#0E8FA0]',
+   217→  },
+   218→  business: {
+   219→    stripe: 'from-[#D4860B] to-[#F59E0B]',
+   220→    check: 'text-[#D4860B]',
+   221→    headerBg: 'bg-[#D4860B]/[0.06]',
+   222→    headerText: 'text-[#D4860B]',
+   223→    cardBg: 'bg-[#D4860B]/[0.02]',
+   224→    priceText: 'text-[#D4860B]',
+   225→    badgeBg: 'bg-[#D4860B]/10',
+   226→    badgeText: 'text-[#D4860B]',
+   227→    btnClass: 'bg-[#D4860B] hover:bg-[#B8730A] text-white',
+   228→    iconBg: 'bg-[#D4860B]/10',
+   229→    savingsText: 'text-[#0E8FA0]',
+   230→  },
+   231→  enterprise: {
+   232→    stripe: 'from-[#7C3AED] to-[#A855F7]',
+   233→    check: 'text-[#7C3AED]',
+   234→    headerBg: 'bg-[#7C3AED]/[0.06]',
+   235→    headerText: 'text-[#7C3AED]',
+   236→    cardBg: 'bg-[#7C3AED]/[0.02]',
+   237→    priceText: 'text-[#7C3AED]',
+   238→    badgeBg: 'bg-[#7C3AED]/10',
+   239→    badgeText: 'text-[#7C3AED]',
+   240→    btnClass: 'bg-[#7C3AED] hover:bg-[#6B2FCC] text-white',
+   241→    iconBg: 'bg-[#7C3AED]/10',
+   242→    savingsText: 'text-[#0E8FA0]',
+   243→  },
+   244→}
+   245→
+   246→/* ------------------------------------------------------------------ */
+   247→/*  Comparison Table Data                                              */
+   248→/* ------------------------------------------------------------------ */
+   249→
+   250→const COMPARISON_CATEGORIES = [
+   251→  {
+   252→    category: 'ERP Access',
+   253→    icon: <Globe className="w-4 h-4 text-primary" />,
+   254→    rows: [
+   255→      { label: 'ERP Platforms (per subscription)', starter: '1', professional: '1', business: '1', enterprise: '1' },
+   256→      { label: 'Cross-ERP Analytics', starter: '—', professional: '—', business: '✓', enterprise: '✓' },
+   257→      { label: 'Cross-ERP Data Sync', starter: '—', professional: '✓', business: '✓', enterprise: '✓' },
+   258→    ],
+   259→  },
+   260→  {
+   261→    category: 'Users & Scale',
+   262→    icon: <Users className="w-4 h-4 text-[var(--gg-amber)]" />,
+   263→    rows: [
+   264→      { label: 'Users', starter: 'Up to 5', professional: 'Up to 25', business: 'Up to 75', enterprise: 'Unlimited' },
+   265→      { label: 'Locations', starter: '1', professional: '5', business: '20', enterprise: 'Unlimited' },
+   266→      { label: 'Items / SKUs', starter: '1,000', professional: '10,000', business: '100,000', enterprise: 'Unlimited' },
+   267→      { label: 'Custom Fields', starter: '5', professional: '50', business: 'Unlimited', enterprise: 'Unlimited' },
+   268→    ],
+   269→  },
+   270→  {
+   271→    category: 'Support',
+   272→    icon: <Headphones className="w-4 h-4 text-[var(--gg-green)]" />,
+   273→    rows: [
+   274→      { label: 'Support Level', starter: 'Email', professional: 'Priority', business: 'Dedicated Manager', enterprise: '24/7 Dedicated' },
+   275→      { label: 'Response Time', starter: '48 hours', professional: '4 hours', business: '2 hours', enterprise: '1 hour' },
+   276→      { label: 'Account Manager', starter: '—', professional: '—', business: '✓', enterprise: '✓' },
+   277→      { label: 'Quarterly Reviews', starter: '—', professional: '—', business: '✓', enterprise: '✓' },
+   278→    ],
+   279→  },
+   280→  {
+   281→    category: 'Reporting & Analytics',
+   282→    icon: <BarChart3 className="w-4 h-4 text-[var(--gg-amber)]" />,
+   283→    rows: [
+   284→      { label: 'Reporting', starter: 'Basic', professional: 'Advanced', business: 'Custom BI', enterprise: 'Custom Engine' },
+   285→      { label: 'Dashboards', starter: '5', professional: '25', business: 'Unlimited', enterprise: 'Unlimited' },
+   286→      { label: 'Custom Reports', starter: '—', professional: '✓', business: '✓', enterprise: '✓' },
+   287→      { label: 'Audit Logs', starter: '30 days', professional: '30 days', business: '1 year', enterprise: 'Unlimited' },
+   288→    ],
+   289→  },
+   290→  {
+   291→    category: 'API & Integration',
+   292→    icon: <Plug className="w-4 h-4 text-primary" />,
+   293→    rows: [
+   294→      { label: 'API Access', starter: '—', professional: '✓', business: 'Full', enterprise: 'Full' },
+   295→      { label: 'Webhooks', starter: '—', professional: '✓', business: '✓', enterprise: '✓' },
+   296→      { label: 'Custom Integrations', starter: '—', professional: '—', business: '✓', enterprise: '✓' },
+   297→      { label: 'Rate Limit', starter: '—', professional: '500/min', business: '5,000/min', enterprise: 'Unlimited' },
+   298→      { label: 'Data Migration Tools', starter: '—', professional: '—', business: '✓', enterprise: '✓' },
+   299→    ],
+   300→  },
+   301→  {
+   302→    category: 'Security & Compliance',
+   303→    icon: <Shield className="w-4 h-4 text-[var(--gg-violet)]" />,
+   304→    rows: [
+   305→      { label: 'Encryption', starter: 'AES-256', professional: 'AES-256', business: 'AES-256', enterprise: 'AES-256' },
+   306→      { label: '2FA', starter: '✓', professional: '✓', business: '✓', enterprise: '✓' },
+   307→      { label: 'SSO / SAML', starter: '—', professional: '✓', business: '✓', enterprise: '✓' },
+   308→      { label: 'SLA Guarantee', starter: '—', professional: '—', business: '99.5%', enterprise: '99.9%' },
+   309→      { label: 'Data Residency', starter: '—', professional: '—', business: '—', enterprise: '✓' },
+   310→      { label: 'On-Premise Option', starter: '—', professional: '—', business: '—', enterprise: '✓' },
+   311→    ],
+   312→  },
+   313→  {
+   314→    category: 'Customization',
+   315→    icon: <Settings2 className="w-4 h-4 text-[var(--gg-teal)]" />,
+   316→    rows: [
+   317→      { label: 'Custom Workflows', starter: '—', professional: '✓', business: '✓', enterprise: '✓' },
+   318→      { label: 'White Label', starter: '—', professional: '—', business: '—', enterprise: '✓' },
+   319→      { label: 'Custom Modules', starter: '—', professional: '—', business: '—', enterprise: '✓' },
+   320→      { label: 'Multi-Currency', starter: '—', professional: '—', business: '✓', enterprise: '✓' },
+   321→      { label: 'Multi-Language', starter: '—', professional: '—', business: '✓', enterprise: '✓' },
+   322→    ],
+   323→  },
+   324→]
+   325→
+   326→/* ------------------------------------------------------------------ */
+   327→/*  FAQs                                                               */
+   328→/* ------------------------------------------------------------------ */
+   329→
+   330→const FAQS = [
+   331→  {
+   332→    question: 'Is there a free trial available?',
+   333→    answer: 'Yes! Every plan comes with a 14-day free trial. No credit card required. You get full access to all features in your chosen tier so you can evaluate everything before committing.',
+   334→  },
+   335→  {
+   336→    question: 'Can I switch plans at any time?',
+   337→    answer: 'Absolutely. You can upgrade or downgrade your plan at any time. When upgrading, the new features are available immediately and billing is prorated. Downgrades take effect at the start of your next billing cycle.',
+   338→  },
+   339→  {
+   340→    question: 'What happens when I exceed my plan limits?',
+   341→    answer: "We'll notify you before you hit any limits. You can upgrade your plan at any time to accommodate growth. We never cut off service unexpectedly — your operations continue running while we help you find the right tier.",
+   342→  },
+   343→  {
+   344→    question: 'Is the pricing per ERP or per organization?',
+   345→    answer: 'Pricing is per ERP. Each subscription covers one ERP platform. If you need multiple ERPs, you can subscribe to each one separately at the same per-ERP price. For example, 2 ERPs on the Professional plan would be 2 × PKR 35,000/month. Volume discounts are available for 3+ ERPs — contact sales.',
+   346→  },
+   347→  {
+   348→    question: 'What payment methods do you accept?',
+   349→    answer: 'We accept all major debit and credit cards (Visa, Mastercard, American Express) through our secure payment partner Stripe. We also support bank transfers, JazzCash, and EasyPaisa. For Enterprise plans, we offer purchase orders and custom invoicing with net-30 payment terms. All transactions are protected with bank-grade encryption and 3D Secure authentication.',
+   350→  },
+   351→  {
+   352→    question: 'Do you offer discounts for annual billing?',
+   353→    answer: 'Yes, annual billing gives you 2 months free — you pay for 10 months and use for 12. That\'s a savings of roughly 17% compared to monthly pricing. We also offer special pricing for non-profits, educational institutions, and startups in their first year. Reach out to learn more.',
+   354→  },
+   355→  {
+   356→    question: 'Which ERP platforms can I choose?',
+   357→    answer: 'ApexFlow offers 21 active ERP platforms across industries including Apparel, Hospitality, Education, Retail, Pharma, Real Estate, Travel, Manufacturing, Food, Automotive, Healthcare, Creative, Logistics, Distribution, and more. You select the ones that match your business needs.',
+   358→  },
+   359→  {
+   360→    question: 'Can I add more ERP platforms later?',
+   361→    answer: 'Yes! Each ERP is a separate subscription, so you can add new ERPs at any time. Choose the plan tier (Starter, Professional, Business, or Enterprise) for each ERP independently. Mix and match tiers across your ERPs based on what each business unit needs.',
+   362→  },
+   363→]
+   364→
+   365→/* ------------------------------------------------------------------ */
+   366→/*  Included Features                                                  */
+   367→/* ------------------------------------------------------------------ */
+   368→
+   369→const INCLUDED_FEATURES = [
+   370→  {
+   371→    icon: <Cpu className="w-6 h-6" />,
+   372→    title: 'Core Platform',
+   373→    desc: 'All plans include the full ApexFlow engine with industry-specific modules and workflows.',
+   374→    accentVar: '--gg-teal',
+   375→  },
+   376→  {
+   377→    icon: <Lock className="w-6 h-6" />,
+   378→    title: 'Data Security',
+   379→    desc: 'Enterprise-grade encryption, daily backups, and role-based access control across every tier.',
+   380→    accentVar: '--gg-violet',
+   381→  },
+   382→  {
+   383→    icon: <Smartphone className="w-6 h-6" />,
+   384→    title: 'Mobile Access',
+   385→    desc: 'Native mobile apps for iOS and Android with offline sync on every plan.',
+   386→    accentVar: '--gg-green',
+   387→  },
+   388→  {
+   389→    icon: <RefreshCw className="w-6 h-6" />,
+   390→    title: 'Updates',
+   391→    desc: 'Continuous feature updates and security patches included at no extra cost.',
+   392→    accentVar: '--gg-amber',
+   393→  },
+   394→]
+   395→
+   396→/* ------------------------------------------------------------------ */
+   397→/*  macOS 27 Golden Gate Segmented Control                             */
+   398→/* ------------------------------------------------------------------ */
+   399→
+   400→function SegmentedControl({
+   401→  isAnnual,
+   402→  onChange,
+   403→}: {
+   404→  isAnnual: boolean
+   405→  onChange: (value: boolean) => void
+   406→}) {
+   407→  return (
+   408→    <div className="inline-flex items-center gap-2">
+   409→      <div className="relative flex bg-secondary/80 rounded-xl p-1 border border-[var(--gg-separator-strong)]">
+   410→        {/* Sliding indicator — vermillion for active state */}
+   411→        <motion.div
+   412→          className="absolute top-1 bottom-1 rounded-lg bg-card shadow-[var(--gg-shadow-sm)]"
+   413→          animate={{
+   414→            left: isAnnual ? 'calc(50% + 2px)' : '4px',
+   415→            width: 'calc(50% - 6px)',
+   416→          }}
+   417→          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+   418→        />
+   419→        <button
+   420→          onClick={() => onChange(false)}
+   421→          className={`relative z-10 px-5 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
+   422→            !isAnnual ? 'text-foreground' : 'text-muted-foreground'
+   423→          }`}
+   424→        >
+   425→          Monthly
+   426→        </button>
+   427→        <button
+   428→          onClick={() => onChange(true)}
+   429→          className={`relative z-10 px-5 py-2 text-sm font-medium rounded-lg transition-colors duration-200 flex items-center gap-1.5 ${
+   430→            isAnnual ? 'text-foreground' : 'text-muted-foreground'
+   431→          }`}
+   432→        >
+   433→          Annual
+   434→        </button>
+   435→      </div>
+   436→      <span className="text-xs font-semibold text-[var(--gg-green)] bg-[var(--gg-green)]/10 border border-[var(--gg-green)]/20 px-2.5 py-1 rounded-full">
+   437→        Save 20%
+   438→      </span>
+   439→    </div>
+   440→  )
+   441→}
+   442→
+   443→/* ------------------------------------------------------------------ */
+   444→/*  Pricing Card Component — Golden Gate design                        */
+   445→/* ------------------------------------------------------------------ */
+   446→
+   447→function PricingCard({
+   448→  tier,
+   449→  index,
+   450→  isAnnual,
+   451→  currency,
+   452→  onSelectPlan,
+   453→}: {
+   454→  tier: (typeof PRICING_TIERS)[number]
+   455→  index: number
+   456→  isAnnual: boolean
+   457→  currency: CurrencyCode
+   458→  onSelectPlan: (planId: string) => void
+   459→}) {
+   460→  const { navigate } = useNavigate()
+   461→  const isPopular = tier.popular
+   462→  const monthlyPrice = tier.pkrMonthly
+   463→  // Annual calculation: 2 months free (pay for 10 months, use for 12)
+   464→  // This is more intuitive: "Pay for 10, get 12"
+   465→  const annualTotal = monthlyPrice * 10
+   466→  const annualMonthlyRate = Math.round(annualTotal / 12)
+   467→  const savingsAmount = monthlyPrice * 12 - annualTotal // = monthlyPrice * 2
+   468→  const savingsPercent = Math.round((savingsAmount / (monthlyPrice * 12)) * 100) // ~17%
+   469→  const price = isAnnual ? annualMonthlyRate : monthlyPrice
+   470→  const accent = TIER_ACCENTS[tier.id]
+   471→
+   472→  const [featuresExpanded, setFeaturesExpanded] = useState(false)
+   473→  const INITIAL_FEATURES_COUNT = 4
+   474→  const visibleFeatures = featuresExpanded
+   475→    ? tier.features
+   476→    : tier.features.slice(0, INITIAL_FEATURES_COUNT)
+   477→  const hasMoreFeatures = tier.features.length > INITIAL_FEATURES_COUNT
+   478→
+   479→  return (
+   480→    <motion.div
+   481→      initial={{ opacity: 0, y: 24 }}
+   482→      whileInView={{ opacity: 1, y: 0 }}
+   483→      viewport={{ once: true }}
+   484→      transition={{ delay: index * 0.15, duration: 0.6 }}
+   485→      className={`relative flex flex-col h-full ${isPopular ? 'xl:-mt-4 xl:mb-4 z-10' : ''}`}
+   486→    >
+   487→      {/* Glow behind popular card — vermillion/amber glow */}
+   488→      {isPopular && (
+   489→        <div className="absolute -inset-3 rounded-3xl bg-gradient-to-b from-[var(--gg-vermillion)]/20 via-[var(--gg-amber)]/10 to-transparent blur-xl pointer-events-none" />
+   490→      )}
+   491→
+   492→      <InteractiveCard
+   493→        glowColor={`var(${tier.accentVar})`}
+   494→        variant={isPopular ? 'strong' : 'default'}
+   495→        className="flex-1 flex flex-col"
+   496→      >
+   497→        <div className={`relative bg-card overflow-hidden group flex flex-col h-full ${isPopular ? 'gg-elevated' : 'gg-card'}`}>
+   498→          {/* Colored accent bar at top */}
+   499→          <div className={`h-1.5 bg-gradient-to-r ${accent.stripe}`} />
+   500→
+   501→          {/* Popular Badge */}
+   502→          {isPopular && (
+   503→            <div className="absolute top-5 left-1/2 -translate-x-1/2 z-10">
+   504→              <div className="bg-gradient-to-r from-[#E2532F] to-[#F59E0B] text-xs font-bold px-4 py-1.5 rounded-full text-white shadow-lg gg-pill">
+   505→                Most Popular
+   506→              </div>
+   507→            </div>
+   508→          )}
+   509→
+   510→          <div className={`relative flex flex-col flex-1 p-9 ${isPopular ? 'pt-14' : ''}`}>
+   511→            {/* Colored background tint for card */}
+   512→            <div className={`absolute inset-0 ${accent.cardBg} pointer-events-none`} />
+   513→            
+   514→            {/* Gradient overlay for popular */}
+   515→            {isPopular && (
+   516→              <div className="absolute inset-0 bg-gradient-to-b from-[#E2532F]/[0.06] to-[#F59E0B]/[0.03] pointer-events-none" />
+   517→            )}
+   518→
+   519→            <div className="relative flex flex-col flex-1">
+   520→              {/* Tier Name with colored badge */}
+   521→              <div className="flex items-center gap-2 mb-1">
+   522→                <h3
+   523→                  className={`text-xl font-bold ${
+   524→                    isPopular
+   525→                      ? 'text-gradient-primary'
+   526→                      : accent.priceText
+   527→                  }`}
+   528→                >
+   529→                  {tier.name}
+   530→                </h3>
+   531→                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${accent.badgeBg} ${accent.badgeText}`}>
+   532→                  {tier.id === 'starter' ? 'Basic' : tier.id === 'professional' ? 'Growth' : tier.id === 'business' ? 'Scale' : 'Unlimited'}
+   533→                </span>
+   534→              </div>
+   535→              <p className="text-sm text-muted-foreground mb-6">{tier.description}</p>
+   536→
+   537→              {/* Price */}
+   538→              <div className="mb-6">
+   539→                <div className="flex items-baseline gap-1">
+   540→                  <span className="text-sm font-medium text-muted-foreground">{CURRENCIES[currency].symbol}</span>
+   541→                  <span
+   542→                    className={`text-4xl sm:text-5xl font-extrabold tracking-tight ${
+   543→                      isPopular
+   544→                        ? 'text-gradient-primary'
+   545→                        : accent.priceText
+   546→                    }`}
+   547→                  >
+   548→                    {formatPrice(price, currency)}
+   549→                  </span>
+   550→                  <span className="text-sm text-muted-foreground">/mo</span>
+   551→                </div>
+   552→                {/* Per ERP badge */}
+   553→                <div className={`mt-2 inline-flex items-center gap-1.5 ${accent.badgeBg} rounded-md px-2 py-0.5`}>
+   554→                  <CreditCard className={`w-3 h-3 ${accent.badgeText}`} />
+   555→                  <span className={`text-[11px] font-medium ${accent.badgeText}`}>per ERP</span>
+   556→                </div>
+   557→                {isAnnual && (
+   558→                  <>
+   559→                    <p className={`mt-1.5 text-xs font-medium ${accent.savingsText}`}>
+   560→                      2 months free — save {CURRENCIES[currency].symbol}{formatPrice(savingsAmount, currency)}/yr
+   561→                    </p>
+   562→                    <p className="text-xs text-muted-foreground">
+   563→                      Billed {CURRENCIES[currency].symbol}{formatPrice(annualTotal, currency)}/yr
+   564→                    </p>
+   565→                  </>
+   566→                )}
+   567→              </div>
+   568→
+   569→              {/* Features */}
+   570→              <ul className="space-y-3 mb-2 flex-1">
+   571→                {visibleFeatures.map((feature) => (
+   572→                  <li key={feature} className="flex items-start gap-3">
+   573→                    <div className="mt-0.5 shrink-0">
+   574→                      <Check className={`w-4 h-4 ${accent.check}`} />
+   575→                    </div>
+   576→                    <span className="text-sm text-muted-foreground">{feature}</span>
+   577→                  </li>
+   578→                ))}
+   579→              </ul>
+   580→              <AnimatePresence initial={false}>
+   581→                {hasMoreFeatures && (
+   582→                  <button
+   583→                    onClick={() => setFeaturesExpanded(!featuresExpanded)}
+   584→                    className="text-xs text-[var(--gg-vermillion)] hover:underline mb-4 flex items-center gap-1 transition-colors"
+   585→                  >
+   586→                    {featuresExpanded
+   587→                      ? 'Show less'
+   588→                      : `+${tier.features.length - INITIAL_FEATURES_COUNT} more features`
+   589→                    }
+   590→                    <motion.span
+   591→                      animate={{ rotate: featuresExpanded ? 180 : 0 }}
+   592→                      transition={{ duration: 0.2, ease: 'easeInOut' }}
+   593→                      className="inline-flex"
+   594→                    >
+   595→                      <ChevronDown className="w-3 h-3" />
+   596→                    </motion.span>
+   597→                  </button>
+   598→                )}
+   599→              </AnimatePresence>
+   600→              {!hasMoreFeatures && <div className="mb-4" />}
+   601→
+   602→              {/* CTA Button — per-tier color */}
+   603→              <Button
+   604→                size="lg"
+   605→                className={`w-full h-12 rounded-xl font-semibold ${
+   606→                  isPopular
+   607→                    ? accent.btnClass
+   608→                    : accent.btnClass
+   609→                }`}
+   610→                onClick={() => {
+   611→                  if (tier.name === 'Enterprise') {
+   612→                    navigate('contact')
+   613→                  } else {
+   614→                    onSelectPlan(tier.id)
+   615→                  }
+   616→                }}
+   617→              >
+   618→                {tier.cta}
+   619→                <ArrowRight className="w-4 h-4 ml-2" />
+   620→              </Button>
+   621→            </div>
+   622→          </div>
+   623→        </div>
+   624→      </InteractiveCard>
+   625→    </motion.div>
+   626→  )
+   627→}
+   628→
+   629→/* ------------------------------------------------------------------ */
+   630→/*  FAQ Item Component — Golden Gate card with numbered indicator      */
+   631→/* ------------------------------------------------------------------ */
+   632→
+   633→function FAQItem({
+   634→  question,
+   635→  answer,
+   636→  index,
+   637→}: {
+   638→  question: string
+   639→  answer: string
+   640→  index: number
+   641→}) {
+   642→  const [isOpen, setIsOpen] = useState(false)
+   643→  const num = String(index + 1).padStart(2, '0')
+   644→
+   645→  return (
+   646→    <motion.div
+   647→      initial={{ opacity: 0, y: 10 }}
+   648→      whileInView={{ opacity: 1, y: 0 }}
+   649→      viewport={{ once: true }}
+   650→      transition={{ delay: index * 0.06, duration: 0.4, ease: GG_EASE }}
+   651→      className={`gg-card overflow-hidden transition-all duration-200 ${
+   652→        isOpen ? 'border-[var(--gg-vermillion)]/30' : ''
+   653→      }`}
+   654→    >
+   655→      <button
+   656→        onClick={() => setIsOpen(!isOpen)}
+   657→        className="w-full flex items-center justify-between p-4 text-left hover:bg-secondary/50 transition-colors"
+   658→      >
+   659→        <div className="flex items-center gap-3 pr-4">
+   660→          {/* Numbered indicator */}
+   661→          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors font-mono text-xs font-bold ${
+   662→            isOpen ? 'bg-[var(--gg-vermillion)]/10 text-[var(--gg-vermillion)]' : 'bg-secondary text-muted-foreground'
+   663→          }`}>
+   664→            {num}
+   665→          </div>
+   666→          <span className={`text-sm font-medium transition-colors ${isOpen ? 'text-foreground' : 'text-foreground/80'}`}>
+   667→            {question}
+   668→          </span>
+   669→        </div>
+   670→        <motion.div
+   671→          animate={{ rotate: isOpen ? 180 : 0 }}
+   672→          transition={{ duration: 0.2, ease: 'easeInOut' }}
+   673→          className="shrink-0"
+   674→        >
+   675→          <ChevronDown className={`w-4 h-4 transition-colors ${isOpen ? 'text-[var(--gg-vermillion)]' : 'text-muted-foreground'}`} />
+   676→        </motion.div>
+   677→      </button>
+   678→      <motion.div
+   679→        initial={false}
+   680→        animate={{ height: isOpen ? 'auto' : 0, opacity: isOpen ? 1 : 0 }}
+   681→        transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+   682→        className="overflow-hidden"
+   683→      >
+   684→        <div className="px-4 pb-4 pt-0 ml-11">
+   685→          <p className="text-sm text-muted-foreground leading-relaxed">{answer}</p>
+   686→        </div>
+   687→      </motion.div>
+   688→    </motion.div>
+   689→  )
+   690→}
+   691→
+   692→/* ------------------------------------------------------------------ */
+   693→/*  Currency Selector Dropdown — Golden Gate                           */
+   694→/* ------------------------------------------------------------------ */
+   695→
+   696→function CurrencySelector({
+   697→  currency,
+   698→  setCurrency,
+   699→}: {
+   700→  currency: CurrencyCode
+   701→  setCurrency: (c: CurrencyCode) => void
+   702→}) {
+   703→  const [open, setOpen] = useState(false)
+   704→
+   705→  return (
+   706→    <div className="relative">
+   707→      <button
+   708→        onClick={() => setOpen(!open)}
+   709→        className="flex items-center gap-2 bg-card/80 backdrop-blur-sm border border-[var(--gg-separator-strong)] rounded-xl px-4 py-2.5 text-sm text-foreground shadow-[var(--gg-shadow-sm)] hover:shadow-[var(--gg-shadow-md)] transition-shadow duration-200"
+   710→      >
+   711→        <Globe className="w-4 h-4 text-muted-foreground" />
+   712→        <span className="font-medium">{currency}</span>
+   713→        <span className="text-muted-foreground hidden sm:inline">· {CURRENCIES[currency].label}</span>
+   714→        <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+   715→      </button>
+   716→      {open && (
+   717→        <motion.div
+   718→          initial={{ opacity: 0, y: -4, scale: 0.98 }}
+   719→          animate={{ opacity: 1, y: 0, scale: 1 }}
+   720→          transition={{ duration: 0.15 }}
+   721→          className="absolute top-full mt-2 right-0 z-[200] bg-card border border-border rounded-xl p-1.5 min-w-[200px] shadow-[var(--gg-shadow-xl)]"
+   722→        >
+   723→          {(Object.keys(CURRENCIES) as CurrencyCode[]).map((code) => (
+   724→            <button
+   725→              key={code}
+   726→              onClick={() => {
+   727→                setCurrency(code)
+   728→                setOpen(false)
+   729→              }}
+   730→              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors duration-150 ${
+   731→                currency === code
+   732→                  ? 'bg-[var(--gg-vermillion)]/10 text-[var(--gg-vermillion)] font-medium'
+   733→                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+   734→              }`}
+   735→            >
+   736→              <span className="flex items-center gap-2">
+   737→                <span className="font-medium">{CURRENCIES[code].symbol}</span>
+   738→                <span>{code}</span>
+   739→                <span className="text-muted-foreground hidden sm:inline">· {CURRENCIES[code].label}</span>
+   740→              </span>
+   741→              {currency === code && <Check className="w-3.5 h-3.5 text-[var(--gg-vermillion)]" />}
+   742→            </button>
+   743→          ))}
+   744→          <div className="border-t border-[var(--gg-separator)] mt-1 pt-1.5 px-3">
+   745→            <p className="text-[10px] text-muted-foreground">Prices in selected currency. PKR is the billing currency.</p>
+   746→          </div>
+   747→        </motion.div>
+   748→      )}
+   749→    </div>
+   750→  )
+   751→}
+   752→
+   753→/* ------------------------------------------------------------------ */
+   754→/*  Dot Grid Background Pattern — Warm vermillion dots                 */
+   755→/* ------------------------------------------------------------------ */
+   756→
+   757→function DotGridPattern() {
+   758→  return (
+   759→    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+   760→      <svg className="absolute inset-0 w-full h-full opacity-[0.035]" xmlns="http://www.w3.org/2000/svg">
+   761→        <defs>
+   762→          <pattern id="pricing-dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+   763→            <circle cx="2" cy="2" r="1" fill="var(--gg-vermillion)" />
+   764→          </pattern>
+   765→        </defs>
+   766→        <rect width="100%" height="100%" fill="url(#pricing-dots)" />
+   767→      </svg>
+   768→    </div>
+   769→  )
+   770→}
+   771→
+   772→/* ------------------------------------------------------------------ */
+   773→/*  Main Page Component                                                */
+   774→/* ------------------------------------------------------------------ */
+   775→
+   776→export function PricingPage() {
+   777→  const { navigate } = useNavigate()
+   778→  const [isAnnual, setIsAnnual] = useState(false)
+   779→  const [currency, setCurrency] = useState<CurrencyCode>('PKR')
+   780→  const { activeErps, loading: erpsLoading } = useErpSystems()
+   781→  const [checkoutOpen, setCheckoutOpen] = useState(false)
+   782→  const [selectedPlan, setSelectedPlan] = useState<PlanId | null>(null)
+   783→
+   784→  // Checkout status from URL params - parse once on mount using ref
+   785→  const [checkoutStatus, setCheckoutStatus] = useState<{ type: 'success' | 'cancelled' | 'error'; order?: string } | null>(null)
+   786→  const hasParsedCheckout = useRef(false)
+   787→
+   788→  useEffect(() => {
+   789→    if (hasParsedCheckout.current) return
+   790→    hasParsedCheckout.current = true
+   791→    const params = new URLSearchParams(window.location.search)
+   792→    const checkout = params.get('checkout')
+   793→    if (checkout) {
+   794→      const timer = setTimeout(() => {
+   795→        if (checkout === 'success') {
+   796→          setCheckoutStatus({ type: 'success', order: params.get('order') ?? undefined })
+   797→        } else if (checkout === 'cancelled') {
+   798→          setCheckoutStatus({ type: 'cancelled' })
+   799→        } else {
+   800→          setCheckoutStatus({ type: 'error' })
+   801→        }
+   802→        const url = new URL(window.location.href)
+   803→        url.searchParams.delete('checkout')
+   804→        url.searchParams.delete('order')
+   805→        url.searchParams.delete('reason')
+   806→        window.history.replaceState({}, '', url.pathname)
+   807→      }, 0)
+   808→      return () => clearTimeout(timer)
+   809→    }
+   810→  }, [])
+   811→
+   812→  const handleSelectPlan = (planId: string) => {
+   813→    setSelectedPlan(planId as PlanId)
+   814→    setCheckoutOpen(true)
+   815→  }
+   816→
+   817→  const faqs = FAQS.map((faq) => {
+   818→    if (faq.question === 'Which ERP platforms can I choose?') {
+   819→      const erpNames = activeErps.length > 0
+   820→        ? activeErps.map((e) => e.name).join(', ')
+   821→        : 'multiple'
+   822→      return {
+   823→        ...faq,
+   824→        answer: `ApexFlow offers ${erpsLoading ? 'multiple' : activeErps.length} active ERP platforms: ${erpNames}. You select the ones that match your business needs.`,
+   825→      }
+   826→    }
+   827→    return faq
+   828→  })
+   829→
+   830→  // Filter out ElectroFlow and FleetFlow from the "other ERPs" list since they get featured treatment
+   831→  const otherErps = activeErps.filter((e) => e.slug !== 'electroflow' && e.slug !== 'fleetflow')
+   832→
+   833→  return (
+   834→    <PageLayout>
+   835→      {/* ── Checkout Status Banner ── */}
+   836→      <AnimatePresence>
+   837→        {checkoutStatus && (
+   838→          <motion.div
+   839→            initial={{ opacity: 0, y: -20 }}
+   840→            animate={{ opacity: 1, y: 0 }}
+   841→            exit={{ opacity: 0, y: -20 }}
+   842→            className={`fixed top-0 left-0 right-0 z-[100] ${
+   843→              checkoutStatus.type === 'success'
+   844→                ? 'bg-[var(--gg-green)]'
+   845→                : checkoutStatus.type === 'cancelled'
+   846→                ? 'bg-[var(--gg-amber)]'
+   847→                : 'bg-[var(--gg-rose)]'
+   848→            } text-white`}
+   849→          >
+   850→            <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center justify-between">
+   851→              <div className="flex items-center gap-3">
+   852→                {checkoutStatus.type === 'success' ? (
+   853→                  <CheckCircle2 className="w-5 h-5 shrink-0" />
+   854→                ) : checkoutStatus.type === 'cancelled' ? (
+   855→                  <XCircle className="w-5 h-5 shrink-0" />
+   856→                ) : (
+   857→                  <XCircle className="w-5 h-5 shrink-0" />
+   858→                )}
+   859→                <div>
+   860→                  <p className="text-sm font-semibold">
+   861→                    {checkoutStatus.type === 'success'
+   862→                      ? 'Payment Successful!'
+   863→                      : checkoutStatus.type === 'cancelled'
+   864→                      ? 'Payment Cancelled'
+   865→                      : 'Payment Error'}
+   866→                  </p>
+   867→                  <p className="text-xs opacity-90">
+   868→                    {checkoutStatus.type === 'success'
+   869→                      ? checkoutStatus.order
+   870→                        ? `Order ${checkoutStatus.order} confirmed. Check your email for details.`
+   871→                        : 'Your order has been confirmed. Check your email for details.'
+   872→                      : checkoutStatus.type === 'cancelled'
+   873→                      ? 'Your checkout was cancelled. No charge was made.'
+   874→                      : 'Something went wrong. Please try again or contact support.'}
+   875→                  </p>
+   876→                </div>
+   877→              </div>
+   878→              <button
+   879→                onClick={() => setCheckoutStatus(null)}
+   880→                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
+   881→              >
+   882→                <X className="w-4 h-4" />
+   883→              </button>
+   884→            </div>
+   885→          </motion.div>
+   886→        )}
+   887→      </AnimatePresence>
+   888→
+   889→      {/* ── Hero Section — Warm gradient with frosted glass ── */}
+   890→      <section className="relative z-20 overflow-visible bg-gradient-to-b from-background via-secondary/40 to-background pt-24 pb-16 sm:pt-32 sm:pb-20">
+   891→        <DotGridPattern />
+   892→
+   893→        <div className="relative max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+   894→          <motion.div
+   895→            initial={{ opacity: 0, y: 20 }}
+   896→            animate={{ opacity: 1, y: 0 }}
+   897→            transition={{ duration: 0.6, ease: GG_EASE }}
+   898→          >
+   899→            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black leading-tight tracking-tight max-w-3xl mx-auto text-foreground">
+   900→              Simple{' '}
+   901→              <span className="text-gradient-golden">
+   902→                Pricing
+   903→              </span>
+   904→            </h1>
+   905→
+   906→            <p className="mt-5 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">
+   907→              Start free. Scale as you grow. No hidden fees, no surprises — just powerful ERP
+   908→              software at a price that makes sense for your business.
+   909→            </p>
+   910→
+   911→            {/* ── Billing Toggle + Currency Selector inside frosted glass container ── */}
+   912→            <div className="mt-8 flex justify-center relative z-50">
+   913→              <div className="relative inline-flex flex-col sm:flex-row items-center gap-4 p-4 overflow-visible">
+   914→                {/* Frosted glass background — gg-glass style */}
+   915→                <div className="absolute inset-0 bg-card/60 backdrop-blur-xl border border-[var(--gg-separator-strong)] rounded-2xl shadow-[var(--gg-shadow-md)] pointer-events-none" />
+   916→                <SegmentedControl isAnnual={isAnnual} onChange={setIsAnnual} />
+   917→                <div className="hidden sm:block w-px h-8 bg-[var(--gg-separator)]" />
+   918→                <CurrencySelector currency={currency} setCurrency={setCurrency} />
+   919→              </div>
+   920→            </div>
+   921→          </motion.div>
+   922→        </div>
+   923→      </section>
+   924→
+   925→      {/* ── Pricing Cards — Golden Gate accent stripes ── */}
+   926→      <section className="relative z-0 pt-16 sm:pt-20 pb-16 sm:pb-24">
+   927→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+   928→          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-6xl mx-auto">
+   929→            {PRICING_TIERS.map((tier, i) => (
+   930→              <PricingCard key={tier.id} tier={tier} index={i} isAnnual={isAnnual} currency={currency} onSelectPlan={handleSelectPlan} />
+   931→            ))}
+   932→          </div>
+   933→
+   934→          {/* Billing note */}
+   935→          <motion.div
+   936→            initial={{ opacity: 0 }}
+   937→            whileInView={{ opacity: 1 }}
+   938→            viewport={{ once: true }}
+   939→            className="text-center mt-6"
+   940→          >
+   941→            <p className="text-sm text-muted-foreground">
+   942→              All prices billed in PKR (Pakistani Rupee).{currency !== 'PKR' && ' Currency conversions are approximate. '}{' '}
+   943→              <button
+   944→                onClick={() => navigate('contact')}
+   945→                className="text-primary hover:text-primary/80 transition-colors underline underline-offset-2"
+   946→              >
+   947→                Contact us for custom pricing
+   948→              </button>
+   949→            </p>
+   950→          </motion.div>
+   951→        </div>
+   952→      </section>
+   953→
+   954→      {/* ── Available ERP Platforms — 2-column featured + list ── */}
+   955→      <section className="py-16 sm:py-24 border-t border-[var(--gg-separator)]">
+   956→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+   957→          <motion.div
+   958→            initial={{ opacity: 0, y: 16 }}
+   959→            whileInView={{ opacity: 1, y: 0 }}
+   960→            viewport={{ once: true }}
+   961→            transition={{ duration: 0.5, ease: GG_EASE }}
+   962→            className="mb-10"
+   963→          >
+   964→            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
+   965→              Choose Your{' '}
+   966→              <span className="text-gradient-cool">ERP Platforms</span>
+   967→            </h2>
+   968→            <p className="mt-3 text-muted-foreground max-w-xl">
+   969→              {activeErps.length} industry-specific ERPs, each purpose-built for real-world operations. Subscribe to each ERP separately at the plan tier that fits your needs.
+   970→            </p>
+   971→          </motion.div>
+   972→
+   973→          {/* 2-column layout: featured on left, scrollable list on right */}
+   974→          <div className="grid lg:grid-cols-5 gap-6">
+   975→            {/* Left: Featured ERPs */}
+   976→            <div className="lg:col-span-3 space-y-5">
+   977→              {/* Featured Integrated ERP — ElectroFlow */}
+   978→              <motion.div
+   979→                initial={{ opacity: 0, y: 16 }}
+   980→                whileInView={{ opacity: 1, y: 0 }}
+   981→                viewport={{ once: true }}
+   982→                transition={{ duration: 0.5, ease: GG_EASE }}
+   983→                className="gg-card border-[var(--gg-green)]/20 overflow-hidden"
+   984→              >
+   985→                <div className="h-1.5 bg-gradient-to-r from-[var(--gg-green)] to-[var(--gg-teal)]" />
+   986→                <div className="p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+   987→                  <div className="w-14 h-14 rounded-xl bg-[var(--gg-green)]/10 border border-[var(--gg-green)]/20 flex items-center justify-center shrink-0">
+   988→                    <Zap className="w-7 h-7 text-[var(--gg-green)]" />
+   989→                  </div>
+   990→                  <div className="flex-1 min-w-0">
+   991→                    <div className="flex items-center gap-2 mb-1">
+   992→                      <h3 className="text-lg font-bold text-foreground">ElectroFlow</h3>
+   993→                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider bg-[var(--gg-green)]/10 text-[var(--gg-green)] px-2 py-0.5 rounded-full border border-[var(--gg-green)]/20">
+   994→                        <span className="w-1 h-1 rounded-full bg-[var(--gg-green)]" />
+   995→                        Featured
+   996→                      </span>
+   997→                      <span className="text-[10px] font-medium text-muted-foreground">· Consumer Electronics & Appliances</span>
+   998→                    </div>
+   999→                    <p className="text-sm text-muted-foreground">
+  1000→                      Complete ERP with POS, installment management, service & repair, warranty tracking, and multi-branch operations.
+  1001→                      Starting from <span className="font-semibold text-foreground">PKR 15,000/mo</span> per ERP.
+  1002→                    </p>
+  1003→                  </div>
+  1004→                  <div className="flex items-center gap-2 shrink-0">
+  1005→                    <Button
+  1006→                      size="sm"
+  1007→                      className="bg-[var(--gg-green)] hover:bg-[var(--gg-green)]/90 text-white font-semibold rounded-xl px-4 h-9"
+  1008→                      onClick={() => navigate('erp-detail', 'electroflow')}
+  1009→                    >
+  1010→                      Learn More
+  1011→                      <ChevronRight className="w-3.5 h-3.5 ml-1" />
+  1012→                    </Button>
+  1013→                    <Button
+  1014→                      size="sm"
+  1015→                      variant="outline"
+  1016→                      className="border-border text-foreground/80 hover:bg-secondary/50 rounded-xl px-4 h-9"
+  1017→                      onClick={() => window.open('https://electroflowerp.vercel.app/', '_blank', 'noopener')}
+  1018→                    >
+  1019→                      Live Demo
+  1020→                    </Button>
+  1021→                  </div>
+  1022→                </div>
+  1023→              </motion.div>
+  1024→
+  1025→              {/* Featured Integrated ERP — FleetFlow */}
+  1026→              <motion.div
+  1027→                initial={{ opacity: 0, y: 16 }}
+  1028→                whileInView={{ opacity: 1, y: 0 }}
+  1029→                viewport={{ once: true }}
+  1030→                transition={{ duration: 0.5, ease: GG_EASE }}
+  1031→                className="gg-card border-[var(--gg-cyan)]/20 overflow-hidden"
+  1032→              >
+  1033→                <div className="h-1.5 bg-gradient-to-r from-[var(--gg-cyan)] to-[var(--gg-teal)]" />
+  1034→                <div className="p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+  1035→                  <div className="w-14 h-14 rounded-xl bg-[var(--gg-cyan)]/10 border border-[var(--gg-cyan)]/20 flex items-center justify-center shrink-0">
+  1036→                    <Compass className="w-7 h-7 text-[var(--gg-cyan)]" />
+  1037→                  </div>
+  1038→                  <div className="flex-1 min-w-0">
+  1039→                    <div className="flex items-center gap-2 mb-1">
+  1040→                      <h3 className="text-lg font-bold text-foreground">FleetFlow</h3>
+  1041→                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider bg-[var(--gg-green)]/10 text-[var(--gg-green)] px-2 py-0.5 rounded-full border border-[var(--gg-green)]/20">
+  1042→                        <span className="w-1 h-1 rounded-full bg-[var(--gg-green)]" />
+  1043→                        Featured
+  1044→                      </span>
+  1045→                      <span className="text-[10px] font-medium text-muted-foreground">· Fleet & Transportation</span>
+  1046→                    </div>
+  1047→                    <p className="text-sm text-muted-foreground">
+  1048→                      Complete fleet ERP with GPS tracking, driver management, fuel monitoring, trip planning, and maintenance scheduling.
+  1049→                      Starting from <span className="font-semibold text-foreground">PKR 15,000/mo</span> per ERP.
+  1050→                    </p>
+  1051→                  </div>
+  1052→                  <div className="flex items-center gap-2 shrink-0">
+  1053→                    <Button
+  1054→                      size="sm"
+  1055→                      className="bg-[var(--gg-cyan)] hover:bg-[var(--gg-cyan)]/90 text-white font-semibold rounded-xl px-4 h-9"
+  1056→                      onClick={() => navigate('erp-detail', 'fleetflow')}
+  1057→                    >
+  1058→                      Learn More
+  1059→                      <ChevronRight className="w-3.5 h-3.5 ml-1" />
+  1060→                    </Button>
+  1061→                    <Button
+  1062→                      size="sm"
+  1063→                      variant="outline"
+  1064→                      className="border-border text-foreground/80 hover:bg-secondary/50 rounded-xl px-4 h-9"
+  1065→                      onClick={() => window.open('https://fleetflowerp.vercel.app/', '_blank', 'noopener')}
+  1066→                    >
+  1067→                      Live Demo
+  1068→                    </Button>
+  1069→                  </div>
+  1070→                </div>
+  1071→              </motion.div>
+  1072→            </div>
+  1073→
+  1074→            {/* Right: Scrollable list of other ERPs */}
+  1075→            <div className="lg:col-span-2">
+  1076→              <div className="gg-card p-4 max-h-[420px] overflow-y-auto lg:sticky lg:top-24 custom-scrollbar">
+  1077→                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+  1078→                  <Globe className="w-4 h-4 text-muted-foreground" />
+  1079→                  All Available ERPs
+  1080→                  <span className="text-xs text-muted-foreground font-normal">({activeErps.length})</span>
+  1081→                </h3>
+  1082→                <div className="space-y-2">
+  1083→                  {otherErps.map((erp, i) => {
+  1084→                    const Icon = getErpIcon(erp.icon)
+  1085→                    const colors = getErpColor(erp.color)
+  1086→                    return (
+  1087→                      <motion.button
+  1088→                        key={erp.slug}
+  1089→                        initial={{ opacity: 0, y: 10 }}
+  1090→                        whileInView={{ opacity: 1, y: 0 }}
+  1091→                        viewport={{ once: true }}
+  1092→                        transition={{ delay: i * 0.03, duration: 0.3, ease: GG_EASE }}
+  1093→                        className="w-full bg-secondary/50 border border-[var(--gg-separator)] rounded-xl p-3 flex items-center gap-3 text-left hover:bg-secondary hover:shadow-[var(--gg-shadow-sm)] transition-all duration-200"
+  1094→                        onClick={() => navigate('erp-detail', erp.slug)}
+  1095→                      >
+  1096→                        <div
+  1097→                          className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+  1098→                          style={{
+  1099→                            color: colors.hex,
+  1100→                            background: `linear-gradient(135deg, ${colors.hex}12, ${colors.hex}06)`,
+  1101→                          }}
+  1102→                        >
+  1103→                          <Icon className="w-4 h-4" />
+  1104→                        </div>
+  1105→                        <div className="flex-1 min-w-0">
+  1106→                          <div className="flex items-center gap-2">
+  1107→                            <h4 className="text-sm font-semibold text-foreground">{erp.name}</h4>
+  1108→                            <span className="text-[9px] bg-[var(--gg-green)]/10 text-[var(--gg-green)] px-1.5 py-0.5 rounded font-medium">Active</span>
+  1109→                          </div>
+  1110→                          <p className="text-xs text-muted-foreground">{erp.industry}</p>
+  1111→                        </div>
+  1112→                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+  1113→                      </motion.button>
+  1114→                    )
+  1115→                  })}
+  1116→                  {/* Also include ElectroFlow and FleetFlow in the list for completeness */}
+  1117→                  {activeErps.filter((e) => e.slug === 'electroflow' || e.slug === 'fleetflow').map((erp, i) => {
+  1118→                    const Icon = getErpIcon(erp.icon)
+  1119→                    const colors = getErpColor(erp.color)
+  1120→                    return (
+  1121→                      <motion.button
+  1122→                        key={erp.slug}
+  1123→                        initial={{ opacity: 0, y: 10 }}
+  1124→                        whileInView={{ opacity: 1, y: 0 }}
+  1125→                        viewport={{ once: true }}
+  1126→                        transition={{ delay: i * 0.03, duration: 0.3, ease: GG_EASE }}
+  1127→                        className="w-full bg-secondary/50 border border-[var(--gg-green)]/10 rounded-xl p-3 flex items-center gap-3 text-left hover:bg-secondary hover:shadow-[var(--gg-shadow-sm)] transition-all duration-200"
+  1128→                        onClick={() => navigate('erp-detail', erp.slug)}
+  1129→                      >
+  1130→                        <div
+  1131→                          className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+  1132→                          style={{
+  1133→                            color: colors.hex,
+  1134→                            background: `linear-gradient(135deg, ${colors.hex}12, ${colors.hex}06)`,
+  1135→                          }}
+  1136→                        >
+  1137→                          <Icon className="w-4 h-4" />
+  1138→                        </div>
+  1139→                        <div className="flex-1 min-w-0">
+  1140→                          <div className="flex items-center gap-2">
+  1141→                            <h4 className="text-sm font-semibold text-foreground">{erp.name}</h4>
+  1142→                            <span className="text-[9px] bg-[var(--gg-green)]/10 text-[var(--gg-green)] px-1.5 py-0.5 rounded font-medium">Featured</span>
+  1143→                          </div>
+  1144→                          <p className="text-xs text-muted-foreground">{erp.industry}</p>
+  1145→                        </div>
+  1146→                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+  1147→                      </motion.button>
+  1148→                    )
+  1149→                  })}
+  1150→                </div>
+  1151→              </div>
+  1152→            </div>
+  1153→          </div>
+  1154→
+  1155→          {/* Per-ERP pricing summary */}
+  1156→          <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+  1157→            {PRICING_TIERS.map((tier) => {
+  1158→              const monthlyPrice = tier.pkrMonthly
+  1159→              const annualTotal = monthlyPrice * 10
+  1160→              const annualMonthlyRate = Math.round(annualTotal / 12)
+  1161→              const accent = TIER_ACCENTS[tier.id]
+  1162→              return (
+  1163→                <div key={tier.id} className={`${accent.cardBg} gg-card p-4 text-center relative overflow-hidden`}>
+  1164→                  <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${accent.stripe}`} />
+  1165→                  <p className={`text-sm font-semibold ${accent.headerText}`}>{tier.name}</p>
+  1166→                  {isAnnual ? (
+  1167→                    <>
+  1168→                      <p className="text-xs text-muted-foreground mt-1">
+  1169→                        {CURRENCIES[currency].symbol} {formatPrice(annualMonthlyRate, currency)}/mo per ERP
+  1170→                      </p>
+  1171→                      <p className={`text-[11px] ${accent.savingsText} mt-0.5`}>
+  1172→                        Billed {CURRENCIES[currency].symbol}{formatPrice(annualTotal, currency)}/yr
+  1173→                      </p>
+  1174→                    </>
+  1175→                  ) : (
+  1176→                    <>
+  1177→                      <p className="text-xs text-muted-foreground mt-1">
+  1178→                        {CURRENCIES[currency].symbol} {formatPrice(monthlyPrice, currency)}/mo per ERP
+  1179→                      </p>
+  1180→                      <p className="text-[11px] text-muted-foreground mt-0.5">
+  1181→                        Annual: {CURRENCIES[currency].symbol} {formatPrice(annualTotal, currency)}/yr (2 months free)
+  1182→                      </p>
+  1183→                    </>
+  1184→                  )}
+  1185→                </div>
+  1186→              )
+  1187→            })}
+  1188→          </div>
+  1189→        </div>
+  1190→      </section>
+  1191→
+  1192→      {/* ── What's Included — Horizontal Banner ── */}
+  1193→      <section className="py-16 sm:py-24 border-t border-[var(--gg-separator)]">
+  1194→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+  1195→          <motion.div
+  1196→            initial={{ opacity: 0, y: 16 }}
+  1197→            whileInView={{ opacity: 1, y: 0 }}
+  1198→            viewport={{ once: true }}
+  1199→            transition={{ duration: 0.5, ease: GG_EASE }}
+  1200→            className="text-center mb-10"
+  1201→          >
+  1202→            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
+  1203→              What&apos;s{' '}
+  1204→              <span className="text-gradient-primary">Included</span>
+  1205→            </h2>
+  1206→            <p className="mt-3 text-muted-foreground max-w-lg mx-auto">
+  1207→              Every plan comes with the core ApexFlow platform — the differences are in scale,
+  1208→              support, and customization.
+  1209→            </p>
+  1210→          </motion.div>
+  1211→
+  1212→          {/* Horizontal banner layout */}
+  1213→          <motion.div
+  1214→            initial={{ opacity: 0, y: 16 }}
+  1215→            whileInView={{ opacity: 1, y: 0 }}
+  1216→            viewport={{ once: true }}
+  1217→            transition={{ duration: 0.5, ease: GG_EASE, delay: 0.1 }}
+  1218→            className="gg-card overflow-hidden"
+  1219→          >
+  1220→            <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-[var(--gg-separator)]">
+  1221→              {INCLUDED_FEATURES.map((item, i) => (
+  1222→                <motion.div
+  1223→                  key={item.title}
+  1224→                  initial={{ opacity: 0, scale: 0.95 }}
+  1225→                  whileInView={{ opacity: 1, scale: 1 }}
+  1226→                  viewport={{ once: true }}
+  1227→                  transition={{ delay: i * 0.1 }}
+  1228→                  className="p-6 flex flex-col items-center text-center gap-3 group"
+  1229→                >
+  1230→                  <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center group-hover:scale-110 transition-transform" style={{ color: `var(${item.accentVar})` }}>
+  1231→                    {item.icon}
+  1232→                  </div>
+  1233→                  <h4 className="text-sm font-semibold text-foreground">{item.title}</h4>
+  1234→                  <p className="text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
+  1235→                </motion.div>
+  1236→              ))}
+  1237→            </div>
+  1238→          </motion.div>
+  1239→        </div>
+  1240→      </section>
+  1241→
+  1242→      {/* ── Feature Comparison Table — Warm separators, Golden Gate headers ── */}
+  1243→      <section className="py-16 sm:py-24 border-t border-[var(--gg-separator)]">
+  1244→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+  1245→          <motion.div
+  1246→            initial={{ opacity: 0, y: 16 }}
+  1247→            whileInView={{ opacity: 1, y: 0 }}
+  1248→            viewport={{ once: true }}
+  1249→            transition={{ duration: 0.5, ease: GG_EASE }}
+  1250→            className="text-center mb-10"
+  1251→          >
+  1252→            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
+  1253→              Feature{' '}
+  1254→              <span className="text-gradient-golden">Comparison</span>
+  1255→            </h2>
+  1256→            <p className="mt-3 text-muted-foreground max-w-lg mx-auto">
+  1257→              A detailed breakdown of what each plan includes. Every tier is built on the same powerful foundation.
+  1258→            </p>
+  1259→          </motion.div>
+  1260→
+  1261→          <motion.div
+  1262→            initial={{ opacity: 0, y: 16 }}
+  1263→            whileInView={{ opacity: 1, y: 0 }}
+  1264→            viewport={{ once: true }}
+  1265→            transition={{ duration: 0.5, ease: GG_EASE, delay: 0.1 }}
+  1266→            className="gg-card overflow-x-auto"
+  1267→          >
+  1268→            {/* Table Header — colored per tier with Golden Gate palette */}
+  1269→            <div className="grid grid-cols-5 min-w-[640px] border-b border-[var(--gg-separator-strong)]">
+  1270→              <div className="p-4 bg-secondary">
+  1271→                <span className="text-sm font-medium text-muted-foreground">Feature</span>
+  1272→              </div>
+  1273→              {PRICING_TIERS.map((tier) => {
+  1274→                const tierPrice = isAnnual ? Math.round((tier.pkrMonthly * 10) / 12) : tier.pkrMonthly
+  1275→                const accent = TIER_ACCENTS[tier.id]
+  1276→                return (
+  1277→                  <div key={tier.id} className={`p-4 text-center border-l border-[var(--gg-separator)] ${accent.headerBg} ${tier.popular ? 'relative' : ''}`}>
+  1278→                    {tier.popular && (
+  1279→                      <div className="flex items-center justify-center gap-1.5">
+  1280→                        <span className={`text-sm font-semibold ${accent.headerText}`}>{tier.name}</span>
+  1281→                        <span className={`text-[10px] bg-[var(--gg-vermillion)]/10 text-[var(--gg-vermillion)] px-1.5 py-0.5 rounded font-medium gg-pill`}>
+  1282→                          Popular
+  1283→                        </span>
+  1284→                      </div>
+  1285→                    )}
+  1286→                    {!tier.popular && (
+  1287→                      <span className={`text-sm font-semibold ${accent.headerText}`}>{tier.name}</span>
+  1288→                    )}
+  1289→                    <div className="text-[11px] text-muted-foreground mt-0.5">
+  1290→                      {CURRENCIES[currency].symbol} {formatPrice(tierPrice, currency)}/mo
+  1291→                      {isAnnual && (
+  1292→                        <span className="text-[var(--gg-green)]"> (2 months free)</span>
+  1293→                      )}
+  1294→                    </div>
+  1295→                  </div>
+  1296→                )
+  1297→              })}
+  1298→            </div>
+  1299→
+  1300→            {/* Table Body */}
+  1301→            {COMPARISON_CATEGORIES.map((category) => (
+  1302→              <div key={category.category}>
+  1303→                {/* Category Header */}
+  1304→                <div className="grid grid-cols-5 min-w-[640px] border-b border-[var(--gg-separator)] bg-secondary/50">
+  1305→                  <div className="p-3 col-span-5 flex items-center gap-2.5">
+  1306→                    <div className="w-5 h-5 rounded-md bg-secondary flex items-center justify-center">
+  1307→                      {category.icon}
+  1308→                    </div>
+  1309→                    <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
+  1310→                      {category.category}
+  1311→                    </span>
+  1312→                  </div>
+  1313→                </div>
+  1314→
+  1315→                {/* Category Rows — alternating backgrounds */}
+  1316→                {category.rows.map((row, rowIdx) => (
+  1317→                  <div
+  1318→                    key={row.label}
+  1319→                    className={`grid grid-cols-5 min-w-[640px] border-b border-[var(--gg-separator)] last:border-b-0 ${
+  1320→                      rowIdx % 2 === 0 ? 'bg-transparent' : 'bg-muted/30'
+  1321→                    }`}
+  1322→                  >
+  1323→                    <div className="p-3">
+  1324→                      <span className="text-sm text-muted-foreground">{row.label}</span>
+  1325→                    </div>
+  1326→                    {(['starter', 'professional', 'business', 'enterprise'] as const).map((tierKey) => {
+  1327→                      const value = (row as Record<string, string>)[tierKey]
+  1328→                      return (
+  1329→                        <div key={tierKey} className="p-3 text-center border-l border-[var(--gg-separator)]">
+  1330→                          {value === '✓' ? (
+  1331→                            <div className="w-5 h-5 rounded-md flex items-center justify-center mx-auto bg-[var(--gg-green)]/10">
+  1332→                              <Check className="w-3 h-3 text-[var(--gg-green)]" strokeWidth={3} />
+  1333→                            </div>
+  1334→                          ) : (
+  1335→                            <span className={`text-sm ${value === '—' ? 'text-foreground/35' : 'text-foreground'}`}>
+  1336→                              {value}
+  1337→                            </span>
+  1338→                          )}
+  1339→                        </div>
+  1340→                      )
+  1341→                    })}
+  1342→                  </div>
+  1343→                ))}
+  1344→              </div>
+  1345→            ))}
+  1346→          </motion.div>
+  1347→        </div>
+  1348→      </section>
+  1349→
+  1350→      {/* ── FAQ Section — 2-column with numbered indicators ── */}
+  1351→      <section className="py-16 sm:py-24 border-t border-[var(--gg-separator)]">
+  1352→        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+  1353→          <motion.div
+  1354→            initial={{ opacity: 0, y: 16 }}
+  1355→            whileInView={{ opacity: 1, y: 0 }}
+  1356→            viewport={{ once: true }}
+  1357→            transition={{ duration: 0.5, ease: GG_EASE }}
+  1358→            className="mb-10"
+  1359→          >
+  1360→            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
+  1361→              Frequently Asked{' '}
+  1362→              <span className="text-gradient-golden">Questions</span>
+  1363→            </h2>
+  1364→            <p className="mt-3 text-muted-foreground max-w-lg">
+  1365→              Got questions? We&apos;ve got answers. If you don&apos;t find what you need, reach out
+  1366→              to our team.
+  1367→            </p>
+  1368→          </motion.div>
+  1369→
+  1370→          {/* 2-column FAQ grid */}
+  1371→          <div className="grid md:grid-cols-2 gap-3">
+  1372→            {faqs.map((faq, i) => (
+  1373→              <FAQItem
+  1374→                key={faq.question}
+  1375→                question={faq.question}
+  1376→                answer={faq.answer}
+  1377→                index={i}
+  1378→              />
+  1379→            ))}
+  1380→          </div>
+  1381→        </div>
+  1382→      </section>
+  1383→
+  1384→      {/* ── CTA Section — Split layout (text left, buttons right) ── */}
+  1385→      <section className="py-20 sm:py-28 border-t border-[var(--gg-separator)]">
+  1386→        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+  1387→          <motion.div
+  1388→            initial={{ opacity: 0, y: 16 }}
+  1389→            whileInView={{ opacity: 1, y: 0 }}
+  1390→            viewport={{ once: true }}
+  1391→            transition={{ duration: 0.5, ease: GG_EASE }}
+  1392→            className="gg-elevated p-8 sm:p-12 overflow-hidden relative"
+  1393→          >
+  1394→            {/* Decorative gradient accent — vermillion→amber */}
+  1395→            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[var(--gg-vermillion)] via-[var(--gg-amber)] to-[var(--gg-vermillion)]" />
+  1396→
+  1397→            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+  1398→              {/* Left: Text */}
+  1399→              <div className="flex-1">
+  1400→                <div className="inline-flex items-center gap-2 bg-secondary rounded-full px-4 py-1.5 mb-5">
+  1401→                  <Zap className="w-3.5 h-3.5 text-[var(--gg-vermillion)]" />
+  1402→                  <span className="text-xs text-muted-foreground font-medium">Start your free trial today</span>
+  1403→                </div>
+  1404→                <h2 className="text-3xl sm:text-4xl font-extrabold mb-3 text-foreground">
+  1405→                  Ready to{' '}
+  1406→                  <span className="text-gradient-golden">Get Started?</span>
+  1407→                </h2>
+  1408→                <p className="text-muted-foreground max-w-lg">
+  1409→                  Join thousands of businesses already using ApexFlow to streamline their operations.
+  1410→                  14-day free trial, no credit card required.
+  1411→                </p>
+  1412→              </div>
+  1413→
+  1414→              {/* Right: Buttons */}
+  1415→              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+  1416→                <Button
+  1417→                  size="lg"
+  1418→                  className="bg-[var(--gg-vermillion)] hover:bg-[var(--gg-vermillion-light)] text-white font-semibold rounded-xl px-8 h-12 shadow-[var(--gg-shadow-sm)] btn-glow transition-all duration-200"
+  1419→                  onClick={() => handleSelectPlan('professional')}
+  1420→                >
+  1421→                  Get Started <ArrowRight className="w-4 h-4 ml-1.5" />
+  1422→                </Button>
+  1423→                <Button
+  1424→                  size="lg"
+  1425→                  variant="outline"
+  1426→                  className="border-border text-foreground hover:bg-secondary/50 rounded-xl px-8 h-12 transition-all duration-200"
+  1427→                  onClick={() => navigate('contact')}
+  1428→                >
+  1429→                  Contact Sales
+  1430→                </Button>
+  1431→              </div>
+  1432→            </div>
+  1433→          </motion.div>
+  1434→        </div>
+  1435→      </section>
+  1436→
+  1437→      {/* ── Checkout Modal ── */}
+  1438→      <CheckoutModal
+  1439→        open={checkoutOpen}
+  1440→        onOpenChange={setCheckoutOpen}
+  1441→        preselectedPlan={selectedPlan}
+  1442→      />
+  1443→    </PageLayout>
+  1444→  )
+  1445→}
+  1446→
