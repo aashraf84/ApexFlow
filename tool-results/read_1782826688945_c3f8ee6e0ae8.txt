@@ -1,0 +1,886 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useCallback } from 'react'
+     4→import {
+     5→  Card,
+     6→  CardContent,
+     7→  CardHeader,
+     8→  CardTitle,
+     9→  CardDescription,
+    10→} from '@/components/ui/card'
+    11→import {
+    12→  Tabs,
+    13→  TabsContent,
+    14→  TabsList,
+    15→  TabsTrigger,
+    16→} from '@/components/ui/tabs'
+    17→import {
+    18→  Table,
+    19→  TableBody,
+    20→  TableCell,
+    21→  TableHead,
+    22→  TableHeader,
+    23→  TableRow,
+    24→} from '@/components/ui/table'
+    25→import {
+    26→  Dialog,
+    27→  DialogContent,
+    28→  DialogDescription,
+    29→  DialogFooter,
+    30→  DialogHeader,
+    31→  DialogTitle,
+    32→} from '@/components/ui/dialog'
+    33→import {
+    34→  Select,
+    35→  SelectContent,
+    36→  SelectItem,
+    37→  SelectTrigger,
+    38→  SelectValue,
+    39→} from '@/components/ui/select'
+    40→import { Button } from '@/components/ui/button'
+    41→import { Input } from '@/components/ui/input'
+    42→import { Label } from '@/components/ui/label'
+    43→import { Badge } from '@/components/ui/badge'
+    44→import { Separator } from '@/components/ui/separator'
+    45→import { toast } from 'sonner'
+    46→import {
+    47→  Settings,
+    48→  Shield,
+    49→  FileText,
+    50→  User,
+    51→  Plus,
+    52→  Pencil,
+    53→  Loader2,
+    54→  Search,
+    55→  ChevronLeft,
+    56→  ChevronRight,
+    57→  Key,
+    58→  Mail,
+    59→  CreditCard,
+    60→  Palette,
+    61→  AlertCircle,
+    62→} from 'lucide-react'
+    63→
+    64→// ─── Types ─────────────────────────────────────────────────────────────────
+    65→interface SiteSetting {
+    66→  id: string
+    67→  key: string
+    68→  value: string
+    69→  group: string
+    70→}
+    71→
+    72→interface AuditLog {
+    73→  id: string
+    74→  userId: string | null
+    75→  action: string
+    76→  module: string
+    77→  details: string | null
+    78→  ipAddress: string | null
+    79→  createdAt: string
+    80→  user: { id: string; name: string; email: string } | null
+    81→}
+    82→
+    83→interface SessionUser {
+    84→  id: string
+    85→  name: string
+    86→  email: string
+    87→  role: string
+    88→  avatar?: string | null
+    89→}
+    90→
+    91→// ─── Constants ─────────────────────────────────────────────────────────────
+    92→const SETTING_GROUPS = [
+    93→  { value: 'general', label: 'General', icon: Settings, color: { style: { color: 'var(--gg-vermillion)' } as React.CSSProperties } },
+    94→  { value: 'security', label: 'Security', icon: Shield, color: { className: 'text-red-400' } },
+    95→  { value: 'email', label: 'Email', icon: Mail, color: { className: 'text-blue-400' } },
+    96→  { value: 'payment', label: 'Payment', icon: CreditCard, color: { className: 'text-amber-400' } },
+    97→  { value: 'appearance', label: 'Appearance', icon: Palette, color: { className: 'text-violet-400' } },
+    98→]
+    99→
+   100→const MODULE_OPTIONS = [
+   101→  'auth',
+   102→  'clients',
+   103→  'deals',
+   104→  'finance',
+   105→  'communications',
+   106→  'marketing',
+   107→  'reports',
+   108→  'system',
+   109→]
+   110→
+   111→const GROUP_ICONS: Record<string, React.ElementType> = {
+   112→  general: Settings,
+   113→  security: Shield,
+   114→  email: Mail,
+   115→  payment: CreditCard,
+   116→  appearance: Palette,
+   117→}
+   118→
+   119→const GROUP_COLORS: Record<string, { className?: string; style?: React.CSSProperties }> = {
+   120→  general: { style: { color: 'var(--gg-vermillion)' } },
+   121→  security: { className: 'text-red-400' },
+   122→  email: { className: 'text-blue-400' },
+   123→  payment: { className: 'text-amber-400' },
+   124→  appearance: { className: 'text-violet-400' },
+   125→}
+   126→
+   127→// ─── Main Page ─────────────────────────────────────────────────────────────
+   128→export default function AdminSystemPage() {
+   129→  const [activeTab, setActiveTab] = useState('settings')
+   130→
+   131→  return (
+   132→    <div className="space-y-6">
+   133→      {/* Page Header */}
+   134→      <div>
+   135→        <h2 className="text-2xl font-bold text-foreground">System Administration</h2>
+   136→        <p className="text-muted-foreground mt-1">
+   137→          Manage settings, audit logs, and your admin profile.
+   138→        </p>
+   139→      </div>
+   140→
+   141→      {/* Tabs */}
+   142→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   143→        <TabsList
+   144→          className="border"
+   145→          style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+   146→        >
+   147→          <TabsTrigger
+   148→            value="settings"
+   149→            className="data-[state=active]:bg-[color-mix(in_srgb,var(--gg-vermillion)_20%,transparent)] data-[state=active]:text-[var(--gg-vermillion)]"
+   150→          >
+   151→            <Settings className="h-4 w-4 mr-1.5" />
+   152→            Settings
+   153→          </TabsTrigger>
+   154→          <TabsTrigger value="audit" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400">
+   155→            <FileText className="h-4 w-4 mr-1.5" />
+   156→            Audit Logs
+   157→          </TabsTrigger>
+   158→          <TabsTrigger value="profile" className="data-[state=active]:bg-violet-500/20 data-[state=active]:text-violet-400">
+   159→            <User className="h-4 w-4 mr-1.5" />
+   160→            Profile
+   161→          </TabsTrigger>
+   162→        </TabsList>
+   163→
+   164→        <TabsContent value="settings" className="mt-6">
+   165→          <SettingsTab />
+   166→        </TabsContent>
+   167→        <TabsContent value="audit" className="mt-6">
+   168→          <AuditLogsTab />
+   169→        </TabsContent>
+   170→        <TabsContent value="profile" className="mt-6">
+   171→          <ProfileTab />
+   172→        </TabsContent>
+   173→      </Tabs>
+   174→    </div>
+   175→  )
+   176→}
+   177→
+   178→// ═══════════════════════════════════════════════════════════════════════════
+   179→// SETTINGS TAB
+   180→// ═══════════════════════════════════════════════════════════════════════════
+   181→function SettingsTab() {
+   182→  const [settings, setSettings] = useState<SiteSetting[]>([])
+   183→  const [loading, setLoading] = useState(true)
+   184→  const [dialogOpen, setDialogOpen] = useState(false)
+   185→  const [editingSetting, setEditingSetting] = useState<SiteSetting | null>(null)
+   186→  const [formKey, setFormKey] = useState('')
+   187→  const [formValue, setFormValue] = useState('')
+   188→  const [formGroup, setFormGroup] = useState('general')
+   189→  const [saving, setSaving] = useState(false)
+   190→  const [searchQuery, setSearchQuery] = useState('')
+   191→  const [filterGroup, setFilterGroup] = useState('all')
+   192→
+   193→  const fetchSettings = useCallback(async () => {
+   194→    try {
+   195→      const res = await fetch('/api/system/settings')
+   196→      if (res.ok) {
+   197→        const data = await res.json()
+   198→        setSettings(data.settings || [])
+   199→      }
+   200→    } catch {
+   201→      toast.error('Failed to load settings')
+   202→    } finally {
+   203→      setLoading(false)
+   204→    }
+   205→  }, [])
+   206→
+   207→  useEffect(() => {
+   208→    fetchSettings()
+   209→  }, [fetchSettings])
+   210→
+   211→  const handleOpenCreate = () => {
+   212→    setEditingSetting(null)
+   213→    setFormKey('')
+   214→    setFormValue('')
+   215→    setFormGroup('general')
+   216→    setDialogOpen(true)
+   217→  }
+   218→
+   219→  const handleOpenEdit = (setting: SiteSetting) => {
+   220→    setEditingSetting(setting)
+   221→    setFormKey(setting.key)
+   222→    setFormValue(setting.value)
+   223→    setFormGroup(setting.group)
+   224→    setDialogOpen(true)
+   225→  }
+   226→
+   227→  const handleSave = async () => {
+   228→    if (!formKey.trim()) {
+   229→      toast.error('Setting key is required')
+   230→      return
+   231→    }
+   232→    if (formValue === undefined || formValue === '') {
+   233→      toast.error('Setting value is required')
+   234→      return
+   235→    }
+   236→
+   237→    setSaving(true)
+   238→    try {
+   239→      const res = await fetch('/api/system/settings', {
+   240→        method: 'POST',
+   241→        headers: { 'Content-Type': 'application/json' },
+   242→        body: JSON.stringify({
+   243→          key: formKey.trim(),
+   244→          value: formValue,
+   245→          group: formGroup,
+   246→        }),
+   247→      })
+   248→
+   249→      if (res.ok) {
+   250→        toast.success(editingSetting ? 'Setting updated' : 'Setting created')
+   251→        setDialogOpen(false)
+   252→        fetchSettings()
+   253→      } else {
+   254→        const data = await res.json()
+   255→        toast.error(data.error || 'Failed to save setting')
+   256→      }
+   257→    } catch {
+   258→      toast.error('Failed to save setting')
+   259→    } finally {
+   260→      setSaving(false)
+   261→    }
+   262→  }
+   263→
+   264→  // Group settings
+   265→  const grouped: Record<string, SiteSetting[]> = {}
+   266→  for (const s of settings) {
+   267→    if (!grouped[s.group]) grouped[s.group] = []
+   268→    grouped[s.group].push(s)
+   269→  }
+   270→
+   271→  // Filter
+   272→  const filteredGroups = filterGroup === 'all'
+   273→    ? Object.keys(grouped).sort()
+   274→    : [filterGroup]
+   275→
+   276→  // Search filter
+   277→  const filteredSettings = (group: string) => {
+   278→    if (!searchQuery) return grouped[group] || []
+   279→    return (grouped[group] || []).filter(
+   280→      (s) =>
+   281→        s.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
+   282→        s.value.toLowerCase().includes(searchQuery.toLowerCase())
+   283→    )
+   284→  }
+   285→
+   286→  if (loading) {
+   287→    return (
+   288→      <div className="flex items-center justify-center py-20">
+   289→        <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--gg-vermillion)' }} />
+   290→        <span className="ml-3 text-muted-foreground">Loading settings...</span>
+   291→      </div>
+   292→    )
+   293→  }
+   294→
+   295→  return (
+   296→    <div className="space-y-6">
+   297→      {/* Toolbar */}
+   298→      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+   299→        <div className="relative flex-1 w-full sm:max-w-xs">
+   300→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+   301→          <Input
+   302→            placeholder="Search settings..."
+   303→            value={searchQuery}
+   304→            onChange={(e) => setSearchQuery(e.target.value)}
+   305→            className="pl-9 border-white/10 text-foreground placeholder:text-gray-500"
+   306→            style={{ background: 'var(--card)' }}
+   307→          />
+   308→        </div>
+   309→        <Select value={filterGroup} onValueChange={setFilterGroup}>
+   310→          <SelectTrigger className="w-full sm:w-[180px] border-white/10 text-foreground" style={{ background: 'var(--card)' }}>
+   311→            <SelectValue placeholder="Filter by group" />
+   312→          </SelectTrigger>
+   313→          <SelectContent>
+   314→            <SelectItem value="all">All Groups</SelectItem>
+   315→            {SETTING_GROUPS.map((g) => (
+   316→              <SelectItem key={g.value} value={g.value}>
+   317→                {g.label}
+   318→              </SelectItem>
+   319→            ))}
+   320→          </SelectContent>
+   321→        </Select>
+   322→        <Button
+   323→          onClick={handleOpenCreate}
+   324→          className="hover:opacity-90 text-foreground"
+   325→          style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+   326→        >
+   327→          <Plus className="h-4 w-4 mr-1.5" />
+   328→          Add Setting
+   329→        </Button>
+   330→      </div>
+   331→
+   332→      {/* Settings Groups */}
+   333→      {filteredGroups.map((group) => {
+   334→        const groupSettings = filteredSettings(group)
+   335→        if (groupSettings.length === 0 && searchQuery) return null
+   336→        const IconComp = GROUP_ICONS[group] || Settings
+   337→        const colorObj = GROUP_COLORS[group] || { className: 'text-muted-foreground' }
+   338→
+   339→        return (
+   340→          <Card
+   341→            key={group}
+   342→            style={{ borderColor: 'var(--gg-separator)', background: 'var(--card)', boxShadow: 'var(--gg-shadow-card)' }}
+   343→          >
+   344→            <CardHeader className="pb-3">
+   345→              <div className="flex items-center gap-2">
+   346→                <IconComp className={`h-5 w-5 ${colorObj.className || ''}`} style={colorObj.style} />
+   347→                <CardTitle className="text-foreground text-lg">
+   348→                  {SETTING_GROUPS.find((g) => g.value === group)?.label || formatLabel(group)}
+   349→                </CardTitle>
+   350→                <Badge variant="outline" className="text-xs border-white/10 text-muted-foreground">
+   351→                  {groupSettings.length}
+   352→                </Badge>
+   353→              </div>
+   354→            </CardHeader>
+   355→            <CardContent>
+   356→              {groupSettings.length > 0 ? (
+   357→                <Table>
+   358→                  <TableHeader>
+   359→                    <TableRow style={{ borderColor: 'var(--gg-separator)' }} className="hover:bg-transparent">
+   360→                      <TableHead className="text-muted-foreground">Key</TableHead>
+   361→                      <TableHead className="text-muted-foreground">Value</TableHead>
+   362→                      <TableHead className="text-muted-foreground text-right">Actions</TableHead>
+   363→                    </TableRow>
+   364→                  </TableHeader>
+   365→                  <TableBody>
+   366→                    {groupSettings.map((s) => (
+   367→                      <TableRow key={s.id} style={{ borderColor: 'var(--gg-separator)' }} className="hover:bg-white/[0.02]">
+   368→                        <TableCell className="text-foreground font-mono text-sm">
+   369→                          {s.key}
+   370→                        </TableCell>
+   371→                        <TableCell className="text-gray-300 max-w-[300px] truncate">
+   372→                          {s.value}
+   373→                        </TableCell>
+   374→                        <TableCell className="text-right">
+   375→                          <Button
+   376→                            variant="ghost"
+   377→                            size="sm"
+   378→                            onClick={() => handleOpenEdit(s)}
+   379→                            className="text-muted-foreground hover:text-foreground hover:bg-white/5"
+   380→                          >
+   381→                            <Pencil className="h-3.5 w-3.5" />
+   382→                          </Button>
+   383→                        </TableCell>
+   384→                      </TableRow>
+   385→                    ))}
+   386→                  </TableBody>
+   387→                </Table>
+   388→              ) : (
+   389→                <p className="text-gray-500 text-sm py-4 text-center">
+   390→                  No settings in this group
+   391→                </p>
+   392→              )}
+   393→            </CardContent>
+   394→          </Card>
+   395→        )
+   396→      })}
+   397→
+   398→      {/* Empty State */}
+   399→      {settings.length === 0 && (
+   400→        <Card style={{ borderColor: 'var(--gg-separator)', background: 'var(--card)', boxShadow: 'var(--gg-shadow-card)' }}>
+   401→          <CardContent className="flex flex-col items-center justify-center py-16">
+   402→            <Settings className="h-12 w-12 text-gray-600 mb-4" />
+   403→            <p className="text-muted-foreground text-lg font-medium">No Settings Configured</p>
+   404→            <p className="text-gray-500 text-sm mt-1 mb-4">
+   405→              Add your first setting to get started.
+   406→            </p>
+   407→            <Button
+   408→              onClick={handleOpenCreate}
+   409→              className="hover:opacity-90 text-foreground"
+   410→              style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+   411→            >
+   412→              <Plus className="h-4 w-4 mr-1.5" />
+   413→              Add Setting
+   414→            </Button>
+   415→          </CardContent>
+   416→        </Card>
+   417→      )}
+   418→
+   419→      {/* Create / Edit Dialog */}
+   420→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   421→        <DialogContent className="bg-gray-900 border-white/10">
+   422→          <DialogHeader>
+   423→            <DialogTitle className="text-foreground">
+   424→              {editingSetting ? 'Edit Setting' : 'Add Setting'}
+   425→            </DialogTitle>
+   426→            <DialogDescription className="text-muted-foreground">
+   427→              {editingSetting
+   428→                ? 'Update the setting value or group.'
+   429→                : 'Create a new site setting.'}
+   430→            </DialogDescription>
+   431→          </DialogHeader>
+   432→
+   433→          <div className="space-y-4 py-2">
+   434→            <div className="space-y-2">
+   435→              <Label className="text-gray-300">Key</Label>
+   436→              <Input
+   437→                value={formKey}
+   438→                onChange={(e) => setFormKey(e.target.value)}
+   439→                placeholder="e.g. site_name"
+   440→                disabled={!!editingSetting}
+   441→                className="bg-gray-800 border-white/10 text-foreground placeholder:text-gray-500 disabled:opacity-50"
+   442→              />
+   443→            </div>
+   444→            <div className="space-y-2">
+   445→              <Label className="text-gray-300">Value</Label>
+   446→              <Input
+   447→                value={formValue}
+   448→                onChange={(e) => setFormValue(e.target.value)}
+   449→                placeholder="Setting value"
+   450→                className="bg-gray-800 border-white/10 text-foreground placeholder:text-gray-500"
+   451→              />
+   452→            </div>
+   453→            <div className="space-y-2">
+   454→              <Label className="text-gray-300">Group</Label>
+   455→              <Select value={formGroup} onValueChange={setFormGroup}>
+   456→                <SelectTrigger className="bg-gray-800 border-white/10 text-foreground">
+   457→                  <SelectValue />
+   458→                </SelectTrigger>
+   459→                <SelectContent>
+   460→                  {SETTING_GROUPS.map((g) => (
+   461→                    <SelectItem key={g.value} value={g.value}>
+   462→                      {g.label}
+   463→                    </SelectItem>
+   464→                  ))}
+   465→                </SelectContent>
+   466→              </Select>
+   467→            </div>
+   468→          </div>
+   469→
+   470→          <DialogFooter>
+   471→            <Button
+   472→              variant="outline"
+   473→              onClick={() => setDialogOpen(false)}
+   474→              className="border-white/10 text-gray-300 hover:bg-white/5"
+   475→            >
+   476→              Cancel
+   477→            </Button>
+   478→            <Button
+   479→              onClick={handleSave}
+   480→              disabled={saving}
+   481→              className="hover:opacity-90 text-foreground"
+   482→              style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+   483→            >
+   484→              {saving && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
+   485→              {editingSetting ? 'Update' : 'Create'}
+   486→            </Button>
+   487→          </DialogFooter>
+   488→        </DialogContent>
+   489→      </Dialog>
+   490→    </div>
+   491→  )
+   492→}
+   493→
+   494→// ═══════════════════════════════════════════════════════════════════════════
+   495→// AUDIT LOGS TAB
+   496→// ═══════════════════════════════════════════════════════════════════════════
+   497→function AuditLogsTab() {
+   498→  const [logs, setLogs] = useState<AuditLog[]>([])
+   499→  const [loading, setLoading] = useState(true)
+   500→  const [page, setPage] = useState(1)
+   501→  const [totalPages, setTotalPages] = useState(1)
+   502→  const [total, setTotal] = useState(0)
+   503→  const [moduleFilter, setModuleFilter] = useState('')
+   504→
+   505→  const fetchLogs = useCallback(async (p: number, mod: string) => {
+   506→    setLoading(true)
+   507→    try {
+   508→      const params = new URLSearchParams({ page: String(p), limit: '20' })
+   509→      if (mod) params.set('module', mod)
+   510→
+   511→      const res = await fetch(`/api/system/audit-logs?${params}`)
+   512→      if (res.ok) {
+   513→        const data = await res.json()
+   514→        setLogs(data.logs || [])
+   515→        setTotalPages(data.pagination?.totalPages || 1)
+   516→        setTotal(data.pagination?.total || 0)
+   517→      }
+   518→    } catch {
+   519→      toast.error('Failed to load audit logs')
+   520→    } finally {
+   521→      setLoading(false)
+   522→    }
+   523→  }, [])
+   524→
+   525→  useEffect(() => {
+   526→    fetchLogs(page, moduleFilter)
+   527→  }, [page, moduleFilter, fetchLogs])
+   528→
+   529→  const handleModuleChange = (val: string) => {
+   530→    setModuleFilter(val === 'all' ? '' : val)
+   531→    setPage(1)
+   532→  }
+   533→
+   534→  const formatDate = (dateStr: string) => {
+   535→    return new Date(dateStr).toLocaleString('en-US', {
+   536→      month: 'short',
+   537→      day: 'numeric',
+   538→      year: 'numeric',
+   539→      hour: '2-digit',
+   540→      minute: '2-digit',
+   541→    })
+   542→  }
+   543→
+   544→  return (
+   545→    <div className="space-y-6">
+   546→      {/* Filters */}
+   547→      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+   548→        <Select
+   549→          value={moduleFilter || 'all'}
+   550→          onValueChange={handleModuleChange}
+   551→        >
+   552→          <SelectTrigger className="w-full sm:w-[200px] border-white/10 text-foreground" style={{ background: 'var(--card)' }}>
+   553→            <SelectValue placeholder="Filter by module" />
+   554→          </SelectTrigger>
+   555→          <SelectContent>
+   556→            <SelectItem value="all">All Modules</SelectItem>
+   557→            {MODULE_OPTIONS.map((m) => (
+   558→              <SelectItem key={m} value={m}>
+   559→                {formatLabel(m)}
+   560→              </SelectItem>
+   561→            ))}
+   562→          </SelectContent>
+   563→        </Select>
+   564→        <span className="text-sm text-gray-500">
+   565→          {total} log{total !== 1 ? 's' : ''} total
+   566→        </span>
+   567→      </div>
+   568→
+   569→      {/* Logs Table */}
+   570→      <Card style={{ borderColor: 'var(--gg-separator)', background: 'var(--card)', boxShadow: 'var(--gg-shadow-card)' }}>
+   571→        <CardContent className="p-0">
+   572→          {loading && logs.length === 0 ? (
+   573→            <div className="flex items-center justify-center py-20">
+   574→              <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+   575→              <span className="ml-3 text-muted-foreground">Loading audit logs...</span>
+   576→            </div>
+   577→          ) : logs.length > 0 ? (
+   578→            <div className="overflow-x-auto">
+   579→              <Table>
+   580→                <TableHeader>
+   581→                  <TableRow style={{ borderColor: 'var(--gg-separator)' }} className="hover:bg-transparent">
+   582→                    <TableHead className="text-muted-foreground">User</TableHead>
+   583→                    <TableHead className="text-muted-foreground">Action</TableHead>
+   584→                    <TableHead className="text-muted-foreground">Module</TableHead>
+   585→                    <TableHead className="text-muted-foreground hidden md:table-cell">Details</TableHead>
+   586→                    <TableHead className="text-muted-foreground hidden lg:table-cell">IP Address</TableHead>
+   587→                    <TableHead className="text-muted-foreground">Timestamp</TableHead>
+   588→                  </TableRow>
+   589→                </TableHeader>
+   590→                <TableBody>
+   591→                  {logs.map((log) => (
+   592→                    <TableRow key={log.id} style={{ borderColor: 'var(--gg-separator)' }} className="hover:bg-white/[0.02]">
+   593→                      <TableCell className="text-foreground text-sm">
+   594→                        {log.user ? log.user.name : (
+   595→                          <span className="text-gray-500">System</span>
+   596→                        )}
+   597→                      </TableCell>
+   598→                      <TableCell>
+   599→                        <Badge
+   600→                          variant="outline"
+   601→                          className="text-xs border-white/10"
+   602→                          style={{ color: 'var(--gg-vermillion)' }}
+   603→                        >
+   604→                          {log.action}
+   605→                        </Badge>
+   606→                      </TableCell>
+   607→                      <TableCell>
+   608→                        <Badge variant="outline" className="text-xs border-white/10 text-gray-300">
+   609→                          {formatLabel(log.module)}
+   610→                        </Badge>
+   611→                      </TableCell>
+   612→                      <TableCell className="text-muted-foreground text-sm max-w-[250px] truncate hidden md:table-cell">
+   613→                        {log.details || '—'}
+   614→                      </TableCell>
+   615→                      <TableCell className="text-gray-500 text-sm font-mono hidden lg:table-cell">
+   616→                        {log.ipAddress || '—'}
+   617→                      </TableCell>
+   618→                      <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+   619→                        {formatDate(log.createdAt)}
+   620→                      </TableCell>
+   621→                    </TableRow>
+   622→                  ))}
+   623→                </TableBody>
+   624→              </Table>
+   625→            </div>
+   626→          ) : (
+   627→            <div className="flex flex-col items-center justify-center py-16">
+   628→              <FileText className="h-12 w-12 text-gray-600 mb-4" />
+   629→              <p className="text-muted-foreground text-lg font-medium">No Audit Logs</p>
+   630→              <p className="text-gray-500 text-sm mt-1">
+   631→                Audit logs will appear here as admin actions are recorded.
+   632→              </p>
+   633→            </div>
+   634→          )}
+   635→        </CardContent>
+   636→      </Card>
+   637→
+   638→      {/* Pagination */}
+   639→      {totalPages > 1 && (
+   640→        <div className="flex items-center justify-center gap-2">
+   641→          <Button
+   642→            variant="outline"
+   643→            size="sm"
+   644→            disabled={page === 1 || loading}
+   645→            onClick={() => setPage((p) => Math.max(1, p - 1))}
+   646→            className="border-white/10 text-gray-300 hover:bg-white/5"
+   647→          >
+   648→            <ChevronLeft className="h-4 w-4 mr-1" />
+   649→            Previous
+   650→          </Button>
+   651→          <span className="text-sm text-muted-foreground px-3">
+   652→            Page {page} of {totalPages}
+   653→          </span>
+   654→          <Button
+   655→            variant="outline"
+   656→            size="sm"
+   657→            disabled={page >= totalPages || loading}
+   658→            onClick={() => setPage((p) => p + 1)}
+   659→            className="border-white/10 text-gray-300 hover:bg-white/5"
+   660→          >
+   661→            Next
+   662→            <ChevronRight className="h-4 w-4 ml-1" />
+   663→          </Button>
+   664→        </div>
+   665→      )}
+   666→    </div>
+   667→  )
+   668→}
+   669→
+   670→// ═══════════════════════════════════════════════════════════════════════════
+   671→// PROFILE TAB
+   672→// ═══════════════════════════════════════════════════════════════════════════
+   673→function ProfileTab() {
+   674→  const [user, setUser] = useState<SessionUser | null>(null)
+   675→  const [loading, setLoading] = useState(true)
+   676→  const [currentPassword, setCurrentPassword] = useState('')
+   677→  const [newPassword, setNewPassword] = useState('')
+   678→  const [confirmPassword, setConfirmPassword] = useState('')
+   679→  const [changingPassword, setChangingPassword] = useState(false)
+   680→
+   681→  useEffect(() => {
+   682→    async function fetchSession() {
+   683→      try {
+   684→        const res = await fetch('/api/auth/session')
+   685→        if (res.ok) {
+   686→          const data = await res.json()
+   687→          if (data.authenticated && data.user) {
+   688→            setUser(data.user)
+   689→          }
+   690→        }
+   691→      } catch {
+   692→        // Ignore
+   693→      } finally {
+   694→        setLoading(false)
+   695→      }
+   696→    }
+   697→    fetchSession()
+   698→  }, [])
+   699→
+   700→  const handleChangePassword = async () => {
+   701→    if (!currentPassword) {
+   702→      toast.error('Current password is required')
+   703→      return
+   704→    }
+   705→    if (!newPassword) {
+   706→      toast.error('New password is required')
+   707→      return
+   708→    }
+   709→    if (newPassword.length < 6) {
+   710→      toast.error('New password must be at least 6 characters')
+   711→      return
+   712→    }
+   713→    if (newPassword !== confirmPassword) {
+   714→      toast.error('New passwords do not match')
+   715→      return
+   716→    }
+   717→
+   718→    setChangingPassword(true)
+   719→    try {
+   720→      const res = await fetch('/api/auth/change-password', {
+   721→        method: 'POST',
+   722→        headers: { 'Content-Type': 'application/json' },
+   723→        body: JSON.stringify({
+   724→          currentPassword,
+   725→          newPassword,
+   726→        }),
+   727→      })
+   728→
+   729→      const data = await res.json()
+   730→
+   731→      if (res.ok) {
+   732→        toast.success('Password changed successfully')
+   733→        setCurrentPassword('')
+   734→        setNewPassword('')
+   735→        setConfirmPassword('')
+   736→      } else {
+   737→        toast.error(data.error || 'Failed to change password')
+   738→      }
+   739→    } catch {
+   740→      toast.error('Failed to change password')
+   741→    } finally {
+   742→      setChangingPassword(false)
+   743→    }
+   744→  }
+   745→
+   746→  if (loading) {
+   747→    return (
+   748→      <div className="flex items-center justify-center py-20">
+   749→        <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
+   750→        <span className="ml-3 text-muted-foreground">Loading profile...</span>
+   751→      </div>
+   752→    )
+   753→  }
+   754→
+   755→  return (
+   756→    <div className="space-y-6 max-w-2xl">
+   757→      {/* Profile Info */}
+   758→      <Card style={{ borderColor: 'var(--gg-separator)', background: 'var(--card)', boxShadow: 'var(--gg-shadow-card)' }}>
+   759→        <CardHeader>
+   760→          <CardTitle className="text-foreground">Admin Profile</CardTitle>
+   761→          <CardDescription className="text-muted-foreground">
+   762→            Your account information
+   763→          </CardDescription>
+   764→        </CardHeader>
+   765→        <CardContent className="space-y-4">
+   766→          {user ? (
+   767→            <>
+   768→              <div className="flex items-center gap-4">
+   769→                <div
+   770→                  className="flex h-14 w-14 items-center justify-center rounded-full text-xl font-bold"
+   771→                  style={{
+   772→                    background: 'color-mix(in srgb, var(--gg-vermillion) 20%, transparent)',
+   773→                    color: 'var(--gg-vermillion)',
+   774→                  }}
+   775→                >
+   776→                  {user.name.charAt(0).toUpperCase()}
+   777→                </div>
+   778→                <div>
+   779→                  <p className="text-foreground text-lg font-semibold">{user.name}</p>
+   780→                  <p className="text-muted-foreground text-sm">{user.email}</p>
+   781→                </div>
+   782→              </div>
+   783→              <Separator style={{ background: 'var(--gg-separator)' }} />
+   784→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   785→                <div>
+   786→                  <p className="text-sm text-gray-500">Role</p>
+   787→                  <Badge
+   788→                    className="mt-1 border-0"
+   789→                    style={{
+   790→                      background: 'color-mix(in srgb, var(--gg-vermillion) 20%, transparent)',
+   791→                      color: 'var(--gg-vermillion)',
+   792→                    }}
+   793→                  >
+   794→                    {formatLabel(user.role)}
+   795→                  </Badge>
+   796→                </div>
+   797→                <div>
+   798→                  <p className="text-sm text-gray-500">Status</p>
+   799→                  <Badge className="mt-1 bg-green-500/20 text-green-400 border-0">
+   800→                    Active
+   801→                  </Badge>
+   802→                </div>
+   803→              </div>
+   804→            </>
+   805→          ) : (
+   806→            <div className="flex items-center gap-3 text-amber-400">
+   807→              <AlertCircle className="h-5 w-5" />
+   808→              <p className="text-sm">Could not load profile information.</p>
+   809→            </div>
+   810→          )}
+   811→        </CardContent>
+   812→      </Card>
+   813→
+   814→      {/* Change Password */}
+   815→      <Card style={{ borderColor: 'var(--gg-separator)', background: 'var(--card)', boxShadow: 'var(--gg-shadow-card)' }}>
+   816→        <CardHeader>
+   817→          <CardTitle className="text-foreground flex items-center gap-2">
+   818→            <Key className="h-5 w-5 text-amber-400" />
+   819→            Change Password
+   820→          </CardTitle>
+   821→          <CardDescription className="text-muted-foreground">
+   822→            Update your admin account password
+   823→          </CardDescription>
+   824→        </CardHeader>
+   825→        <CardContent className="space-y-4">
+   826→          <div className="space-y-2">
+   827→            <Label className="text-gray-300">Current Password</Label>
+   828→            <Input
+   829→              type="password"
+   830→              value={currentPassword}
+   831→              onChange={(e) => setCurrentPassword(e.target.value)}
+   832→              placeholder="Enter current password"
+   833→              className="bg-gray-800 border-white/10 text-foreground placeholder:text-gray-500"
+   834→            />
+   835→          </div>
+   836→          <div className="space-y-2">
+   837→            <Label className="text-gray-300">New Password</Label>
+   838→            <Input
+   839→              type="password"
+   840→              value={newPassword}
+   841→              onChange={(e) => setNewPassword(e.target.value)}
+   842→              placeholder="Enter new password (min 6 chars)"
+   843→              className="bg-gray-800 border-white/10 text-foreground placeholder:text-gray-500"
+   844→            />
+   845→          </div>
+   846→          <div className="space-y-2">
+   847→            <Label className="text-gray-300">Confirm New Password</Label>
+   848→            <Input
+   849→              type="password"
+   850→              value={confirmPassword}
+   851→              onChange={(e) => setConfirmPassword(e.target.value)}
+   852→              placeholder="Confirm new password"
+   853→              className="bg-gray-800 border-white/10 text-foreground placeholder:text-gray-500"
+   854→            />
+   855→          </div>
+   856→          <Button
+   857→            onClick={handleChangePassword}
+   858→            disabled={changingPassword}
+   859→            className="bg-amber-600 hover:bg-amber-700 text-foreground"
+   860→          >
+   861→            {changingPassword ? (
+   862→              <>
+   863→                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+   864→                Changing...
+   865→              </>
+   866→            ) : (
+   867→              <>
+   868→                <Key className="h-4 w-4 mr-1.5" />
+   869→                Change Password
+   870→              </>
+   871→            )}
+   872→          </Button>
+   873→        </CardContent>
+   874→      </Card>
+   875→    </div>
+   876→  )
+   877→}
+   878→
+   879→// ─── Helpers ───────────────────────────────────────────────────────────────
+   880→function formatLabel(str: string): string {
+   881→  return str
+   882→    .split(/[_\s]+/)
+   883→    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+   884→    .join(' ')
+   885→}
+   886→

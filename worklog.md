@@ -74,3 +74,28 @@ Stage Summary:
 - Production will use Neon PostgreSQL again (Vercel sets DATABASE_URL env var)
 - Login should now work: full page reload guarantees cookie availability
 - Local dev can use SQLite by setting USE_LOCAL_SQLITE=true in .env
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix sidebar scrolling, check admin panel, check ERP integrations
+
+Work Log:
+- Fixed admin sidebar: added lg:h-full lg:overflow-hidden to <aside> in admin-shell.tsx
+- Sidebar now stays fixed while page content scrolls independently
+- Added "ERP Systems" nav item with Boxes icon to sidebar navigation
+- Added ERP route to header PAGE_META for breadcrumb display
+- Checked all admin pages: dashboard, clients (72KB), deals (1035 lines), finance (1797 lines), communications (1328 lines), marketing (1303 lines), reports (1031 lines), system (36KB) — all are fully-built components
+- Checked ERP integrations: 21 ERP systems, each with own Neon database
+- ERP list page works with 18 hardcoded fallback ERPs
+- ERP detail page has 7 tabs: Overview, Modules, Connections, Serial Keys, Clients, Database, Sync Log
+- ERP connector module (3700+ lines) uses @neondatabase/serverless for cross-database queries
+- Connection testing, stats endpoints, module management all in place
+- Dashboard stats API queries main DB (clients, deals, payments, invoices, tickets, subscriptions)
+- Pushed commit 71fcba0
+
+Stage Summary:
+- Sidebar is now static/fixed — does not scroll with page content
+- ERP Systems added to admin navigation
+- All admin pages are fully functional client components
+- ERP integration architecture is solid with proper fallbacks

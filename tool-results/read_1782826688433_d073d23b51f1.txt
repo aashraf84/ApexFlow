@@ -1,0 +1,1608 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useCallback } from 'react'
+     4→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     5→import { Button } from '@/components/ui/button'
+     6→import { Input } from '@/components/ui/input'
+     7→import { Label } from '@/components/ui/label'
+     8→import { Textarea } from '@/components/ui/textarea'
+     9→import { Badge } from '@/components/ui/badge'
+    10→import {
+    11→  Dialog,
+    12→  DialogContent,
+    13→  DialogHeader,
+    14→  DialogTitle,
+    15→} from '@/components/ui/dialog'
+    16→import {
+    17→  AlertDialog,
+    18→  AlertDialogAction,
+    19→  AlertDialogCancel,
+    20→  AlertDialogContent,
+    21→  AlertDialogDescription,
+    22→  AlertDialogFooter,
+    23→  AlertDialogHeader,
+    24→  AlertDialogTitle,
+    25→} from '@/components/ui/alert-dialog'
+    26→import {
+    27→  Select,
+    28→  SelectContent,
+    29→  SelectItem,
+    30→  SelectTrigger,
+    31→  SelectValue,
+    32→} from '@/components/ui/select'
+    33→import {
+    34→  Table,
+    35→  TableBody,
+    36→  TableCell,
+    37→  TableHead,
+    38→  TableHeader,
+    39→  TableRow,
+    40→} from '@/components/ui/table'
+    41→import {
+    42→  Tabs,
+    43→  TabsContent,
+    44→  TabsList,
+    45→  TabsTrigger,
+    46→} from '@/components/ui/tabs'
+    47→import { ScrollArea } from '@/components/ui/scroll-area'
+    48→import { Skeleton } from '@/components/ui/skeleton'
+    49→import { toast } from 'sonner'
+    50→import {
+    51→  Users,
+    52→  Plus,
+    53→  Search,
+    54→  ArrowLeft,
+    55→  Edit2,
+    56→  Trash2,
+    57→  Mail,
+    58→  Phone,
+    59→  Globe,
+    60→  MapPin,
+    61→  Building2,
+    62→  Star,
+    63→  UserPlus,
+    64→  PhoneCall,
+    65→  Calendar,
+    66→  FileText,
+    67→  TrendingUp,
+    68→  MessageSquare,
+    69→  Clock,
+    70→  CheckCircle2,
+    71→  XCircle,
+    72→  AlertCircle,
+    73→  ChevronRight,
+    74→  User,
+    75→} from 'lucide-react'
+    76→
+    77→// ============================================
+    78→// Types
+    79→// ============================================
+    80→interface ClientContact {
+    81→  id: string
+    82→  clientId: string
+    83→  name: string
+    84→  email: string | null
+    85→  phone: string | null
+    86→  role: string | null
+    87→  isPrimary: boolean
+    88→  notes: string | null
+    89→  createdAt: string
+    90→  updatedAt: string
+    91→}
+    92→
+    93→interface ClientActivity {
+    94→  id: string
+    95→  clientId: string
+    96→  type: string
+    97→  subject: string
+    98→  notes: string | null
+    99→  createdAt: string
+   100→}
+   101→
+   102→interface Deal {
+   103→  id: string
+   104→  title: string
+   105→  clientId: string | null
+   106→  value: number
+   107→  stage: string
+   108→  probability: number
+   109→  source: string | null
+   110→  expectedCloseDate: string | null
+   111→  notes: string | null
+   112→  createdAt: string
+   113→  updatedAt: string
+   114→}
+   115→
+   116→interface ClientData {
+   117→  id: string
+   118→  name: string
+   119→  email: string | null
+   120→  phone: string | null
+   121→  company: string | null
+   122→  address: string | null
+   123→  city: string | null
+   124→  state: string | null
+   125→  country: string | null
+   126→  zipCode: string | null
+   127→  website: string | null
+   128→  industry: string | null
+   129→  status: string
+   130→  notes: string | null
+   131→  avatar: string | null
+   132→  createdAt: string
+   133→  updatedAt: string
+   134→  contacts?: ClientContact[]
+   135→  activities?: ClientActivity[]
+   136→  deals?: Deal[]
+   137→  _count?: {
+   138→    deals: number
+   139→    invoices: number
+   140→    payments: number
+   141→    subscriptions: number
+   142→  }
+   143→}
+   144→
+   145→// ============================================
+   146→// Status badge helper
+   147→// ============================================
+   148→function StatusBadge({ status }: { status: string }) {
+   149→  const config: Record<string, { label: string; className: string; style?: React.CSSProperties }> = {
+   150→    active: {
+   151→      label: 'Active',
+   152→      className: '',
+   153→      style: {
+   154→        background: 'color-mix(in srgb, var(--gg-vermillion) 15%, transparent)',
+   155→        color: 'var(--gg-vermillion)',
+   156→        borderColor: 'color-mix(in srgb, var(--gg-vermillion) 20%, transparent)',
+   157→      },
+   158→    },
+   159→    inactive: { label: 'Inactive', className: 'bg-red-500/15 text-red-400 border-red-500/20' },
+   160→    prospect: { label: 'Prospect', className: 'bg-amber-500/15 text-amber-400 border-amber-500/20' },
+   161→    churned: { label: 'Churned', className: 'bg-gray-500/15 text-gray-400 border-gray-500/20' },
+   162→  }
+   163→  const c = config[status] || config.prospect
+   164→  return (
+   165→    <Badge variant="outline" className={`text-xs ${c.className}`} style={c.style}>
+   166→      {c.label}
+   167→    </Badge>
+   168→  )
+   169→}
+   170→
+   171→// ============================================
+   172→// Activity icon helper
+   173→// ============================================
+   174→function ActivityIcon({ type }: { type: string }) {
+   175→  const icons: Record<string, React.ReactNode> = {
+   176→    call: <PhoneCall className="h-4 w-4 text-blue-400" />,
+   177→    email: <Mail className="h-4 w-4" style={{ color: 'var(--gg-vermillion)' }} />,
+   178→    meeting: <Calendar className="h-4 w-4 text-purple-400" />,
+   179→    note: <FileText className="h-4 w-4 text-amber-400" />,
+   180→    deal_update: <TrendingUp className="h-4 w-4 text-cyan-400" />,
+   181→  }
+   182→  return <>{icons[type] || <MessageSquare className="h-4 w-4 text-gray-400" />}</>
+   183→}
+   184→
+   185→// ============================================
+   186→// Deal stage badge
+   187→// ============================================
+   188→function DealStageBadge({ stage }: { stage: string }) {
+   189→  const config: Record<string, { label: string; className: string; style?: React.CSSProperties }> = {
+   190→    lead: { label: 'Lead', className: 'bg-gray-500/15 text-gray-300 border-gray-500/20' },
+   191→    qualified: { label: 'Qualified', className: 'bg-blue-500/15 text-blue-400 border-blue-500/20' },
+   192→    proposal: { label: 'Proposal', className: 'bg-purple-500/15 text-purple-400 border-purple-500/20' },
+   193→    negotiation: { label: 'Negotiation', className: 'bg-amber-500/15 text-amber-400 border-amber-500/20' },
+   194→    closed_won: {
+   195→      label: 'Won',
+   196→      className: '',
+   197→      style: {
+   198→        background: 'color-mix(in srgb, var(--gg-vermillion) 15%, transparent)',
+   199→        color: 'var(--gg-vermillion)',
+   200→        borderColor: 'color-mix(in srgb, var(--gg-vermillion) 20%, transparent)',
+   201→      },
+   202→    },
+   203→    closed_lost: { label: 'Lost', className: 'bg-red-500/15 text-red-400 border-red-500/20' },
+   204→  }
+   205→  const c = config[stage] || config.lead
+   206→  return (
+   207→    <Badge variant="outline" className={`text-xs ${c.className}`} style={c.style}>
+   208→      {c.label}
+   209→    </Badge>
+   210→  )
+   211→}
+   212→
+   213→// ============================================
+   214→// Client form data
+   215→// ============================================
+   216→interface ClientFormData {
+   217→  name: string
+   218→  email: string
+   219→  phone: string
+   220→  company: string
+   221→  address: string
+   222→  city: string
+   223→  state: string
+   224→  country: string
+   225→  zipCode: string
+   226→  website: string
+   227→  industry: string
+   228→  status: string
+   229→  notes: string
+   230→}
+   231→
+   232→const emptyClientForm: ClientFormData = {
+   233→  name: '',
+   234→  email: '',
+   235→  phone: '',
+   236→  company: '',
+   237→  address: '',
+   238→  city: '',
+   239→  state: '',
+   240→  country: '',
+   241→  zipCode: '',
+   242→  website: '',
+   243→  industry: '',
+   244→  status: 'prospect',
+   245→  notes: '',
+   246→}
+   247→
+   248→// ============================================
+   249→// Main Component
+   250→// ============================================
+   251→export default function AdminClientsPage() {
+   252→  // State
+   253→  const [clients, setClients] = useState<ClientData[]>([])
+   254→  const [loading, setLoading] = useState(true)
+   255→  const [search, setSearch] = useState('')
+   256→  const [statusFilter, setStatusFilter] = useState('all')
+   257→
+   258→  // View state
+   259→  const [selectedClient, setSelectedClient] = useState<ClientData | null>(null)
+   260→  const [detailLoading, setDetailLoading] = useState(false)
+   261→
+   262→  // Dialog state
+   263→  const [clientDialogOpen, setClientDialogOpen] = useState(false)
+   264→  const [editingClient, setEditingClient] = useState<ClientData | null>(null)
+   265→  const [clientForm, setClientForm] = useState<ClientFormData>(emptyClientForm)
+   266→  const [submitting, setSubmitting] = useState(false)
+   267→
+   268→  // Delete dialog
+   269→  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+   270→  const [deletingClient, setDeletingClient] = useState<ClientData | null>(null)
+   271→
+   272→  // Contact dialog
+   273→  const [contactDialogOpen, setContactDialogOpen] = useState(false)
+   274→  const [contactForm, setContactForm] = useState({
+   275→    name: '',
+   276→    email: '',
+   277→    phone: '',
+   278→    role: '',
+   279→    isPrimary: false,
+   280→    notes: '',
+   281→  })
+   282→
+   283→  // Activity dialog
+   284→  const [activityDialogOpen, setActivityDialogOpen] = useState(false)
+   285→  const [activityForm, setActivityForm] = useState({
+   286→    type: 'note',
+   287→    subject: '',
+   288→    notes: '',
+   289→  })
+   290→
+   291→  // Contact delete
+   292→  const [deleteContactDialogOpen, setDeleteContactDialogOpen] = useState(false)
+   293→  const [deletingContactId, setDeletingContactId] = useState<string | null>(null)
+   294→
+   295→  // ============================================
+   296→  // Fetch clients
+   297→  // ============================================
+   298→  const fetchClients = useCallback(async () => {
+   299→    try {
+   300→      setLoading(true)
+   301→      const params = new URLSearchParams()
+   302→      if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter)
+   303→      if (search) params.set('search', search)
+   304→      params.set('pageSize', '100')
+   305→
+   306→      const res = await fetch(`/api/clients?${params.toString()}`)
+   307→      if (res.ok) {
+   308→        const json = await res.json()
+   309→        setClients(json.data || [])
+   310→      }
+   311→    } catch {
+   312→      toast.error('Failed to load clients')
+   313→    } finally {
+   314→      setLoading(false)
+   315→    }
+   316→  }, [search, statusFilter])
+   317→
+   318→  useEffect(() => {
+   319→    fetchClients()
+   320→  }, [fetchClients])
+   321→
+   322→  // ============================================
+   323→  // Fetch client detail
+   324→  // ============================================
+   325→  const fetchClientDetail = async (id: string) => {
+   326→    try {
+   327→      setDetailLoading(true)
+   328→      const res = await fetch(`/api/clients/${id}`)
+   329→      if (res.ok) {
+   330→        const json = await res.json()
+   331→        setSelectedClient(json.data)
+   332→      } else {
+   333→        toast.error('Failed to load client details')
+   334→      }
+   335→    } catch {
+   336→      toast.error('Failed to load client details')
+   337→    } finally {
+   338→      setDetailLoading(false)
+   339→    }
+   340→  }
+   341→
+   342→  // ============================================
+   343→  // Client CRUD
+   344→  // ============================================
+   345→  const openCreateDialog = () => {
+   346→    setEditingClient(null)
+   347→    setClientForm(emptyClientForm)
+   348→    setClientDialogOpen(true)
+   349→  }
+   350→
+   351→  const openEditDialog = (client: ClientData) => {
+   352→    setEditingClient(client)
+   353→    setClientForm({
+   354→      name: client.name,
+   355→      email: client.email || '',
+   356→      phone: client.phone || '',
+   357→      company: client.company || '',
+   358→      address: client.address || '',
+   359→      city: client.city || '',
+   360→      state: client.state || '',
+   361→      country: client.country || '',
+   362→      zipCode: client.zipCode || '',
+   363→      website: client.website || '',
+   364→      industry: client.industry || '',
+   365→      status: client.status,
+   366→      notes: client.notes || '',
+   367→    })
+   368→    setClientDialogOpen(true)
+   369→  }
+   370→
+   371→  const handleClientSubmit = async () => {
+   372→    if (!clientForm.name.trim()) {
+   373→      toast.error('Client name is required')
+   374→      return
+   375→    }
+   376→
+   377→    try {
+   378→      setSubmitting(true)
+   379→
+   380→      if (editingClient) {
+   381→        // Update
+   382→        const res = await fetch(`/api/clients/${editingClient.id}`, {
+   383→          method: 'PUT',
+   384→          headers: { 'Content-Type': 'application/json' },
+   385→          body: JSON.stringify(clientForm),
+   386→        })
+   387→        if (res.ok) {
+   388→          toast.success('Client updated successfully')
+   389→          setClientDialogOpen(false)
+   390→          fetchClients()
+   391→          if (selectedClient?.id === editingClient.id) {
+   392→            fetchClientDetail(editingClient.id)
+   393→          }
+   394→        } else {
+   395→          const json = await res.json()
+   396→          toast.error(json.error || 'Failed to update client')
+   397→        }
+   398→      } else {
+   399→        // Create
+   400→        const res = await fetch('/api/clients', {
+   401→          method: 'POST',
+   402→          headers: { 'Content-Type': 'application/json' },
+   403→          body: JSON.stringify(clientForm),
+   404→        })
+   405→        if (res.ok) {
+   406→          toast.success('Client created successfully')
+   407→          setClientDialogOpen(false)
+   408→          fetchClients()
+   409→        } else {
+   410→          const json = await res.json()
+   411→          toast.error(json.error || 'Failed to create client')
+   412→        }
+   413→      }
+   414→    } catch {
+   415→      toast.error('An error occurred')
+   416→    } finally {
+   417→      setSubmitting(false)
+   418→    }
+   419→  }
+   420→
+   421→  const handleDeleteClient = async () => {
+   422→    if (!deletingClient) return
+   423→    try {
+   424→      const res = await fetch(`/api/clients/${deletingClient.id}`, { method: 'DELETE' })
+   425→      if (res.ok) {
+   426→        toast.success('Client deleted successfully')
+   427→        setDeleteDialogOpen(false)
+   428→        setDeletingClient(null)
+   429→        if (selectedClient?.id === deletingClient.id) {
+   430→          setSelectedClient(null)
+   431→        }
+   432→        fetchClients()
+   433→      } else {
+   434→        toast.error('Failed to delete client')
+   435→      }
+   436→    } catch {
+   437→      toast.error('An error occurred')
+   438→    }
+   439→  }
+   440→
+   441→  // ============================================
+   442→  // Contact CRUD
+   443→  // ============================================
+   444→  const handleAddContact = async () => {
+   445→    if (!selectedClient || !contactForm.name.trim()) {
+   446→      toast.error('Contact name is required')
+   447→      return
+   448→    }
+   449→
+   450→    try {
+   451→      setSubmitting(true)
+   452→      const res = await fetch(`/api/clients/${selectedClient.id}/contacts`, {
+   453→        method: 'POST',
+   454→        headers: { 'Content-Type': 'application/json' },
+   455→        body: JSON.stringify(contactForm),
+   456→      })
+   457→      if (res.ok) {
+   458→        toast.success('Contact added successfully')
+   459→        setContactDialogOpen(false)
+   460→        setContactForm({ name: '', email: '', phone: '', role: '', isPrimary: false, notes: '' })
+   461→        fetchClientDetail(selectedClient.id)
+   462→      } else {
+   463→        toast.error('Failed to add contact')
+   464→      }
+   465→    } catch {
+   466→      toast.error('An error occurred')
+   467→    } finally {
+   468→      setSubmitting(false)
+   469→    }
+   470→  }
+   471→
+   472→  const handleDeleteContact = async () => {
+   473→    if (!selectedClient || !deletingContactId) return
+   474→    try {
+   475→      const res = await fetch(
+   476→        `/api/clients/${selectedClient.id}/contacts?contactId=${deletingContactId}`,
+   477→        { method: 'DELETE' }
+   478→      )
+   479→      if (res.ok) {
+   480→        toast.success('Contact deleted')
+   481→        setDeleteContactDialogOpen(false)
+   482→        setDeletingContactId(null)
+   483→        fetchClientDetail(selectedClient.id)
+   484→      } else {
+   485→        toast.error('Failed to delete contact')
+   486→      }
+   487→    } catch {
+   488→      toast.error('An error occurred')
+   489→    }
+   490→  }
+   491→
+   492→  // ============================================
+   493→  // Activity CRUD
+   494→  // ============================================
+   495→  const handleAddActivity = async () => {
+   496→    if (!selectedClient || !activityForm.subject.trim()) {
+   497→      toast.error('Subject is required')
+   498→      return
+   499→    }
+   500→
+   501→    try {
+   502→      setSubmitting(true)
+   503→      const res = await fetch(`/api/clients/${selectedClient.id}/activities`, {
+   504→        method: 'POST',
+   505→        headers: { 'Content-Type': 'application/json' },
+   506→        body: JSON.stringify(activityForm),
+   507→      })
+   508→      if (res.ok) {
+   509→        toast.success('Activity added successfully')
+   510→        setActivityDialogOpen(false)
+   511→        setActivityForm({ type: 'note', subject: '', notes: '' })
+   512→        fetchClientDetail(selectedClient.id)
+   513→      } else {
+   514→        toast.error('Failed to add activity')
+   515→      }
+   516→    } catch {
+   517→      toast.error('An error occurred')
+   518→    } finally {
+   519→      setSubmitting(false)
+   520→    }
+   521→  }
+   522→
+   523→  // ============================================
+   524→  // Format date
+   525→  // ============================================
+   526→  const formatDate = (dateStr: string) => {
+   527→    try {
+   528→      return new Date(dateStr).toLocaleDateString('en-US', {
+   529→        year: 'numeric',
+   530→        month: 'short',
+   531→        day: 'numeric',
+   532→      })
+   533→    } catch {
+   534→      return dateStr
+   535→    }
+   536→  }
+   537→
+   538→  const formatDateTime = (dateStr: string) => {
+   539→    try {
+   540→      return new Date(dateStr).toLocaleDateString('en-US', {
+   541→        year: 'numeric',
+   542→        month: 'short',
+   543→        day: 'numeric',
+   544→        hour: '2-digit',
+   545→        minute: '2-digit',
+   546→      })
+   547→    } catch {
+   548→      return dateStr
+   549→    }
+   550→  }
+   551→
+   552→  // ============================================
+   553→  // Render: Loading skeletons
+   554→  // ============================================
+   555→  const renderSkeletons = () => (
+   556→    <div className="space-y-3">
+   557→      {Array.from({ length: 5 }).map((_, i) => (
+   558→        <div key={i} className="flex items-center gap-4 p-4 rounded-lg bg-white/[0.02]">
+   559→          <Skeleton className="h-10 w-10 rounded-full bg-white/5" />
+   560→          <div className="flex-1 space-y-2">
+   561→            <Skeleton className="h-4 w-40 bg-white/5" />
+   562→            <Skeleton className="h-3 w-56 bg-white/5" />
+   563→          </div>
+   564→          <Skeleton className="h-6 w-20 bg-white/5" />
+   565→        </div>
+   566→      ))}
+   567→    </div>
+   568→  )
+   569→
+   570→  // ============================================
+   571→  // RENDER: Client List View
+   572→  // ============================================
+   573→  const renderClientList = () => (
+   574→    <div className="space-y-6">
+   575→      {/* Header */}
+   576→      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+   577→        <div>
+   578→          <h2 className="text-2xl font-bold text-foreground">Clients</h2>
+   579→          <p className="text-muted-foreground mt-1">Manage your client relationships and CRM</p>
+   580→        </div>
+   581→        <Button
+   582→          onClick={openCreateDialog}
+   583→          className="hover:opacity-90 text-white"
+   584→          style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+   585→        >
+   586→          <Plus className="h-4 w-4 mr-2" />
+   587→          Add Client
+   588→        </Button>
+   589→      </div>
+   590→
+   591→      {/* Search & Filter */}
+   592→      <div className="flex flex-col sm:flex-row gap-3">
+   593→        <div className="relative flex-1">
+   594→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+   595→          <Input
+   596→            placeholder="Search clients by name, email, company..."
+   597→            value={search}
+   598→            onChange={(e) => setSearch(e.target.value)}
+   599→            className="pl-10 text-foreground placeholder:text-gray-500"
+   600→            style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+   601→          />
+   602→        </div>
+   603→        <Select value={statusFilter} onValueChange={setStatusFilter}>
+   604→          <SelectTrigger
+   605→            className="w-full sm:w-44 text-foreground"
+   606→            style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+   607→          >
+   608→            <SelectValue placeholder="Filter status" />
+   609→          </SelectTrigger>
+   610→          <SelectContent>
+   611→            <SelectItem value="all">All Statuses</SelectItem>
+   612→            <SelectItem value="active">Active</SelectItem>
+   613→            <SelectItem value="inactive">Inactive</SelectItem>
+   614→            <SelectItem value="prospect">Prospect</SelectItem>
+   615→            <SelectItem value="churned">Churned</SelectItem>
+   616→          </SelectContent>
+   617→        </Select>
+   618→      </div>
+   619→
+   620→      {/* Client Table / Cards */}
+   621→      <Card
+   622→        style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
+   623→      >
+   624→        <CardContent className="p-0">
+   625→          {loading ? (
+   626→            <div className="p-4">{renderSkeletons()}</div>
+   627→          ) : clients.length === 0 ? (
+   628→            <div className="flex flex-col items-center justify-center py-16">
+   629→              <Users className="h-12 w-12 text-gray-600 mb-4" />
+   630→              <p className="text-muted-foreground text-lg font-medium">No clients found</p>
+   631→              <p className="text-gray-500 text-sm mt-1">
+   632→                {search || statusFilter !== 'all'
+   633→                  ? 'Try adjusting your filters'
+   634→                  : 'Get started by adding your first client'}
+   635→              </p>
+   636→              {!search && statusFilter === 'all' && (
+   637→                <Button
+   638→                  onClick={openCreateDialog}
+   639→                  className="mt-4 hover:opacity-90 text-white"
+   640→                  style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+   641→                >
+   642→                  <Plus className="h-4 w-4 mr-2" />
+   643→                  Add Client
+   644→                </Button>
+   645→              )}
+   646→            </div>
+   647→          ) : (
+   648→            <>
+   649→              {/* Desktop Table */}
+   650→              <div className="hidden md:block">
+   651→                <Table>
+   652→                  <TableHeader>
+   653→                    <TableRow
+   654→                      className="hover:bg-transparent"
+   655→                      style={{ borderColor: 'var(--gg-separator)' }}
+   656→                    >
+   657→                      <TableHead className="text-muted-foreground font-medium">Name</TableHead>
+   658→                      <TableHead className="text-muted-foreground font-medium">Email</TableHead>
+   659→                      <TableHead className="text-muted-foreground font-medium">Company</TableHead>
+   660→                      <TableHead className="text-muted-foreground font-medium">Status</TableHead>
+   661→                      <TableHead className="text-muted-foreground font-medium">Industry</TableHead>
+   662→                      <TableHead className="text-muted-foreground font-medium">Created</TableHead>
+   663→                      <TableHead className="w-8"></TableHead>
+   664→                    </TableRow>
+   665→                  </TableHeader>
+   666→                  <TableBody>
+   667→                    {clients.map((client) => (
+   668→                      <TableRow
+   669→                        key={client.id}
+   670→                        className="hover:bg-white/[0.03] cursor-pointer"
+   671→                        style={{ borderColor: 'var(--gg-separator)' }}
+   672→                        onClick={() => fetchClientDetail(client.id)}
+   673→                      >
+   674→                        <TableCell className="font-medium text-foreground">
+   675→                          <div className="flex items-center gap-3">
+   676→                            <div
+   677→                              className="h-8 w-8 rounded-full flex items-center justify-center"
+   678→                              style={{ background: 'color-mix(in srgb, var(--gg-vermillion) 10%, transparent)' }}
+   679→                            >
+   680→                              <span
+   681→                                className="text-sm font-semibold"
+   682→                                style={{ color: 'var(--gg-vermillion)' }}
+   683→                              >
+   684→                                {client.name.charAt(0).toUpperCase()}
+   685→                              </span>
+   686→                            </div>
+   687→                            {client.name}
+   688→                          </div>
+   689→                        </TableCell>
+   690→                        <TableCell className="text-muted-foreground">{client.email || '—'}</TableCell>
+   691→                        <TableCell className="text-muted-foreground">{client.company || '—'}</TableCell>
+   692→                        <TableCell><StatusBadge status={client.status} /></TableCell>
+   693→                        <TableCell className="text-muted-foreground">{client.industry || '—'}</TableCell>
+   694→                        <TableCell className="text-muted-foreground">{formatDate(client.createdAt)}</TableCell>
+   695→                        <TableCell>
+   696→                          <ChevronRight className="h-4 w-4 text-gray-600" />
+   697→                        </TableCell>
+   698→                      </TableRow>
+   699→                    ))}
+   700→                  </TableBody>
+   701→                </Table>
+   702→              </div>
+   703→
+   704→              {/* Mobile Cards */}
+   705→              <div className="md:hidden divide-y divide-[var(--gg-separator)]">
+   706→                {clients.map((client) => (
+   707→                  <div
+   708→                    key={client.id}
+   709→                    className="p-4 hover:bg-white/[0.03] cursor-pointer"
+   710→                    onClick={() => fetchClientDetail(client.id)}
+   711→                  >
+   712→                    <div className="flex items-center justify-between">
+   713→                      <div className="flex items-center gap-3">
+   714→                        <div
+   715→                          className="h-10 w-10 rounded-full flex items-center justify-center"
+   716→                          style={{ background: 'color-mix(in srgb, var(--gg-vermillion) 10%, transparent)' }}
+   717→                        >
+   718→                          <span
+   719→                            className="font-semibold"
+   720→                            style={{ color: 'var(--gg-vermillion)' }}
+   721→                          >
+   722→                            {client.name.charAt(0).toUpperCase()}
+   723→                          </span>
+   724→                        </div>
+   725→                        <div>
+   726→                          <p className="text-foreground font-medium">{client.name}</p>
+   727→                          <p className="text-muted-foreground text-sm">{client.company || client.email || '—'}</p>
+   728→                        </div>
+   729→                      </div>
+   730→                      <ChevronRight className="h-4 w-4 text-gray-600" />
+   731→                    </div>
+   732→                    <div className="mt-2 flex items-center gap-2">
+   733→                      <StatusBadge status={client.status} />
+   734→                      {client.industry && (
+   735→                        <span className="text-xs text-gray-500">{client.industry}</span>
+   736→                      )}
+   737→                    </div>
+   738→                  </div>
+   739→                ))}
+   740→              </div>
+   741→            </>
+   742→          )}
+   743→        </CardContent>
+   744→      </Card>
+   745→    </div>
+   746→  )
+   747→
+   748→  // ============================================
+   749→  // RENDER: Client Detail View
+   750→  // ============================================
+   751→  const renderClientDetail = () => {
+   752→    if (!selectedClient) return null
+   753→
+   754→    return (
+   755→      <div className="space-y-6">
+   756→        {/* Header */}
+   757→        <div className="flex items-center gap-4">
+   758→          <Button
+   759→            variant="ghost"
+   760→            size="sm"
+   761→            onClick={() => setSelectedClient(null)}
+   762→            className="text-muted-foreground hover:text-foreground hover:bg-white/5"
+   763→          >
+   764→            <ArrowLeft className="h-4 w-4 mr-1" />
+   765→            Back
+   766→          </Button>
+   767→        </div>
+   768→
+   769→        {/* Client Info Card */}
+   770→        <Card
+   771→          style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
+   772→        >
+   773→          <CardHeader className="pb-4">
+   774→            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+   775→              <div className="flex items-start gap-4">
+   776→                <div
+   777→                  className="h-14 w-14 rounded-xl flex items-center justify-center shrink-0"
+   778→                  style={{ background: 'color-mix(in srgb, var(--gg-vermillion) 10%, transparent)' }}
+   779→                >
+   780→                  <span
+   781→                    className="text-xl font-bold"
+   782→                    style={{ color: 'var(--gg-vermillion)' }}
+   783→                  >
+   784→                    {selectedClient.name.charAt(0).toUpperCase()}
+   785→                  </span>
+   786→                </div>
+   787→                <div>
+   788→                  <CardTitle className="text-foreground text-xl">{selectedClient.name}</CardTitle>
+   789→                  <div className="flex items-center gap-2 mt-1">
+   790→                    <StatusBadge status={selectedClient.status} />
+   791→                    {selectedClient.industry && (
+   792→                      <Badge
+   793→                        variant="outline"
+   794→                        className="text-xs bg-white/5 text-gray-300"
+   795→                        style={{ borderColor: 'var(--gg-separator)' }}
+   796→                      >
+   797→                        {selectedClient.industry}
+   798→                      </Badge>
+   799→                    )}
+   800→                  </div>
+   801→                </div>
+   802→              </div>
+   803→              <div className="flex gap-2">
+   804→                <Button
+   805→                  variant="outline"
+   806→                  size="sm"
+   807→                  onClick={() => openEditDialog(selectedClient)}
+   808→                  style={{ borderColor: 'var(--gg-separator)' }}
+   809→                  className="text-foreground hover:bg-white/5"
+   810→                >
+   811→                  <Edit2 className="h-4 w-4 mr-1" />
+   812→                  Edit
+   813→                </Button>
+   814→                <Button
+   815→                  variant="outline"
+   816→                  size="sm"
+   817→                  onClick={() => {
+   818→                    setDeletingClient(selectedClient)
+   819→                    setDeleteDialogOpen(true)
+   820→                  }}
+   821→                  className="border-red-500/20 text-red-400 hover:bg-red-500/10"
+   822→                >
+   823→                  <Trash2 className="h-4 w-4 mr-1" />
+   824→                  Delete
+   825→                </Button>
+   826→              </div>
+   827→            </div>
+   828→          </CardHeader>
+   829→          <CardContent>
+   830→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   831→              {selectedClient.email && (
+   832→                <div className="flex items-center gap-2 text-sm">
+   833→                  <Mail className="h-4 w-4 text-gray-500" />
+   834→                  <span className="text-muted-foreground">{selectedClient.email}</span>
+   835→                </div>
+   836→              )}
+   837→              {selectedClient.phone && (
+   838→                <div className="flex items-center gap-2 text-sm">
+   839→                  <Phone className="h-4 w-4 text-gray-500" />
+   840→                  <span className="text-muted-foreground">{selectedClient.phone}</span>
+   841→                </div>
+   842→              )}
+   843→              {selectedClient.company && (
+   844→                <div className="flex items-center gap-2 text-sm">
+   845→                  <Building2 className="h-4 w-4 text-gray-500" />
+   846→                  <span className="text-muted-foreground">{selectedClient.company}</span>
+   847→                </div>
+   848→              )}
+   849→              {selectedClient.website && (
+   850→                <div className="flex items-center gap-2 text-sm">
+   851→                  <Globe className="h-4 w-4 text-gray-500" />
+   852→                  <span className="text-muted-foreground">{selectedClient.website}</span>
+   853→                </div>
+   854→              )}
+   855→              {(selectedClient.city || selectedClient.state || selectedClient.country) && (
+   856→                <div className="flex items-center gap-2 text-sm">
+   857→                  <MapPin className="h-4 w-4 text-gray-500" />
+   858→                  <span className="text-muted-foreground">
+   859→                    {[selectedClient.city, selectedClient.state, selectedClient.country].filter(Boolean).join(', ')}
+   860→                  </span>
+   861→                </div>
+   862→              )}
+   863→              {selectedClient.createdAt && (
+   864→                <div className="flex items-center gap-2 text-sm">
+   865→                  <Clock className="h-4 w-4 text-gray-500" />
+   866→                  <span className="text-muted-foreground">Created {formatDate(selectedClient.createdAt)}</span>
+   867→                </div>
+   868→              )}
+   869→            </div>
+   870→            {selectedClient.notes && (
+   871→              <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--gg-separator)' }}>
+   872→                <p className="text-xs text-gray-500 mb-1">Notes</p>
+   873→                <p className="text-sm text-gray-300">{selectedClient.notes}</p>
+   874→              </div>
+   875→            )}
+   876→          </CardContent>
+   877→        </Card>
+   878→
+   879→        {/* Stats Row */}
+   880→        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   881→          {[
+   882→            { label: 'Deals', value: selectedClient._count?.deals ?? 0, icon: TrendingUp, color: 'text-cyan-400' },
+   883→            { label: 'Invoices', value: selectedClient._count?.invoices ?? 0, icon: FileText, color: 'text-amber-400' },
+   884→            { label: 'Payments', value: selectedClient._count?.payments ?? 0, icon: CheckCircle2, ggColor: true },
+   885→            { label: 'Contacts', value: selectedClient.contacts?.length ?? 0, icon: Users, color: 'text-purple-400' },
+   886→          ].map((stat) => (
+   887→            <Card
+   888→              key={stat.label}
+   889→              style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
+   890→            >
+   891→              <CardContent className="p-4 flex items-center gap-3">
+   892→                <div className={`rounded-lg bg-white/5 p-2 ${stat.ggColor ? '' : stat.color}`}>
+   893→                  <stat.icon
+   894→                    className="h-4 w-4"
+   895→                    {...(stat.ggColor ? { style: { color: 'var(--gg-vermillion)' } } : {})}
+   896→                  />
+   897→                </div>
+   898→                <div>
+   899→                  <p className="text-xs text-gray-500">{stat.label}</p>
+   900→                  <p className="text-lg font-bold text-foreground">{stat.value}</p>
+   901→                </div>
+   902→              </CardContent>
+   903→            </Card>
+   904→          ))}
+   905→        </div>
+   906→
+   907→        {/* Tabs */}
+   908→        <Tabs defaultValue="contacts" className="space-y-4">
+   909→          <TabsList
+   910→            style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+   911→            className="border"
+   912→          >
+   913→            <TabsTrigger
+   914→              value="contacts"
+   915→              className="data-[state=active]:bg-[var(--gg-vermillion)] data-[state=active]:text-white text-muted-foreground"
+   916→            >
+   917→              Contacts
+   918→            </TabsTrigger>
+   919→            <TabsTrigger
+   920→              value="activities"
+   921→              className="data-[state=active]:bg-[var(--gg-vermillion)] data-[state=active]:text-white text-muted-foreground"
+   922→            >
+   923→              Activities
+   924→            </TabsTrigger>
+   925→            <TabsTrigger
+   926→              value="deals"
+   927→              className="data-[state=active]:bg-[var(--gg-vermillion)] data-[state=active]:text-white text-muted-foreground"
+   928→            >
+   929→              Deals
+   930→            </TabsTrigger>
+   931→          </TabsList>
+   932→
+   933→          {/* Contacts Tab */}
+   934→          <TabsContent value="contacts">
+   935→            <Card
+   936→              style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
+   937→            >
+   938→              <CardHeader className="pb-3">
+   939→                <div className="flex items-center justify-between">
+   940→                  <CardTitle className="text-foreground text-base">Contacts</CardTitle>
+   941→                  <Button
+   942→                    size="sm"
+   943→                    onClick={() => {
+   944→                      setContactForm({ name: '', email: '', phone: '', role: '', isPrimary: false, notes: '' })
+   945→                      setContactDialogOpen(true)
+   946→                    }}
+   947→                    className="hover:opacity-90 text-white"
+   948→                    style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+   949→                  >
+   950→                    <UserPlus className="h-4 w-4 mr-1" />
+   951→                    Add
+   952→                  </Button>
+   953→                </div>
+   954→              </CardHeader>
+   955→              <CardContent>
+   956→                {!selectedClient.contacts || selectedClient.contacts.length === 0 ? (
+   957→                  <div className="flex flex-col items-center justify-center py-10">
+   958→                    <Users className="h-10 w-10 text-gray-600 mb-3" />
+   959→                    <p className="text-muted-foreground text-sm">No contacts yet</p>
+   960→                    <p className="text-gray-500 text-xs mt-1">Add a contact for this client</p>
+   961→                  </div>
+   962→                ) : (
+   963→                  <div className="space-y-2 max-h-96 overflow-y-auto">
+   964→                    {selectedClient.contacts.map((contact) => (
+   965→                      <div
+   966→                        key={contact.id}
+   967→                        className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+   968→                      >
+   969→                        <div className="flex items-center gap-3 min-w-0">
+   970→                          <div className="h-9 w-9 rounded-full bg-white/5 flex items-center justify-center shrink-0">
+   971→                            {contact.isPrimary ? (
+   972→                              <Star className="h-4 w-4 text-amber-400" />
+   973→                            ) : (
+   974→                              <User className="h-4 w-4 text-gray-500" />
+   975→                            )}
+   976→                          </div>
+   977→                          <div className="min-w-0">
+   978→                            <div className="flex items-center gap-2">
+   979→                              <p className="text-foreground text-sm font-medium truncate">{contact.name}</p>
+   980→                              {contact.isPrimary && (
+   981→                                <Badge className="text-[10px] bg-amber-500/15 text-amber-400 border-amber-500/20 px-1.5">
+   982→                                  Primary
+   983→                                </Badge>
+   984→                              )}
+   985→                              {contact.role && (
+   986→                                <Badge
+   987→                                  variant="outline"
+   988→                                  className="text-[10px] bg-white/5 text-muted-foreground px-1.5"
+   989→                                  style={{ borderColor: 'var(--gg-separator)' }}
+   990→                                >
+   991→                                  {contact.role}
+   992→                                </Badge>
+   993→                              )}
+   994→                            </div>
+   995→                            <div className="flex items-center gap-3 mt-0.5">
+   996→                              {contact.email && (
+   997→                                <span className="text-gray-500 text-xs truncate">{contact.email}</span>
+   998→                              )}
+   999→                              {contact.phone && (
+  1000→                                <span className="text-gray-500 text-xs">{contact.phone}</span>
+  1001→                              )}
+  1002→                            </div>
+  1003→                          </div>
+  1004→                        </div>
+  1005→                        <Button
+  1006→                          variant="ghost"
+  1007→                          size="sm"
+  1008→                          onClick={() => {
+  1009→                            setDeletingContactId(contact.id)
+  1010→                            setDeleteContactDialogOpen(true)
+  1011→                          }}
+  1012→                          className="text-gray-500 hover:text-red-400 hover:bg-red-500/10 shrink-0"
+  1013→                        >
+  1014→                          <Trash2 className="h-3.5 w-3.5" />
+  1015→                        </Button>
+  1016→                      </div>
+  1017→                    ))}
+  1018→                  </div>
+  1019→                )}
+  1020→              </CardContent>
+  1021→            </Card>
+  1022→          </TabsContent>
+  1023→
+  1024→          {/* Activities Tab */}
+  1025→          <TabsContent value="activities">
+  1026→            <Card
+  1027→              style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
+  1028→            >
+  1029→              <CardHeader className="pb-3">
+  1030→                <div className="flex items-center justify-between">
+  1031→                  <CardTitle className="text-foreground text-base">Activities</CardTitle>
+  1032→                  <Button
+  1033→                    size="sm"
+  1034→                    onClick={() => {
+  1035→                      setActivityForm({ type: 'note', subject: '', notes: '' })
+  1036→                      setActivityDialogOpen(true)
+  1037→                    }}
+  1038→                    className="hover:opacity-90 text-white"
+  1039→                    style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+  1040→                  >
+  1041→                    <Plus className="h-4 w-4 mr-1" />
+  1042→                    Log Activity
+  1043→                  </Button>
+  1044→                </div>
+  1045→              </CardHeader>
+  1046→              <CardContent>
+  1047→                {!selectedClient.activities || selectedClient.activities.length === 0 ? (
+  1048→                  <div className="flex flex-col items-center justify-center py-10">
+  1049→                    <Clock className="h-10 w-10 text-gray-600 mb-3" />
+  1050→                    <p className="text-muted-foreground text-sm">No activities yet</p>
+  1051→                    <p className="text-gray-500 text-xs mt-1">Log a call, email, or meeting</p>
+  1052→                  </div>
+  1053→                ) : (
+  1054→                  <div className="relative max-h-96 overflow-y-auto">
+  1055→                    {/* Timeline line */}
+  1056→                    <div className="absolute left-5 top-2 bottom-2 w-px bg-white/5" />
+  1057→                    <div className="space-y-1">
+  1058→                      {selectedClient.activities.map((activity) => (
+  1059→                        <div key={activity.id} className="flex items-start gap-4 p-3 rounded-lg hover:bg-white/[0.02] relative">
+  1060→                          <div
+  1061→                            className="relative z-10 h-8 w-8 rounded-full bg-gray-800 border flex items-center justify-center shrink-0"
+  1062→                            style={{ borderColor: 'var(--gg-separator)' }}
+  1063→                          >
+  1064→                            <ActivityIcon type={activity.type} />
+  1065→                          </div>
+  1066→                          <div className="flex-1 min-w-0 pt-0.5">
+  1067→                            <div className="flex items-center justify-between gap-2">
+  1068→                              <p className="text-foreground text-sm font-medium truncate">{activity.subject}</p>
+  1069→                              <span className="text-gray-500 text-xs shrink-0">{formatDateTime(activity.createdAt)}</span>
+  1070→                            </div>
+  1071→                            {activity.notes && (
+  1072→                              <p className="text-muted-foreground text-xs mt-1 line-clamp-2">{activity.notes}</p>
+  1073→                            )}
+  1074→                            <Badge
+  1075→                              variant="outline"
+  1076→                              className="mt-1 text-[10px] bg-white/5 text-muted-foreground px-1.5"
+  1077→                              style={{ borderColor: 'var(--gg-separator)' }}
+  1078→                            >
+  1079→                              {activity.type.replace('_', ' ')}
+  1080→                            </Badge>
+  1081→                          </div>
+  1082→                        </div>
+  1083→                      ))}
+  1084→                    </div>
+  1085→                  </div>
+  1086→                )}
+  1087→              </CardContent>
+  1088→            </Card>
+  1089→          </TabsContent>
+  1090→
+  1091→          {/* Deals Tab */}
+  1092→          <TabsContent value="deals">
+  1093→            <Card
+  1094→              style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
+  1095→            >
+  1096→              <CardHeader className="pb-3">
+  1097→                <CardTitle className="text-foreground text-base">Deals</CardTitle>
+  1098→              </CardHeader>
+  1099→              <CardContent>
+  1100→                {!selectedClient.deals || selectedClient.deals.length === 0 ? (
+  1101→                  <div className="flex flex-col items-center justify-center py-10">
+  1102→                    <TrendingUp className="h-10 w-10 text-gray-600 mb-3" />
+  1103→                    <p className="text-muted-foreground text-sm">No deals yet</p>
+  1104→                    <p className="text-gray-500 text-xs mt-1">Deals for this client will appear here</p>
+  1105→                  </div>
+  1106→                ) : (
+  1107→                  <div className="space-y-2 max-h-96 overflow-y-auto">
+  1108→                    {selectedClient.deals.map((deal) => (
+  1109→                      <div
+  1110→                        key={deal.id}
+  1111→                        className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]"
+  1112→                      >
+  1113→                        <div>
+  1114→                          <p className="text-foreground text-sm font-medium">{deal.title}</p>
+  1115→                          <div className="flex items-center gap-2 mt-1">
+  1116→                            <DealStageBadge stage={deal.stage} />
+  1117→                            {deal.source && (
+  1118→                              <span className="text-gray-500 text-xs">{deal.source}</span>
+  1119→                            )}
+  1120→                          </div>
+  1121→                        </div>
+  1122→                        <div className="text-right">
+  1123→                          <p className="text-foreground text-sm font-semibold">
+  1124→                            ${deal.value.toLocaleString()}
+  1125→                          </p>
+  1126→                          <p className="text-gray-500 text-xs">{deal.probability}% prob.</p>
+  1127→                        </div>
+  1128→                      </div>
+  1129→                    ))}
+  1130→                  </div>
+  1131→                )}
+  1132→              </CardContent>
+  1133→            </Card>
+  1134→          </TabsContent>
+  1135→        </Tabs>
+  1136→      </div>
+  1137→    )
+  1138→  }
+  1139→
+  1140→  // ============================================
+  1141→  // RENDER: Client Form Dialog
+  1142→  // ============================================
+  1143→  const renderClientDialog = () => (
+  1144→    <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
+  1145→      <DialogContent
+  1146→        className="bg-gray-900 text-foreground max-w-2xl max-h-[85vh] overflow-y-auto"
+  1147→        style={{ borderColor: 'var(--gg-separator)' }}
+  1148→      >
+  1149→        <DialogHeader>
+  1150→          <DialogTitle>{editingClient ? 'Edit Client' : 'Add New Client'}</DialogTitle>
+  1151→        </DialogHeader>
+  1152→        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
+  1153→          <div className="space-y-2 sm:col-span-2">
+  1154→            <Label className="text-gray-300">Name *</Label>
+  1155→            <Input
+  1156→              value={clientForm.name}
+  1157→              onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
+  1158→              placeholder="Client name"
+  1159→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1160→              style={{ borderColor: 'var(--gg-separator)' }}
+  1161→            />
+  1162→          </div>
+  1163→          <div className="space-y-2">
+  1164→            <Label className="text-gray-300">Email</Label>
+  1165→            <Input
+  1166→              value={clientForm.email}
+  1167→              onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
+  1168→              placeholder="email@example.com"
+  1169→              type="email"
+  1170→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1171→              style={{ borderColor: 'var(--gg-separator)' }}
+  1172→            />
+  1173→          </div>
+  1174→          <div className="space-y-2">
+  1175→            <Label className="text-gray-300">Phone</Label>
+  1176→            <Input
+  1177→              value={clientForm.phone}
+  1178→              onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })}
+  1179→              placeholder="+1 (555) 000-0000"
+  1180→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1181→              style={{ borderColor: 'var(--gg-separator)' }}
+  1182→            />
+  1183→          </div>
+  1184→          <div className="space-y-2">
+  1185→            <Label className="text-gray-300">Company</Label>
+  1186→            <Input
+  1187→              value={clientForm.company}
+  1188→              onChange={(e) => setClientForm({ ...clientForm, company: e.target.value })}
+  1189→              placeholder="Company name"
+  1190→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1191→              style={{ borderColor: 'var(--gg-separator)' }}
+  1192→            />
+  1193→          </div>
+  1194→          <div className="space-y-2">
+  1195→            <Label className="text-gray-300">Industry</Label>
+  1196→            <Input
+  1197→              value={clientForm.industry}
+  1198→              onChange={(e) => setClientForm({ ...clientForm, industry: e.target.value })}
+  1199→              placeholder="e.g. Technology, Finance"
+  1200→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1201→              style={{ borderColor: 'var(--gg-separator)' }}
+  1202→            />
+  1203→          </div>
+  1204→          <div className="space-y-2">
+  1205→            <Label className="text-gray-300">Status</Label>
+  1206→            <Select
+  1207→              value={clientForm.status}
+  1208→              onValueChange={(v) => setClientForm({ ...clientForm, status: v })}
+  1209→            >
+  1210→              <SelectTrigger
+  1211→                className="bg-gray-800 text-foreground"
+  1212→                style={{ borderColor: 'var(--gg-separator)' }}
+  1213→              >
+  1214→                <SelectValue />
+  1215→              </SelectTrigger>
+  1216→              <SelectContent>
+  1217→                <SelectItem value="active">Active</SelectItem>
+  1218→                <SelectItem value="inactive">Inactive</SelectItem>
+  1219→                <SelectItem value="prospect">Prospect</SelectItem>
+  1220→                <SelectItem value="churned">Churned</SelectItem>
+  1221→              </SelectContent>
+  1222→            </Select>
+  1223→          </div>
+  1224→          <div className="space-y-2">
+  1225→            <Label className="text-gray-300">Website</Label>
+  1226→            <Input
+  1227→              value={clientForm.website}
+  1228→              onChange={(e) => setClientForm({ ...clientForm, website: e.target.value })}
+  1229→              placeholder="https://example.com"
+  1230→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1231→              style={{ borderColor: 'var(--gg-separator)' }}
+  1232→            />
+  1233→          </div>
+  1234→          <div className="space-y-2 sm:col-span-2">
+  1235→            <Label className="text-gray-300">Address</Label>
+  1236→            <Input
+  1237→              value={clientForm.address}
+  1238→              onChange={(e) => setClientForm({ ...clientForm, address: e.target.value })}
+  1239→              placeholder="Street address"
+  1240→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1241→              style={{ borderColor: 'var(--gg-separator)' }}
+  1242→            />
+  1243→          </div>
+  1244→          <div className="space-y-2">
+  1245→            <Label className="text-gray-300">City</Label>
+  1246→            <Input
+  1247→              value={clientForm.city}
+  1248→              onChange={(e) => setClientForm({ ...clientForm, city: e.target.value })}
+  1249→              placeholder="City"
+  1250→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1251→              style={{ borderColor: 'var(--gg-separator)' }}
+  1252→            />
+  1253→          </div>
+  1254→          <div className="space-y-2">
+  1255→            <Label className="text-gray-300">State</Label>
+  1256→            <Input
+  1257→              value={clientForm.state}
+  1258→              onChange={(e) => setClientForm({ ...clientForm, state: e.target.value })}
+  1259→              placeholder="State"
+  1260→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1261→              style={{ borderColor: 'var(--gg-separator)' }}
+  1262→            />
+  1263→          </div>
+  1264→          <div className="space-y-2">
+  1265→            <Label className="text-gray-300">Country</Label>
+  1266→            <Input
+  1267→              value={clientForm.country}
+  1268→              onChange={(e) => setClientForm({ ...clientForm, country: e.target.value })}
+  1269→              placeholder="Country"
+  1270→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1271→              style={{ borderColor: 'var(--gg-separator)' }}
+  1272→            />
+  1273→          </div>
+  1274→          <div className="space-y-2">
+  1275→            <Label className="text-gray-300">Zip Code</Label>
+  1276→            <Input
+  1277→              value={clientForm.zipCode}
+  1278→              onChange={(e) => setClientForm({ ...clientForm, zipCode: e.target.value })}
+  1279→              placeholder="Zip code"
+  1280→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1281→              style={{ borderColor: 'var(--gg-separator)' }}
+  1282→            />
+  1283→          </div>
+  1284→          <div className="space-y-2 sm:col-span-2">
+  1285→            <Label className="text-gray-300">Notes</Label>
+  1286→            <Textarea
+  1287→              value={clientForm.notes}
+  1288→              onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })}
+  1289→              placeholder="Additional notes about this client..."
+  1290→              rows={3}
+  1291→              className="bg-gray-800 text-foreground placeholder:text-gray-500 resize-none"
+  1292→              style={{ borderColor: 'var(--gg-separator)' }}
+  1293→            />
+  1294→          </div>
+  1295→        </div>
+  1296→        <div className="flex justify-end gap-3 pt-2">
+  1297→          <Button
+  1298→            variant="outline"
+  1299→            onClick={() => setClientDialogOpen(false)}
+  1300→            style={{ borderColor: 'var(--gg-separator)' }}
+  1301→            className="text-gray-300 hover:bg-white/5"
+  1302→          >
+  1303→            Cancel
+  1304→          </Button>
+  1305→          <Button
+  1306→            onClick={handleClientSubmit}
+  1307→            disabled={submitting}
+  1308→            className="hover:opacity-90 text-white"
+  1309→            style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+  1310→          >
+  1311→            {submitting ? 'Saving...' : editingClient ? 'Update Client' : 'Create Client'}
+  1312→          </Button>
+  1313→        </div>
+  1314→      </DialogContent>
+  1315→    </Dialog>
+  1316→  )
+  1317→
+  1318→  // ============================================
+  1319→  // RENDER: Delete Confirmation Dialog
+  1320→  // ============================================
+  1321→  const renderDeleteDialog = () => (
+  1322→    <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+  1323→      <AlertDialogContent className="bg-gray-900" style={{ borderColor: 'var(--gg-separator)' }}>
+  1324→        <AlertDialogHeader>
+  1325→          <AlertDialogTitle className="text-foreground">Delete Client</AlertDialogTitle>
+  1326→          <AlertDialogDescription className="text-muted-foreground">
+  1327→            Are you sure you want to delete <span className="text-foreground font-medium">{deletingClient?.name}</span>?
+  1328→            This action cannot be undone. All associated contacts, activities, and deals will also be removed.
+  1329→          </AlertDialogDescription>
+  1330→        </AlertDialogHeader>
+  1331→        <AlertDialogFooter>
+  1332→          <AlertDialogCancel
+  1333→            style={{ borderColor: 'var(--gg-separator)' }}
+  1334→            className="text-gray-300 hover:bg-white/5"
+  1335→          >
+  1336→            Cancel
+  1337→          </AlertDialogCancel>
+  1338→          <AlertDialogAction
+  1339→            onClick={handleDeleteClient}
+  1340→            className="bg-red-600 hover:bg-red-700 text-white"
+  1341→          >
+  1342→            Delete
+  1343→          </AlertDialogAction>
+  1344→        </AlertDialogFooter>
+  1345→      </AlertDialogContent>
+  1346→    </AlertDialog>
+  1347→  )
+  1348→
+  1349→  // ============================================
+  1350→  // RENDER: Contact Dialog
+  1351→  // ============================================
+  1352→  const renderContactDialog = () => (
+  1353→    <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
+  1354→      <DialogContent
+  1355→        className="bg-gray-900 text-foreground max-w-md"
+  1356→        style={{ borderColor: 'var(--gg-separator)' }}
+  1357→      >
+  1358→        <DialogHeader>
+  1359→          <DialogTitle>Add Contact</DialogTitle>
+  1360→        </DialogHeader>
+  1361→        <div className="space-y-4 py-4">
+  1362→          <div className="space-y-2">
+  1363→            <Label className="text-gray-300">Name *</Label>
+  1364→            <Input
+  1365→              value={contactForm.name}
+  1366→              onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
+  1367→              placeholder="Contact name"
+  1368→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1369→              style={{ borderColor: 'var(--gg-separator)' }}
+  1370→            />
+  1371→          </div>
+  1372→          <div className="space-y-2">
+  1373→            <Label className="text-gray-300">Email</Label>
+  1374→            <Input
+  1375→              value={contactForm.email}
+  1376→              onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+  1377→              placeholder="email@example.com"
+  1378→              type="email"
+  1379→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1380→              style={{ borderColor: 'var(--gg-separator)' }}
+  1381→            />
+  1382→          </div>
+  1383→          <div className="space-y-2">
+  1384→            <Label className="text-gray-300">Phone</Label>
+  1385→            <Input
+  1386→              value={contactForm.phone}
+  1387→              onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+  1388→              placeholder="+1 (555) 000-0000"
+  1389→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1390→              style={{ borderColor: 'var(--gg-separator)' }}
+  1391→            />
+  1392→          </div>
+  1393→          <div className="space-y-2">
+  1394→            <Label className="text-gray-300">Role</Label>
+  1395→            <Select
+  1396→              value={contactForm.role}
+  1397→              onValueChange={(v) => setContactForm({ ...contactForm, role: v })}
+  1398→            >
+  1399→              <SelectTrigger
+  1400→                className="bg-gray-800 text-foreground"
+  1401→                style={{ borderColor: 'var(--gg-separator)' }}
+  1402→              >
+  1403→                <SelectValue placeholder="Select role" />
+  1404→              </SelectTrigger>
+  1405→              <SelectContent>
+  1406→                <SelectItem value="decision_maker">Decision Maker</SelectItem>
+  1407→                <SelectItem value="influencer">Influencer</SelectItem>
+  1408→                <SelectItem value="user">User</SelectItem>
+  1409→              </SelectContent>
+  1410→            </Select>
+  1411→          </div>
+  1412→          <div className="flex items-center gap-2">
+  1413→            <input
+  1414→              type="checkbox"
+  1415→              id="isPrimary"
+  1416→              checked={contactForm.isPrimary}
+  1417→              onChange={(e) => setContactForm({ ...contactForm, isPrimary: e.target.checked })}
+  1418→              className="h-4 w-4 rounded bg-gray-800 text-[var(--gg-vermillion)] focus:ring-[var(--gg-vermillion)]"
+  1419→              style={{ borderColor: 'var(--gg-separator)' }}
+  1420→            />
+  1421→            <Label htmlFor="isPrimary" className="text-gray-300 cursor-pointer">
+  1422→              Primary contact
+  1423→            </Label>
+  1424→          </div>
+  1425→          <div className="space-y-2">
+  1426→            <Label className="text-gray-300">Notes</Label>
+  1427→            <Textarea
+  1428→              value={contactForm.notes}
+  1429→              onChange={(e) => setContactForm({ ...contactForm, notes: e.target.value })}
+  1430→              placeholder="Notes about this contact..."
+  1431→              rows={2}
+  1432→              className="bg-gray-800 text-foreground placeholder:text-gray-500 resize-none"
+  1433→              style={{ borderColor: 'var(--gg-separator)' }}
+  1434→            />
+  1435→          </div>
+  1436→        </div>
+  1437→        <div className="flex justify-end gap-3">
+  1438→          <Button
+  1439→            variant="outline"
+  1440→            onClick={() => setContactDialogOpen(false)}
+  1441→            style={{ borderColor: 'var(--gg-separator)' }}
+  1442→            className="text-gray-300 hover:bg-white/5"
+  1443→          >
+  1444→            Cancel
+  1445→          </Button>
+  1446→          <Button
+  1447→            onClick={handleAddContact}
+  1448→            disabled={submitting}
+  1449→            className="hover:opacity-90 text-white"
+  1450→            style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+  1451→          >
+  1452→            {submitting ? 'Adding...' : 'Add Contact'}
+  1453→          </Button>
+  1454→        </div>
+  1455→      </DialogContent>
+  1456→    </Dialog>
+  1457→  )
+  1458→
+  1459→  // ============================================
+  1460→  // RENDER: Activity Dialog
+  1461→  // ============================================
+  1462→  const renderActivityDialog = () => (
+  1463→    <Dialog open={activityDialogOpen} onOpenChange={setActivityDialogOpen}>
+  1464→      <DialogContent
+  1465→        className="bg-gray-900 text-foreground max-w-md"
+  1466→        style={{ borderColor: 'var(--gg-separator)' }}
+  1467→      >
+  1468→        <DialogHeader>
+  1469→          <DialogTitle>Log Activity</DialogTitle>
+  1470→        </DialogHeader>
+  1471→        <div className="space-y-4 py-4">
+  1472→          <div className="space-y-2">
+  1473→            <Label className="text-gray-300">Type</Label>
+  1474→            <Select
+  1475→              value={activityForm.type}
+  1476→              onValueChange={(v) => setActivityForm({ ...activityForm, type: v })}
+  1477→            >
+  1478→              <SelectTrigger
+  1479→                className="bg-gray-800 text-foreground"
+  1480→                style={{ borderColor: 'var(--gg-separator)' }}
+  1481→              >
+  1482→                <SelectValue />
+  1483→              </SelectTrigger>
+  1484→              <SelectContent>
+  1485→                <SelectItem value="call">📞 Call</SelectItem>
+  1486→                <SelectItem value="email">✉️ Email</SelectItem>
+  1487→                <SelectItem value="meeting">📅 Meeting</SelectItem>
+  1488→                <SelectItem value="note">📝 Note</SelectItem>
+  1489→                <SelectItem value="deal_update">💰 Deal Update</SelectItem>
+  1490→              </SelectContent>
+  1491→            </Select>
+  1492→          </div>
+  1493→          <div className="space-y-2">
+  1494→            <Label className="text-gray-300">Subject *</Label>
+  1495→            <Input
+  1496→              value={activityForm.subject}
+  1497→              onChange={(e) => setActivityForm({ ...activityForm, subject: e.target.value })}
+  1498→              placeholder="Activity subject"
+  1499→              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+  1500→              style={{ borderColor: 'var(--gg-separator)' }}
+  1501→            />
+  1502→          </div>
+  1503→          <div className="space-y-2">
+  1504→            <Label className="text-gray-300">Notes</Label>
+  1505→            <Textarea
+  1506→              value={activityForm.notes}
+  1507→              onChange={(e) => setActivityForm({ ...activityForm, notes: e.target.value })}
+  1508→              placeholder="Activity details..."
+  1509→              rows={3}
+  1510→              className="bg-gray-800 text-foreground placeholder:text-gray-500 resize-none"
+  1511→              style={{ borderColor: 'var(--gg-separator)' }}
+  1512→            />
+  1513→          </div>
+  1514→        </div>
+  1515→        <div className="flex justify-end gap-3">
+  1516→          <Button
+  1517→            variant="outline"
+  1518→            onClick={() => setActivityDialogOpen(false)}
+  1519→            style={{ borderColor: 'var(--gg-separator)' }}
+  1520→            className="text-gray-300 hover:bg-white/5"
+  1521→          >
+  1522→            Cancel
+  1523→          </Button>
+  1524→          <Button
+  1525→            onClick={handleAddActivity}
+  1526→            disabled={submitting}
+  1527→            className="hover:opacity-90 text-white"
+  1528→            style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+  1529→          >
+  1530→            {submitting ? 'Saving...' : 'Log Activity'}
+  1531→          </Button>
+  1532→        </div>
+  1533→      </DialogContent>
+  1534→    </Dialog>
+  1535→  )
+  1536→
+  1537→  // ============================================
+  1538→  // RENDER: Delete Contact Confirmation
+  1539→  // ============================================
+  1540→  const renderDeleteContactDialog = () => (
+  1541→    <AlertDialog open={deleteContactDialogOpen} onOpenChange={setDeleteContactDialogOpen}>
+  1542→      <AlertDialogContent className="bg-gray-900" style={{ borderColor: 'var(--gg-separator)' }}>
+  1543→        <AlertDialogHeader>
+  1544→          <AlertDialogTitle className="text-foreground">Delete Contact</AlertDialogTitle>
+  1545→          <AlertDialogDescription className="text-muted-foreground">
+  1546→            Are you sure you want to remove this contact? This action cannot be undone.
+  1547→          </AlertDialogDescription>
+  1548→        </AlertDialogHeader>
+  1549→        <AlertDialogFooter>
+  1550→          <AlertDialogCancel
+  1551→            style={{ borderColor: 'var(--gg-separator)' }}
+  1552→            className="text-gray-300 hover:bg-white/5"
+  1553→          >
+  1554→            Cancel
+  1555→          </AlertDialogCancel>
+  1556→          <AlertDialogAction
+  1557→            onClick={handleDeleteContact}
+  1558→            className="bg-red-600 hover:bg-red-700 text-white"
+  1559→          >
+  1560→            Delete
+  1561→          </AlertDialogAction>
+  1562→        </AlertDialogFooter>
+  1563→      </AlertDialogContent>
+  1564→    </AlertDialog>
+  1565→  )
+  1566→
+  1567→  // ============================================
+  1568→  // Main Render
+  1569→  // ============================================
+  1570→  return (
+  1571→    <div className="space-y-6">
+  1572→      {detailLoading ? (
+  1573→        <div className="space-y-6">
+  1574→          <Skeleton className="h-8 w-24 bg-white/5" />
+  1575→          <Card
+  1576→            style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
+  1577→          >
+  1578→            <CardContent className="p-6 space-y-4">
+  1579→              <div className="flex items-center gap-4">
+  1580→                <Skeleton className="h-14 w-14 rounded-xl bg-white/5" />
+  1581→                <div className="space-y-2">
+  1582→                  <Skeleton className="h-6 w-48 bg-white/5" />
+  1583→                  <Skeleton className="h-5 w-24 bg-white/5" />
+  1584→                </div>
+  1585→              </div>
+  1586→              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+  1587→                {Array.from({ length: 3 }).map((_, i) => (
+  1588→                  <Skeleton key={i} className="h-4 w-40 bg-white/5" />
+  1589→                ))}
+  1590→              </div>
+  1591→            </CardContent>
+  1592→          </Card>
+  1593→        </div>
+  1594→      ) : selectedClient ? (
+  1595→        renderClientDetail()
+  1596→      ) : (
+  1597→        renderClientList()
+  1598→      )}
+  1599→
+  1600→      {renderClientDialog()}
+  1601→      {renderDeleteDialog()}
+  1602→      {renderContactDialog()}
+  1603→      {renderActivityDialog()}
+  1604→      {renderDeleteContactDialog()}
+  1605→    </div>
+  1606→  )
+  1607→}
+  1608→
