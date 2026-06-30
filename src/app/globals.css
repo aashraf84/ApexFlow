@@ -6,8 +6,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-display);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -41,82 +41,706 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --color-cyan: #1B9C85;
+  --color-violet: #9B6DFF;
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   macOS 27 GOLDEN GATE — LIGHT MODE
+   Warm parchment whites, Golden Gate vermillion accents,
+   solid retina colors, layered depth
+   ═══════════════════════════════════════════════════════════════ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.875rem;
+
+  /* Core surfaces */
+  --background: #F8F7F4;
+  --foreground: #1A1917;
+  --card: #FFFFFF;
+  --card-foreground: #1A1917;
+  --popover: #FFFFFF;
+  --popover-foreground: #1A1917;
+
+  /* Golden Gate Primary — International Orange inspired */
+  --primary: #C84B31;
+  --primary-foreground: #FFFFFF;
+
+  /* Secondary surfaces */
+  --secondary: #EDEAE5;
+  --secondary-foreground: #1A1917;
+  --muted: #EDEAE5;
+  --muted-foreground: #6B665F;
+  --accent: #EDEAE5;
+  --accent-foreground: #1A1917;
+
+  /* Semantic colors — solid retina */
+  --destructive: #D43131;
+  --border: rgba(26, 25, 23, 0.08);
+  --input: rgba(26, 25, 23, 0.10);
+  --ring: #C84B31;
+
+  /* Chart colors — rich, saturated */
+  --chart-1: #C84B31;
+  --chart-2: #1B9C85;
+  --chart-3: #2D8F4E;
+  --chart-4: #D4930D;
+  --chart-5: #D43131;
+
+  /* Sidebar */
+  --sidebar: #F2F0EC;
+  --sidebar-foreground: #1A1917;
+  --sidebar-primary: #C84B31;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #E6E3DD;
+  --sidebar-accent-foreground: #1A1917;
+  --sidebar-border: rgba(26, 25, 23, 0.06);
+  --sidebar-ring: #1B9C85;
+
+  /* Extended palette — solid retina colors */
+  --gg-vermillion: #C84B31;
+  --gg-vermillion-light: #E8633B;
+  --gg-teal: #1B9C85;
+  --gg-teal-light: #22B899;
+  --gg-green: #2D8F4E;
+  --gg-amber: #B07A0A;
+  --gg-rose: #C4375A;
+  --gg-violet: #9B6DFF;
+  --gg-cyan: #0E8FA0;
+
+  /* Shadows — layered, warm */
+  --gg-shadow-xs: 0 1px 2px rgba(26, 25, 23, 0.04);
+  --gg-shadow-sm: 0 1px 3px rgba(26, 25, 23, 0.06), 0 1px 2px rgba(26, 25, 23, 0.04);
+  --gg-shadow-md: 0 4px 6px -1px rgba(26, 25, 23, 0.07), 0 2px 4px -2px rgba(26, 25, 23, 0.05);
+  --gg-shadow-lg: 0 10px 15px -3px rgba(26, 25, 23, 0.08), 0 4px 6px -4px rgba(26, 25, 23, 0.04);
+  --gg-shadow-xl: 0 20px 25px -5px rgba(26, 25, 23, 0.08), 0 8px 10px -6px rgba(26, 25, 23, 0.04);
+  --gg-shadow-glow: 0 0 30px -5px rgba(200, 75, 49, 0.15);
+  --gg-shadow-card: 0 1px 3px rgba(26, 25, 23, 0.05), 0 6px 16px rgba(26, 25, 23, 0.04);
+  --gg-shadow-card-hover: 0 4px 8px rgba(26, 25, 23, 0.06), 0 12px 28px rgba(26, 25, 23, 0.06);
+
+  /* Separator */
+  --gg-separator: rgba(26, 25, 23, 0.06);
+  --gg-separator-strong: rgba(26, 25, 23, 0.12);
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   macOS 27 GOLDEN GATE — DARK MODE
+   Rich blacks, warm surfaces, bright vermillion accents,
+   luminous retina colors on deep canvas
+   ═══════════════════════════════════════════════════════════════ */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Core surfaces */
+  --background: #0A0A09;
+  --foreground: #F0EFEC;
+  --card: #171716;
+  --card-foreground: #F0EFEC;
+  --popover: #1C1C1B;
+  --popover-foreground: #F0EFEC;
+
+  /* Golden Gate Primary — brighter for dark */
+  --primary: #E8633B;
+  --primary-foreground: #FFFFFF;
+
+  /* Secondary surfaces */
+  --secondary: #252423;
+  --secondary-foreground: #F0EFEC;
+  --muted: #252423;
+  --muted-foreground: #8A8680;
+  --accent: #252423;
+  --accent-foreground: #F0EFEC;
+
+  /* Semantic colors — luminous on dark */
+  --destructive: #F04040;
+  --border: rgba(255, 255, 255, 0.06);
+  --input: rgba(255, 255, 255, 0.08);
+  --ring: #E8633B;
+
+  /* Chart colors — luminous for dark */
+  --chart-1: #E8633B;
+  --chart-2: #22B899;
+  --chart-3: #3DBA64;
+  --chart-4: #F0A820;
+  --chart-5: #F04040;
+
+  /* Sidebar */
+  --sidebar: #0F0F0E;
+  --sidebar-foreground: #F0EFEC;
+  --sidebar-primary: #E8633B;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #1E1E1D;
+  --sidebar-accent-foreground: #F0EFEC;
+  --sidebar-border: rgba(255, 255, 255, 0.04);
+  --sidebar-ring: #22B899;
+
+  /* Extended palette — luminous retina */
+  --gg-vermillion: #E8633B;
+  --gg-vermillion-light: #F07B55;
+  --gg-teal: #22B899;
+  --gg-teal-light: #30D4AE;
+  --gg-green: #3DBA64;
+  --gg-amber: #F0A820;
+  --gg-rose: #E04872;
+  --gg-violet: #B48AFF;
+  --gg-cyan: #18B0C8;
+
+  /* Shadows — warm, subtle on dark */
+  --gg-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --gg-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --gg-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+  --gg-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.35), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+  --gg-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  --gg-shadow-glow: 0 0 40px -5px rgba(232, 99, 59, 0.2);
+  --gg-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2), 0 6px 16px rgba(0, 0, 0, 0.15);
+  --gg-shadow-card-hover: 0 4px 8px rgba(0, 0, 0, 0.25), 0 12px 28px rgba(0, 0, 0, 0.2);
+
+  /* Separator */
+  --gg-separator: rgba(255, 255, 255, 0.04);
+  --gg-separator-strong: rgba(255, 255, 255, 0.08);
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   BASE STYLES
+   ═══════════════════════════════════════════════════════════════ */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+  h1 {
+    font-family: var(--font-display), var(--font-inter), sans-serif;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    font-family: var(--font-display), var(--font-inter), sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  h3 {
+    font-family: var(--font-display), var(--font-inter), sans-serif;
+    font-weight: 700;
+  }
+  .font-display {
+    font-family: var(--font-display), var(--font-inter), sans-serif;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   SCROLLBAR — macOS style, minimal & elegant
+   ═══════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.35);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.2);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.35);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   macOS 27 CARD STYLES — Frosted glass, layered depth
+   ═══════════════════════════════════════════════════════════════ */
+
+.gg-card {
+  background: var(--card);
+  border-radius: 1rem;
+  box-shadow: var(--gg-shadow-card);
+  border: 1px solid var(--border);
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              box-shadow 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.gg-card:hover {
+  box-shadow: var(--gg-shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+/* Frosted glass card — macOS vibrancy */
+.gg-glass {
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid color-mix(in srgb, var(--foreground) 6%, transparent);
+  border-radius: 1rem;
+  box-shadow: var(--gg-shadow-card);
+}
+
+/* Premium elevated card */
+.gg-elevated {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  overflow: hidden;
+  box-shadow: var(--gg-shadow-lg);
+}
+
+/* Inline card with inner top glow */
+.gg-inline {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: var(--gg-shadow-xs);
+}
+
+/* Legacy compatibility */
+.ios-card {
+  background: var(--card);
+  border-radius: 1rem;
+  box-shadow: var(--gg-shadow-card);
+  border: 1px solid var(--border);
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              box-shadow 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.ios-glass, .glass-card {
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid color-mix(in srgb, var(--foreground) 6%, transparent);
+  border-radius: 1rem;
+  box-shadow: var(--gg-shadow-card);
+}
+.premium-card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  overflow: hidden;
+  box-shadow: var(--gg-shadow-lg);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   BACKGROUND PATTERNS — Subtle, warm, macOS-like
+   ═══════════════════════════════════════════════════════════════ */
+
+.grid-bg {
+  background-image:
+    radial-gradient(circle, color-mix(in srgb, var(--gg-vermillion) 4%, transparent) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.grid-lines {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--gg-vermillion) 2%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--gg-vermillion) 2%, transparent) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+.mesh-gradient {
+  background:
+    radial-gradient(ellipse at 20% 50%, color-mix(in srgb, var(--gg-vermillion) 6%, transparent) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, color-mix(in srgb, var(--gg-violet) 4%, transparent) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, color-mix(in srgb, var(--gg-teal) 3%, transparent) 0%, transparent 50%);
+}
+
+/* Warm noise texture */
+.noise-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.015;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATIONS — macOS spring physics, smooth & fluid
+   ═══════════════════════════════════════════════════════════════ */
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float-delayed {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-float-delayed {
+  animation: float-delayed 8s ease-in-out infinite;
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-float-slow {
+  animation: float-slow 10s ease-in-out infinite;
+}
+
+@keyframes marquee-left {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes marquee-right {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+
+.animate-marquee-left {
+  animation: marquee-left 40s linear infinite;
+}
+
+.animate-marquee-right {
+  animation: marquee-right 45s linear infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 25%, color-mix(in srgb, var(--foreground) 3%, transparent) 50%, transparent 75%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes card-shimmer-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-card-shimmer {
+  animation: card-shimmer-slide 0.8s ease-out forwards;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.03); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-gradient-text {
+  background-size: 200% auto;
+  animation: gradient-shift 4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.5; }
+}
+
+.animate-breathe {
+  animation: breathe 4s ease-in-out infinite;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   TEXT GRADIENTS — Golden Gate palette
+   ═══════════════════════════════════════════════════════════════ */
+
+.text-gradient-primary {
+  background: linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-warm {
+  background: linear-gradient(135deg, var(--gg-vermillion), var(--gg-rose));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-cool {
+  background: linear-gradient(135deg, var(--gg-teal), var(--gg-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Golden Gate signature gradient */
+.text-gradient-golden {
+  background: linear-gradient(135deg, var(--gg-amber), var(--gg-vermillion), var(--gg-rose));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Light mode gradient overrides — deeper colors for text readability on white */
+:root:not(.dark) .text-gradient-golden {
+  background: linear-gradient(135deg, #8B5E06, #A83D25, #A02E4C);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+:root:not(.dark) .text-gradient-primary {
+  background: linear-gradient(135deg, #A83D25, #8B5E06);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+:root:not(.dark) .text-gradient-warm {
+  background: linear-gradient(135deg, #A83D25, #A02E4C);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+:root:not(.dark) .text-gradient-cool {
+  background: linear-gradient(135deg, #157A6A, #0A7185);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   UTILITY CLASSES — macOS 27 Golden Gate design tokens
+   ═══════════════════════════════════════════════════════════════ */
+
+.section-divider {
+  height: 1px;
+  background: var(--gg-separator);
+}
+
+.hover-lift {
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              box-shadow 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--gg-shadow-card-hover);
+}
+
+/* Button glow — vermillion halo */
+.btn-glow {
+  position: relative;
+}
+
+.btn-glow::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber));
+  opacity: 0;
+  z-index: -1;
+  filter: blur(14px);
+  transition: opacity 0.3s ease;
+}
+
+.btn-glow:hover::after {
+  opacity: 0.2;
+}
+
+.inner-glow {
+  box-shadow: inset 0 0.5px 0 color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+/* Accent top bar — Golden Gate gradient */
+.accent-top {
+  position: relative;
+}
+
+.accent-top::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gg-vermillion), var(--gg-amber), transparent);
+  border-radius: 1px;
+}
+
+.ios-separator {
+  height: 0.5px;
+  background: var(--gg-separator);
+  margin-left: 1rem;
+  margin-right: 1rem;
+}
+
+/* macOS pill shape */
+.ios-pill {
+  border-radius: 100px;
+}
+
+.gg-pill {
+  border-radius: 100px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   SITE LOGO — Enhanced text logo with premium effects
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Container — interactive hover with glow & scale */
+.site-logo-container {
+  position: relative;
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              box-shadow 0.3s ease;
+  cursor: pointer;
+}
+
+.site-logo-container:hover {
+  transform: scale(1.04);
+  box-shadow: 0 0 24px -4px color-mix(in srgb, var(--gg-vermillion) 22%, transparent);
+}
+
+/* "Apex" text — warms to vermillion on hover, with subtle text-shadow */
+.site-logo-first {
+  transition: color 0.3s ease, letter-spacing 0.3s ease, text-shadow 0.3s ease;
+}
+
+.site-logo-container:hover .site-logo-first {
+  color: var(--gg-vermillion);
+  text-shadow: 0 0 20px color-mix(in srgb, var(--gg-vermillion) 25%, transparent);
+}
+
+/* "Flow" text — gradient intensifies on hover with glow */
+.site-logo-second {
+  transition: letter-spacing 0.3s ease, filter 0.3s ease;
+}
+
+.site-logo-container:hover .site-logo-second {
+  filter: brightness(1.25) saturate(1.4) drop-shadow(0 0 8px color-mix(in srgb, var(--gg-amber) 40%, transparent));
+}
+
+/* Animated underline — slides in on hover */
+.site-logo-underline {
+  transform-origin: left;
+}
+
+.site-logo-container:hover .site-logo-underline {
+  transform: scaleX(1);
+  opacity: 1;
+}
+
+/* Active / pressed state */
+.site-logo-container:active {
+  transform: scale(0.97);
+  box-shadow: none;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   RESOURCES PAGE — Terminal theme animations
+   ═══════════════════════════════════════════════════════════════ */
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-blink-cursor {
+  animation: blink-cursor 1s step-end infinite;
+}
+
+@keyframes pulse-play {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(27, 156, 133, 0.4); }
+  50% { box-shadow: 0 0 0 12px rgba(27, 156, 133, 0); }
+}
+
+.animate-pulse-play {
+  animation: pulse-play 2s ease-in-out infinite;
+}
+
+@keyframes type-line {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+/* Hide scrollbar for carousel */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Syntax highlighting colors for Resources code block */
+.syn-comment { color: #8b949e; }
+.syn-keyword { color: #E8633B; }
+.syn-string { color: #22B899; }
+.sin-fn { color: #B48AFF; }
+.syn-variable { color: #18B0C8; }
+.syn-constant { color: #F0A820; }
+.syn-fg { color: #F0EFEC; }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   macOS 27 GLOBAL TRANSITIONS & SELECTION
+   ═══════════════════════════════════════════════════════════════ */
+
+::selection {
+  background: color-mix(in srgb, var(--gg-vermillion) 20%, transparent);
+  color: var(--foreground);
+}
+
+/* Focus ring — macOS style */
+:focus-visible {
+  outline: 2px solid var(--gg-vermillion);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Smooth page transitions */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  transition: background-color 0.3s ease, color 0.3s ease;
 }

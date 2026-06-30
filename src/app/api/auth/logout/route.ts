@@ -1,30 +1,39 @@
-import { NextRequest } from 'next/server';
-import { db } from '@/lib/db';
-import { getAdminSession } from '@/lib/api-helpers';
+import { NextRequest, NextResponse } from 'next/server'
+import { withRetry } from '@/lib/db'
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const result = await getAdminSession(request);
-    if (result) {
-      await db.adminSession.delete({ where: { id: result.session.id } });
+    const sessionToken = req.cookies.get('admin_session')?.value
+
+    if (sessionToken) {
+      // Delete the session from database
+      await withRetry((tx) =>
+        tx.adminSession.deleteMany({ where: { token: sessionToken } })
+      ).catch(() => {})
     }
 
-    return Response.json(
-      { success: true },
-      {
-        headers: {
-          'Set-Cookie': 'admin_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
-        },
-      }
-    );
+    // Clear the cookie
+    const response = NextResponse.json({ success: true })
+    response.cookies.set('admin_session', '', {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: 0,
+      path: '/',
+    })
+
+    return response
   } catch (error) {
-    return Response.json(
-      { success: true },
-      {
-        headers: {
-          'Set-Cookie': 'admin_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
-        },
-      }
-    );
+    console.error('[Auth] Logout error:', error)
+    // Still clear the cookie even if DB deletion fails
+    const response = NextResponse.json({ success: true })
+    response.cookies.set('admin_session', '', {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: 0,
+      path: '/',
+    })
+    return response
   }
 }

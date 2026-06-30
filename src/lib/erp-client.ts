@@ -12,7 +12,6 @@ export interface ErpSystemConfig {
   sslMode: string;
 }
 
-// Connection pool cache per ERP system
 const pools = new Map<string, pg.Pool>();
 
 function getConnectionString(config: ErpSystemConfig): string {
@@ -79,20 +78,6 @@ export async function executeErp(
 ): Promise<void> {
   const pool = getErpPool(config);
   await pool.query(sql, params);
-}
-
-export async function getErpTableStats(config: ErpSystemConfig) {
-  const rows = await queryErp<{ tablename: string; rowcount: string }>(
-    config,
-    `
-    SELECT schemaname || '.' || tablename as tablename, 
-           n_live_tup as rowcount
-    FROM pg_stat_user_tables 
-    WHERE schemaname = 'public'
-    ORDER BY n_live_tup DESC
-    `
-  );
-  return rows;
 }
 
 export async function getErpDashboardMetrics(config: ErpSystemConfig, tenantId?: string) {
