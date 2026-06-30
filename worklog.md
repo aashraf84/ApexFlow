@@ -46,3 +46,31 @@ Stage Summary:
 - Database schema synced: 2 columns added, 2 tables created
 - Login flow verified end-to-end via curl: login returns 200, cookie set, session check returns authenticated:true
 - Key files: /home/z/apexflow-study/src/app/api/auth/login/route.ts, /home/z/apexflow-study/src/lib/db.ts
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix browser login failure for ApexFlow admin panel
+
+Work Log:
+- Read and analyzed the complete login flow: login page → API route → session route → admin layout
+- Identified 3 root causes:
+  1. Cookie race condition: router.push() triggered session check before Set-Cookie was processed
+  2. SQLite on Vercel: commit 5029317 switched from Neon PostgreSQL to SQLite, but SQLite filesystem is ephemeral on Vercel serverless, causing sessions to be lost between function invocations
+  3. Cookie secure flag was hardcoded to false even on HTTPS production
+- Fixed login page: replaced router.push() with window.location.href for full page reload after login
+- Fixed admin layout: added explicit credentials:'same-origin' to session check fetch
+- Fixed login API: made cookie secure flag dynamic based on x-forwarded-proto header
+- Reverted Prisma schema from sqlite to postgresql provider
+- Made db-env.ts conditional: only overrides DATABASE_URL when USE_LOCAL_SQLITE=true
+- Updated db.ts: retry patterns now adapt based on IS_NEON_POSTGRES flag
+- Fixed ef-db.ts: removed reference to deleted NEON_URL export
+- Removed SQLite db files from git tracking, added db/*.db to .gitignore
+- Regenerated Prisma client for PostgreSQL
+- Committed and pushed to GitHub (7e622f8)
+
+Stage Summary:
+- Pushed commit 7e622f8 with all fixes
+- Production will use Neon PostgreSQL again (Vercel sets DATABASE_URL env var)
+- Login should now work: full page reload guarantees cookie availability
+- Local dev can use SQLite by setting USE_LOCAL_SQLITE=true in .env

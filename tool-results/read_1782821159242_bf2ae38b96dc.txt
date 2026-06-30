@@ -1,0 +1,1396 @@
+     1→// ApexFlow Cloud Platform — Full Database Schema
+     2→generator client {
+     3→  provider = "prisma-client-js"
+     4→}
+     5→
+     6→datasource db {
+     7→  provider = "sqlite"
+     8→  url      = env("DATABASE_URL")
+     9→}
+    10→
+    11→model Tenant {
+    12→  id            String    @id @default(cuid())
+    13→  name          String
+    14→  slug          String    @unique
+    15→  domain        String?
+    16→  logo          String?
+    17→  primaryColor  String    @default("#10b981")
+    18→  subscription  String    @default("starter")
+    19→  maxBranches   Int       @default(5)
+    20→  maxUsers      Int       @default(10)
+    21→  isActive      Boolean   @default(true)
+    22→  omsId         String?
+    23→  omsSyncToken  String?
+    24→  omsLastSyncAt DateTime?
+    25→  createdAt     DateTime  @default(now())
+    26→  updatedAt     DateTime  @updatedAt
+    27→
+    28→  branches              Branch[]
+    29→  users                 User[]
+    30→  categories            Category[]
+    31→  products              Product[]
+    32→  customers             Customer[]
+    33→  suppliers             Supplier[]
+    34→  sales                 Sale[]
+    35→  quotations            Quotation[]
+    36→  expenses              Expense[]
+    37→  expenseCategories     ExpenseCategory[]
+    38→  purchaseOrders        PurchaseOrder[]
+    39→  chartOfAccounts       ChartOfAccount[]
+    40→  journalEntries        JournalEntry[]
+    41→  warehouses            Warehouse[]
+    42→  stockItems            StockItem[]
+    43→  stockTransfers        StockTransfer[]
+    44→  deliveries            Delivery[]
+    45→  installmentPlans      InstallmentPlan[]
+    46→  recoveryAssignments   RecoveryAssignment[]
+    47→  serviceTickets        ServiceTicket[]
+    48→  helpdeskTickets       HelpdeskTicket[]
+    49→  warrantyClaims        WarrantyClaim[]
+    50→  returnExchanges       ReturnExchange[]
+    51→  campaigns             Campaign[]
+    52→  loyaltyPrograms       LoyaltyProgram[]
+    53→  notificationTemplates NotificationTemplate[]
+    54→  notificationLogs      NotificationLog[]
+    55→  savedReports          SavedReport[]
+    56→  auditLogs             AuditLog[]
+    57→  departments           Department[]
+    58→  tenantSettings        TenantSetting[]
+    59→  supplierPayments      SupplierPayment[]
+    60→  employees             Employee[]
+    61→}
+    62→
+    63→model TenantSetting {
+    64→  id       String @id @default(cuid())
+    65→  tenantId String
+    66→  key      String
+    67→  value    String
+    68→  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+    69→
+    70→  @@unique([tenantId, key])
+    71→}
+    72→
+    73→model User {
+    74→  id          String    @id @default(cuid())
+    75→  tenantId    String
+    76→  email       String
+    77→  name        String
+    78→  password    String
+    79→  phone       String?
+    80→  avatar      String?
+    81→  role        String    @default("user")
+    82→  isActive    Boolean   @default(true)
+    83→  lastLoginAt DateTime?
+    84→  createdAt   DateTime  @default(now())
+    85→  updatedAt   DateTime  @updatedAt
+    86→
+    87→  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+    88→  sessions  Session[]
+    89→  auditLogs AuditLog[]
+    90→
+    91→  @@unique([tenantId, email])
+    92→}
+    93→
+    94→model Session {
+    95→  id        String   @id @default(cuid())
+    96→  userId    String
+    97→  token     String
+    98→  device    String?
+    99→  ip        String?
+   100→  expiresAt DateTime
+   101→  createdAt DateTime @default(now())
+   102→
+   103→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   104→
+   105→  @@unique([token])
+   106→}
+   107→
+   108→model AuditLog {
+   109→  id        String   @id @default(cuid())
+   110→  tenantId  String
+   111→  userId    String?
+   112→  action    String
+   113→  entity    String
+   114→  entityId  String?
+   115→  details   String?
+   116→  ip        String?
+   117→  createdAt DateTime @default(now())
+   118→
+   119→  tenant Tenant @relation(fields: [tenantId], references: [id])
+   120→  user   User?  @relation(fields: [userId], references: [id])
+   121→}
+   122→
+   123→model Branch {
+   124→  id        String   @id @default(cuid())
+   125→  tenantId  String
+   126→  name      String
+   127→  code      String
+   128→  address   String?
+   129→  phone     String?
+   130→  email     String?
+   131→  manager   String?
+   132→  isActive  Boolean  @default(true)
+   133→  createdAt DateTime @default(now())
+   134→  updatedAt DateTime @updatedAt
+   135→
+   136→  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+   137→  employees  Employee[]
+   138→  warehouses Warehouse[]
+   139→  sales      Sale[]
+   140→  stockItems StockItem[]
+   141→
+   142→  @@unique([tenantId, code])
+   143→}
+   144→
+   145→model Department {
+   146→  id        String   @id @default(cuid())
+   147→  tenantId  String
+   148→  name      String
+   149→  createdAt DateTime @default(now())
+   150→  updatedAt DateTime @updatedAt
+   151→
+   152→  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+   153→  employees Employee[]
+   154→
+   155→  @@unique([tenantId, name])
+   156→}
+   157→
+   158→model Employee {
+   159→  id           String    @id @default(cuid())
+   160→  tenantId     String
+   161→  branchId     String?
+   162→  departmentId String?
+   163→  name         String
+   164→  email        String?
+   165→  phone        String?
+   166→  cnic         String?
+   167→  designation  String?
+   168→  salary       Float     @default(0)
+   169→  commission   Float     @default(0)
+   170→  hireDate     DateTime?
+   171→  isActive     Boolean   @default(true)
+   172→  createdAt    DateTime  @default(now())
+   173→  updatedAt    DateTime  @updatedAt
+   174→
+   175→  tenant     Tenant       @relation(fields: [tenantId], references: [id])
+   176→  branch     Branch?      @relation(fields: [branchId], references: [id])
+   177→  department Department?  @relation(fields: [departmentId], references: [id])
+   178→  attendance Attendance[]
+   179→  payroll    Payroll[]
+   180→}
+   181→
+   182→model Attendance {
+   183→  id         String    @id @default(cuid())
+   184→  employeeId String
+   185→  date       DateTime
+   186→  checkIn    DateTime?
+   187→  checkOut   DateTime?
+   188→  status     String    @default("present")
+   189→  notes      String?
+   190→
+   191→  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+   192→
+   193→  @@unique([employeeId, date])
+   194→}
+   195→
+   196→model Payroll {
+   197→  id          String    @id @default(cuid())
+   198→  employeeId  String
+   199→  month       String
+   200→  basicSalary Float
+   201→  commission  Float     @default(0)
+   202→  incentives  Float     @default(0)
+   203→  deductions  Float     @default(0)
+   204→  netPay      Float
+   205→  status      String    @default("pending")
+   206→  paidAt      DateTime?
+   207→
+   208→  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+   209→
+   210→  @@unique([employeeId, month])
+   211→}
+   212→
+   213→model Category {
+   214→  id        String   @id @default(cuid())
+   215→  tenantId  String
+   216→  name      String
+   217→  parent    String?
+   218→  icon      String?
+   219→  createdAt DateTime @default(now())
+   220→  updatedAt DateTime @updatedAt
+   221→
+   222→  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+   223→  products Product[]
+   224→
+   225→  @@unique([tenantId, name])
+   226→}
+   227→
+   228→model Product {
+   229→  id             String   @id @default(cuid())
+   230→  tenantId       String
+   231→  categoryId     String?
+   232→  name           String
+   233→  sku            String?
+   234→  barcode        String?
+   235→  brand          String?
+   236→  model          String?
+   237→  description    String?
+   238→  costPrice      Float    @default(0)
+   239→  salePrice      Float    @default(0)
+   240→  minPrice       Float?
+   241→  unit           String   @default("piece")
+   242→  hasSerial      Boolean  @default(false)
+   243→  hasIMEI        Boolean  @default(false)
+   244→  hasWarranty    Boolean  @default(false)
+   245→  warrantyMonths Int?
+   246→  reorderLevel   Int      @default(5)
+   247→  isActive       Boolean  @default(true)
+   248→  image          String?
+   249→  createdAt      DateTime @default(now())
+   250→  updatedAt      DateTime @updatedAt
+   251→
+   252→  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+   253→  category           Category?           @relation(fields: [categoryId], references: [id])
+   254→  stockItems         StockItem[]
+   255→  saleItems          SaleItem[]
+   256→  quotationItems     QuotationItem[]
+   257→  purchaseOrderItems PurchaseOrderItem[]
+   258→  stockTransfers     StockTransfer[]
+   259→  installmentPlans   InstallmentPlan[]
+   260→  serviceTickets     ServiceTicket[]
+   261→  warrantyClaims     WarrantyClaim[]
+   262→  returnExchanges    ReturnExchange[]
+   263→}
+   264→
+   265→model Warehouse {
+   266→  id        String   @id @default(cuid())
+   267→  tenantId  String
+   268→  branchId  String
+   269→  name      String
+   270→  address   String?
+   271→  isActive  Boolean  @default(true)
+   272→  createdAt DateTime @default(now())
+   273→  updatedAt DateTime @updatedAt
+   274→
+   275→  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+   276→  branch     Branch      @relation(fields: [branchId], references: [id])
+   277→  stockItems StockItem[]
+   278→}
+   279→
+   280→model StockItem {
+   281→  id             String    @id @default(cuid())
+   282→  tenantId       String
+   283→  productId      String
+   284→  warehouseId    String
+   285→  branchId       String
+   286→  quantity       Int       @default(0)
+   287→  reservedQty    Int       @default(0)
+   288→  serialNumber   String?
+   289→  imeiNumber     String?
+   290→  batchNumber    String?
+   291→  warrantyNumber String?
+   292→  condition      String    @default("new")
+   293→  purchaseDate   DateTime?
+   294→  expiryDate     DateTime?
+   295→  createdAt      DateTime  @default(now())
+   296→  updatedAt      DateTime  @updatedAt
+   297→
+   298→  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+   299→  product   Product   @relation(fields: [productId], references: [id])
+   300→  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+   301→  branch    Branch    @relation(fields: [branchId], references: [id])
+   302→}
+   303→
+   304→model StockTransfer {
+   305→  id           String   @id @default(cuid())
+   306→  tenantId     String
+   307→  fromBranchId String
+   308→  toBranchId   String
+   309→  productId    String
+   310→  quantity     Int
+   311→  status       String   @default("pending")
+   312→  notes        String?
+   313→  initiatedBy  String?
+   314→  receivedBy   String?
+   315→  createdAt    DateTime @default(now())
+   316→  updatedAt    DateTime @updatedAt
+   317→
+   318→  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+   319→  product Product @relation(fields: [productId], references: [id])
+   320→}
+   321→
+   322→model Customer {
+   323→  id            String    @id @default(cuid())
+   324→  tenantId      String
+   325→  name          String
+   326→  email         String?
+   327→  phone         String
+   328→  cnic          String?
+   329→  dateOfBirth   DateTime?
+   330→  gender        String?
+   331→  occupation    String?
+   332→  monthlyIncome Float?
+   333→  address       String?
+   334→  city          String?
+   335→  state         String?
+   336→  zipCode       String?
+   337→  creditLimit   Float     @default(0)
+   338→  riskScore     Float     @default(0)
+   339→  notes         String?
+   340→  isActive      Boolean   @default(true)
+   341→  createdAt     DateTime  @default(now())
+   342→  updatedAt     DateTime  @updatedAt
+   343→
+   344→  tenant           Tenant                @relation(fields: [tenantId], references: [id])
+   345→  addresses        CustomerAddress[]
+   346→  documents        CustomerDocument[]
+   347→  ledgerEntries    CustomerLedgerEntry[]
+   348→  guarantors       Guarantor[]
+   349→  sales            Sale[]
+   350→  deliveries       Delivery[]
+   351→  installmentPlans InstallmentPlan[]
+   352→  loyaltyPoints    LoyaltyPoint[]
+   353→  helpdeskTickets  HelpdeskTicket[]
+   354→  serviceTickets   ServiceTicket[]
+   355→  warrantyClaims   WarrantyClaim[]
+   356→  returnExchanges  ReturnExchange[]
+   357→  quotations       Quotation[]
+   358→}
+   359→
+   360→model CustomerAddress {
+   361→  id         String  @id @default(cuid())
+   362→  customerId String
+   363→  type       String
+   364→  address    String
+   365→  city       String?
+   366→  state      String?
+   367→  zipCode    String?
+   368→  isDefault  Boolean @default(false)
+   369→
+   370→  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+   371→}
+   372→
+   373→model CustomerDocument {
+   374→  id         String   @id @default(cuid())
+   375→  customerId String
+   376→  type       String
+   377→  name       String
+   378→  fileUrl    String
+   379→  verified   Boolean  @default(false)
+   380→  uploadedAt DateTime @default(now())
+   381→
+   382→  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+   383→}
+   384→
+   385→model CustomerLedgerEntry {
+   386→  id          String   @id @default(cuid())
+   387→  tenantId    String
+   388→  customerId  String
+   389→  type        String
+   390→  amount      Float
+   391→  balance     Float
+   392→  description String?
+   393→  referenceId String?
+   394→  createdAt   DateTime @default(now())
+   395→
+   396→  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+   397→}
+   398→
+   399→model Guarantor {
+   400→  id            String  @id @default(cuid())
+   401→  customerId    String
+   402→  name          String
+   403→  cnic          String?
+   404→  phone         String?
+   405→  address       String?
+   406→  relation      String?
+   407→  monthlyIncome Float?
+   408→
+   409→  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+   410→}
+   411→
+   412→model Supplier {
+   413→  id            String   @id @default(cuid())
+   414→  tenantId      String
+   415→  name          String
+   416→  email         String?
+   417→  phone         String?
+   418→  address       String?
+   419→  city          String?
+   420→  contactPerson String?
+   421→  paymentTerms  String?
+   422→  rating        Float    @default(0)
+   423→  isActive      Boolean  @default(true)
+   424→  createdAt     DateTime @default(now())
+   425→  updatedAt     DateTime @updatedAt
+   426→
+   427→  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+   428→  purchaseOrders   PurchaseOrder[]
+   429→  supplierPayments SupplierPayment[]
+   430→}
+   431→
+   432→model Sale {
+   433→  id            String   @id @default(cuid())
+   434→  tenantId      String
+   435→  branchId      String
+   436→  customerId    String?
+   437→  employeeId    String?
+   438→  invoiceNumber String
+   439→  saleType      String   @default("retail")
+   440→  subtotal      Float    @default(0)
+   441→  discount      Float    @default(0)
+   442→  taxAmount     Float    @default(0)
+   443→  totalAmount   Float
+   444→  paidAmount    Float    @default(0)
+   445→  paymentMethod String?
+   446→  status        String   @default("completed")
+   447→  notes         String?
+   448→  createdAt     DateTime @default(now())
+   449→  updatedAt     DateTime @updatedAt
+   450→
+   451→  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+   452→  branch          Branch           @relation(fields: [branchId], references: [id])
+   453→  customer        Customer?        @relation(fields: [customerId], references: [id])
+   454→  items           SaleItem[]
+   455→  payments        SalePayment[]
+   456→  delivery        Delivery?
+   457→  installmentPlan InstallmentPlan?
+   458→}
+   459→
+   460→model SaleItem {
+   461→  id             String  @id @default(cuid())
+   462→  saleId         String
+   463→  productId      String
+   464→  productName    String
+   465→  quantity       Int
+   466→  unitPrice      Float
+   467→  discount       Float   @default(0)
+   468→  totalPrice     Float
+   469→  serialNumber   String?
+   470→  imeiNumber     String?
+   471→  warrantyMonths Int?
+   472→
+   473→  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+   474→  product Product @relation(fields: [productId], references: [id])
+   475→}
+   476→
+   477→model SalePayment {
+   478→  id        String   @id @default(cuid())
+   479→  saleId    String
+   480→  amount    Float
+   481→  method    String
+   482→  reference String?
+   483→  createdAt DateTime @default(now())
+   484→
+   485→  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+   486→}
+   487→
+   488→model Quotation {
+   489→  id              String    @id @default(cuid())
+   490→  tenantId        String
+   491→  quotationNumber String
+   492→  customerId      String?
+   493→  branchId        String?
+   494→  employeeId      String?
+   495→  status          String    @default("draft")
+   496→  subtotal        Float     @default(0)
+   497→  discount        Float     @default(0)
+   498→  taxAmount       Float     @default(0)
+   499→  totalAmount     Float     @default(0)
+   500→  validUntil      DateTime?
+   501→  notes           String?
+   502→  approvedById    String?
+   503→  approvedAt      DateTime?
+   504→  convertedSaleId String?
+   505→  createdAt       DateTime  @default(now())
+   506→  updatedAt       DateTime  @updatedAt
+   507→
+   508→  tenant   Tenant          @relation(fields: [tenantId], references: [id])
+   509→  customer Customer?       @relation(fields: [customerId], references: [id])
+   510→  items    QuotationItem[]
+   511→}
+   512→
+   513→model QuotationItem {
+   514→  id          String  @id @default(cuid())
+   515→  quotationId String
+   516→  productId   String
+   517→  productName String
+   518→  quantity    Int
+   519→  unitPrice   Float
+   520→  discount    Float   @default(0)
+   521→  totalPrice  Float
+   522→  notes       String?
+   523→
+   524→  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+   525→  product   Product   @relation(fields: [productId], references: [id])
+   526→}
+   527→
+   528→model PurchaseOrder {
+   529→  id           String    @id @default(cuid())
+   530→  tenantId     String
+   531→  supplierId   String
+   532→  poNumber     String
+   533→  status       String    @default("draft")
+   534→  totalAmount  Float     @default(0)
+   535→  notes        String?
+   536→  orderDate    DateTime  @default(now())
+   537→  expectedDate DateTime?
+   538→  receivedDate DateTime?
+   539→  createdAt    DateTime  @default(now())
+   540→  updatedAt    DateTime  @updatedAt
+   541→
+   542→  tenant           Tenant              @relation(fields: [tenantId], references: [id])
+   543→  supplier         Supplier            @relation(fields: [supplierId], references: [id])
+   544→  items            PurchaseOrderItem[]
+   545→  supplierPayments SupplierPayment[]
+   546→}
+   547→
+   548→model PurchaseOrderItem {
+   549→  id              String @id @default(cuid())
+   550→  purchaseOrderId String
+   551→  productId       String
+   552→  quantity        Int
+   553→  unitPrice       Float
+   554→  totalPrice      Float
+   555→  receivedQty     Int    @default(0)
+   556→
+   557→  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+   558→  product       Product       @relation(fields: [productId], references: [id])
+   559→}
+   560→
+   561→model SupplierPayment {
+   562→  id              String   @id @default(cuid())
+   563→  tenantId        String
+   564→  supplierId      String
+   565→  purchaseOrderId String?
+   566→  amount          Float
+   567→  method          String
+   568→  reference       String?
+   569→  notes           String?
+   570→  paidAt          DateTime @default(now())
+   571→
+   572→  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+   573→  supplier      Supplier       @relation(fields: [supplierId], references: [id])
+   574→  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+   575→}
+   576→
+   577→model InstallmentPlan {
+   578→  id                   String   @id @default(cuid())
+   579→  tenantId             String
+   580→  saleId               String
+   581→  customerId           String
+   582→  productId            String
+   583→  totalAmount          Float
+   584→  downPayment          Float    @default(0)
+   585→  financedAmount       Float
+   586→  numberOfInstallments Int
+   587→  installmentAmount    Float
+   588→  frequency            String   @default("monthly")
+   589→  serviceCharge        Float    @default(0)
+   590→  penaltyRate          Float    @default(0)
+   591→  startDate            DateTime
+   592→  endDate              DateTime
+   593→  nextDueDate          DateTime
+   594→  status               String   @default("active")
+   595→  contractNumber       String?
+   596→  contractUrl          String?
+   597→  guarantorId          String?
+   598→  notes                String?
+   599→  createdAt            DateTime @default(now())
+   600→  updatedAt            DateTime @updatedAt
+   601→
+   602→  tenant              Tenant               @relation(fields: [tenantId], references: [id])
+   603→  sale                Sale                 @relation(fields: [saleId], references: [id])
+   604→  customer            Customer             @relation(fields: [customerId], references: [id])
+   605→  product             Product              @relation(fields: [productId], references: [id])
+   606→  payments            InstallmentPayment[]
+   607→  penaltyCharges      PenaltyCharge[]
+   608→  recoveryAssignments RecoveryAssignment[]
+   609→
+   610→  @@unique([saleId])
+   611→}
+   612→
+   613→model InstallmentPayment {
+   614→  id                String    @id @default(cuid())
+   615→  planId            String
+   616→  installmentNumber Int
+   617→  dueDate           DateTime
+   618→  amount            Float
+   619→  paidAmount        Float     @default(0)
+   620→  paidDate          DateTime?
+   621→  penalty           Float     @default(0)
+   622→  status            String    @default("pending")
+   623→  paymentMethod     String?
+   624→  reference         String?
+   625→  notes             String?
+   626→  createdAt         DateTime  @default(now())
+   627→  updatedAt         DateTime  @updatedAt
+   628→
+   629→  plan InstallmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+   630→}
+   631→
+   632→model PenaltyCharge {
+   633→  id        String   @id @default(cuid())
+   634→  planId    String
+   635→  amount    Float
+   636→  reason    String?
+   637→  waived    Boolean  @default(false)
+   638→  createdAt DateTime @default(now())
+   639→
+   640→  plan InstallmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+   641→}
+   642→
+   643→model RecoveryAssignment {
+   644→  id         String    @id @default(cuid())
+   645→  tenantId   String
+   646→  planId     String
+   647→  customerId String
+   648→  employeeId String
+   649→  stage      String    @default("reminder")
+   650→  priority   String    @default("normal")
+   651→  status     String    @default("open")
+   652→  assignedAt DateTime  @default(now())
+   653→  resolvedAt DateTime?
+   654→  notes      String?
+   655→
+   656→  tenant     Tenant             @relation(fields: [tenantId], references: [id])
+   657→  plan       InstallmentPlan    @relation(fields: [planId], references: [id])
+   658→  activities RecoveryActivity[]
+   659→}
+   660→
+   661→model RecoveryActivity {
+   662→  id           String    @id @default(cuid())
+   663→  assignmentId String
+   664→  type         String
+   665→  outcome      String?
+   666→  notes        String?
+   667→  followUpDate DateTime?
+   668→  createdAt    DateTime  @default(now())
+   669→
+   670→  assignment RecoveryAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+   671→}
+   672→
+   673→model ChartOfAccount {
+   674→  id       String  @id @default(cuid())
+   675→  tenantId String
+   676→  code     String
+   677→  name     String
+   678→  type     String
+   679→  parent   String?
+   680→  isActive Boolean @default(true)
+   681→
+   682→  tenant            Tenant             @relation(fields: [tenantId], references: [id])
+   683→  journalEntryLines JournalEntryLine[]
+   684→
+   685→  @@unique([tenantId, code])
+   686→}
+   687→
+   688→model JournalEntry {
+   689→  id          String   @id @default(cuid())
+   690→  tenantId    String
+   691→  entryNumber String
+   692→  date        DateTime
+   693→  description String?
+   694→  reference   String?
+   695→  isPosted    Boolean  @default(false)
+   696→  createdById String?
+   697→  createdAt   DateTime @default(now())
+   698→  updatedAt   DateTime @updatedAt
+   699→
+   700→  tenant Tenant             @relation(fields: [tenantId], references: [id])
+   701→  lines  JournalEntryLine[]
+   702→}
+   703→
+   704→model JournalEntryLine {
+   705→  id          String  @id @default(cuid())
+   706→  entryId     String
+   707→  accountId   String
+   708→  debit       Float   @default(0)
+   709→  credit      Float   @default(0)
+   710→  description String?
+   711→
+   712→  entry   JournalEntry   @relation(fields: [entryId], references: [id], onDelete: Cascade)
+   713→  account ChartOfAccount @relation(fields: [accountId], references: [id])
+   714→}
+   715→
+   716→model Expense {
+   717→  id          String   @id @default(cuid())
+   718→  tenantId    String
+   719→  categoryId  String
+   720→  amount      Float
+   721→  description String?
+   722→  date        DateTime
+   723→  paidBy      String?
+   724→  receipt     String?
+   725→  status      String   @default("pending")
+   726→  createdAt   DateTime @default(now())
+   727→  updatedAt   DateTime @updatedAt
+   728→
+   729→  tenant   Tenant          @relation(fields: [tenantId], references: [id])
+   730→  category ExpenseCategory @relation(fields: [categoryId], references: [id])
+   731→}
+   732→
+   733→model ExpenseCategory {
+   734→  id       String @id @default(cuid())
+   735→  tenantId String
+   736→  name     String
+   737→
+   738→  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+   739→  expenses Expense[]
+   740→
+   741→  @@unique([tenantId, name])
+   742→}
+   743→
+   744→model Delivery {
+   745→  id              String    @id @default(cuid())
+   746→  tenantId        String
+   747→  saleId          String?
+   748→  customerId      String?
+   749→  orderNumber     String
+   750→  deliveryAddress String
+   751→  city            String?
+   752→  phone           String?
+   753→  courierName     String?
+   754→  trackingNumber  String?
+   755→  status          String    @default("pending")
+   756→  deliveryFee     Float     @default(0)
+   757→  codAmount       Float     @default(0)
+   758→  assignedToId    String?
+   759→  scheduledDate   DateTime?
+   760→  shippedAt       DateTime?
+   761→  deliveredAt     DateTime?
+   762→  notes           String?
+   763→  createdAt       DateTime  @default(now())
+   764→  updatedAt       DateTime  @updatedAt
+   765→
+   766→  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+   767→  customer Customer? @relation(fields: [customerId], references: [id])
+   768→  sale     Sale?     @relation(fields: [saleId], references: [id])
+   769→
+   770→  @@unique([saleId])
+   771→}
+   772→
+   773→model ServiceTicket {
+   774→  id              String    @id @default(cuid())
+   775→  tenantId        String
+   776→  ticketNumber    String
+   777→  customerId      String?
+   778→  productId       String
+   779→  serialNumber    String?
+   780→  imeiNumber      String?
+   781→  issue           String
+   782→  priority        String    @default("normal")
+   783→  status          String    @default("received")
+   784→  assignedToId    String?
+   785→  estimatedCost   Float     @default(0)
+   786→  actualCost      Float     @default(0)
+   787→  diagnosis       String?
+   788→  repairNotes     String?
+   789→  receivedAt      DateTime  @default(now())
+   790→  estimatedReady  DateTime?
+   791→  completedAt     DateTime?
+   792→  deliveredAt     DateTime?
+   793→  warrantyCovered Boolean   @default(false)
+   794→  createdAt       DateTime  @default(now())
+   795→  updatedAt       DateTime  @updatedAt
+   796→
+   797→  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+   798→  customer Customer? @relation(fields: [customerId], references: [id])
+   799→  product  Product   @relation(fields: [productId], references: [id])
+   800→}
+   801→
+   802→model HelpdeskTicket {
+   803→  id           String    @id @default(cuid())
+   804→  tenantId     String
+   805→  ticketNumber String
+   806→  customerId   String?
+   807→  subject      String
+   808→  description  String
+   809→  category     String    @default("general")
+   810→  priority     String    @default("normal")
+   811→  status       String    @default("open")
+   812→  assignedToId String?
+   813→  source       String    @default("walk_in")
+   814→  slaDeadline  DateTime?
+   815→  resolvedAt   DateTime?
+   816→  satisfaction Int?
+   817→  createdAt    DateTime  @default(now())
+   818→  updatedAt    DateTime  @updatedAt
+   819→
+   820→  tenant    Tenant             @relation(fields: [tenantId], references: [id])
+   821→  customer  Customer?          @relation(fields: [customerId], references: [id])
+   822→  responses HelpdeskResponse[]
+   823→}
+   824→
+   825→model HelpdeskResponse {
+   826→  id          String   @id @default(cuid())
+   827→  ticketId    String
+   828→  responderId String?
+   829→  message     String
+   830→  isInternal  Boolean  @default(false)
+   831→  createdAt   DateTime @default(now())
+   832→
+   833→  ticket HelpdeskTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+   834→}
+   835→
+   836→model WarrantyClaim {
+   837→  id            String    @id @default(cuid())
+   838→  tenantId      String
+   839→  productId     String
+   840→  customerId    String?
+   841→  serialNumber  String?
+   842→  warrantyType  String    @default("manufacturer")
+   843→  issue         String
+   844→  status        String    @default("open")
+   845→  repairCost    Float     @default(0)
+   846→  serviceDate   DateTime?
+   847→  completedDate DateTime?
+   848→  notes         String?
+   849→  createdAt     DateTime  @default(now())
+   850→  updatedAt     DateTime  @updatedAt
+   851→
+   852→  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+   853→  product  Product   @relation(fields: [productId], references: [id])
+   854→  customer Customer? @relation(fields: [customerId], references: [id])
+   855→}
+   856→
+   857→model ReturnExchange {
+   858→  id                String    @id @default(cuid())
+   859→  tenantId          String
+   860→  type              String
+   861→  saleId            String?
+   862→  customerId        String?
+   863→  productId         String
+   864→  serialNumber      String?
+   865→  imeiNumber        String?
+   866→  reason            String
+   867→  condition         String    @default("sealed")
+   868→  refundAmount      Float     @default(0)
+   869→  exchangeProductId String?
+   870→  status            String    @default("requested")
+   871→  processedById     String?
+   872→  processedAt       DateTime?
+   873→  notes             String?
+   874→  createdAt         DateTime  @default(now())
+   875→  updatedAt         DateTime  @updatedAt
+   876→
+   877→  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+   878→  product  Product   @relation(fields: [productId], references: [id])
+   879→  customer Customer? @relation(fields: [customerId], references: [id])
+   880→}
+   881→
+   882→model Campaign {
+   883→  id             String    @id @default(cuid())
+   884→  tenantId       String
+   885→  name           String
+   886→  type           String
+   887→  subject        String?
+   888→  message        String
+   889→  targetGroup    String?
+   890→  status         String    @default("draft")
+   891→  scheduledAt    DateTime?
+   892→  sentAt         DateTime?
+   893→  recipientCount Int       @default(0)
+   894→  createdAt      DateTime  @default(now())
+   895→  updatedAt      DateTime  @updatedAt
+   896→
+   897→  tenant Tenant @relation(fields: [tenantId], references: [id])
+   898→}
+   899→
+   900→model LoyaltyProgram {
+   901→  id                  String   @id @default(cuid())
+   902→  tenantId            String
+   903→  name                String
+   904→  pointsPerAmount     Float    @default(1)
+   905→  minimumRedeemPoints Int      @default(100)
+   906→  isActive            Boolean  @default(true)
+   907→  createdAt           DateTime @default(now())
+   908→  updatedAt           DateTime @updatedAt
+   909→
+   910→  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+   911→  loyaltyPoints LoyaltyPoint[]
+   912→}
+   913→
+   914→model LoyaltyPoint {
+   915→  id          String   @id @default(cuid())
+   916→  customerId  String
+   917→  programId   String
+   918→  points      Int      @default(0)
+   919→  source      String
+   920→  referenceId String?
+   921→  createdAt   DateTime @default(now())
+   922→
+   923→  customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+   924→  program  LoyaltyProgram @relation(fields: [programId], references: [id])
+   925→}
+   926→
+   927→model NotificationTemplate {
+   928→  id        String   @id @default(cuid())
+   929→  tenantId  String
+   930→  name      String
+   931→  type      String
+   932→  category  String
+   933→  subject   String?
+   934→  body      String
+   935→  variables String?
+   936→  isActive  Boolean  @default(true)
+   937→  createdAt DateTime @default(now())
+   938→  updatedAt DateTime @updatedAt
+   939→
+   940→  tenant Tenant @relation(fields: [tenantId], references: [id])
+   941→}
+   942→
+   943→model NotificationLog {
+   944→  id             String    @id @default(cuid())
+   945→  tenantId       String
+   946→  type           String
+   947→  category       String
+   948→  recipientId    String?
+   949→  recipientPhone String?
+   950→  recipientEmail String?
+   951→  subject        String?
+   952→  message        String
+   953→  status         String    @default("pending")
+   954→  provider       String?
+   955→  referenceId    String?
+   956→  sentAt         DateTime?
+   957→  deliveredAt    DateTime?
+   958→  failureReason  String?
+   959→  createdAt      DateTime  @default(now())
+   960→
+   961→  tenant Tenant @relation(fields: [tenantId], references: [id])
+   962→}
+   963→
+   964→model SavedReport {
+   965→  id        String    @id @default(cuid())
+   966→  tenantId  String
+   967→  userId    String?
+   968→  name      String
+   969→  type      String
+   970→  config    String
+   971→  schedule  String?
+   972→  isPublic  Boolean   @default(false)
+   973→  lastRunAt DateTime?
+   974→  createdAt DateTime  @default(now())
+   975→  updatedAt DateTime  @updatedAt
+   976→
+   977→  tenant Tenant @relation(fields: [tenantId], references: [id])
+   978→}
+   979→
+   980→/* ═══════════════════════════════════════════════════════════════
+   981→   ApexFlow Cloud Platform Models
+   982→   ═══════════════════════════════════════════════════════════════ */
+   983→
+   984→model ErpSystem {
+   985→  id          String   @id @default(cuid())
+   986→  name        String
+   987→  slug        String   @unique
+   988→  description String?
+   989→  icon        String   @default("building")
+   990→  color       String   @default("cyan")
+   991→  status      String   @default("active")
+   992→  version     String   @default("1.0.0")
+   993→  website     String?
+   994→  industry    String?
+   995→  features    String?
+   996→  pricing     String?
+   997→  databaseUrl String?  // Neon PostgreSQL connection string for this ERP
+   998→  sortOrder   Int      @default(0)
+   999→  moduleCount Int      @default(0)
+  1000→  isActive    Boolean  @default(true)
+  1001→  createdAt   DateTime @default(now())
+  1002→  updatedAt   DateTime @updatedAt
+  1003→
+  1004→  clients       Client[]
+  1005→  subscriptions Subscription[]
+  1006→  licenses      License[]
+  1007→  packages      Package[]
+  1008→  orders        Order[]
+  1009→  syncConnectors SyncConnector[]
+  1010→}
+  1011→
+  1012→model Client {
+  1013→  id            String    @id @default(cuid())
+  1014→  companyName   String
+  1015→  contactPerson String
+  1016→  email         String    @unique
+  1017→  phone         String?
+  1018→  address       String?
+  1019→  city          String?
+  1020→  state         String?
+  1021→  country       String?
+  1022→  postalCode    String?
+  1023→  website       String?
+  1024→  taxId         String?
+  1025→  status        String    @default("trial")
+  1026→  industry      String?
+  1027→  businessType  String?
+  1028→  companySize   String?
+  1029→  notes         String?
+  1030→  erpSystemId   String?
+  1031→  databaseName  String?
+  1032→  createdAt     DateTime  @default(now())
+  1033→  updatedAt     DateTime  @updatedAt
+  1034→
+  1035→  erpSystem    ErpSystem?     @relation(fields: [erpSystemId], references: [id])
+  1036→  subscriptions Subscription[]
+  1037→  licenses     License[]
+  1038→  orders       Order[]
+  1039→  invoices     Invoice[]
+  1040→  payments     Payment[]
+  1041→  syncTenants  SyncTenant[]
+  1042→}
+  1043→
+  1044→model Subscription {
+  1045→  id              String    @id @default(cuid())
+  1046→  clientId        String
+  1047→  erpSystemId     String
+  1048→  plan            String    @default("starter")
+  1049→  status          String    @default("active")
+  1050→  startDate       DateTime  @default(now())
+  1051→  endDate         DateTime?
+  1052→  trialEndsAt     DateTime?
+  1053→  monthlyFee      Float     @default(0)
+  1054→  currency        String    @default("PKR")
+  1055→  billingCycle    String    @default("monthly")
+  1056→  maxUsers        Int       @default(5)
+  1057→  maxLocations    Int?
+  1058→  maxItems        Int?
+  1059→  includedModules String?
+  1060→  stripeSubscriptionId String?
+  1061→  stripePriceId        String?
+  1062→  createdAt       DateTime  @default(now())
+  1063→  updatedAt       DateTime  @updatedAt
+  1064→
+  1065→  client    Client    @relation(fields: [clientId], references: [id])
+  1066→  erpSystem ErpSystem @relation(fields: [erpSystemId], references: [id])
+  1067→}
+  1068→
+  1069→model Package {
+  1070→  id          String   @id @default(cuid())
+  1071→  name        String
+  1072→  slug        String   @unique
+  1073→  description String?
+  1074→  price       Float    @default(0)
+  1075→  currency    String   @default("PKR")
+  1076→  plan        String   @default("starter")
+  1077→  erpSystemId String?
+  1078→  features    String?
+  1079→  isActive    Boolean  @default(true)
+  1080→  sortOrder   Int      @default(0)
+  1081→  stripePriceId String?
+  1082→  createdAt   DateTime @default(now())
+  1083→  updatedAt   DateTime @updatedAt
+  1084→
+  1085→  erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id])
+  1086→}
+  1087→
+  1088→model License {
+  1089→  id              String    @id @default(cuid())
+  1090→  clientId        String
+  1091→  erpSystemId     String?
+  1092→  serialKey       String    @unique
+  1093→  licenseKey      String?
+  1094→  type            String    @default("standard")
+  1095→  status          String    @default("active")
+  1096→  maxUsers        Int       @default(5)
+  1097→  maxDevices      Int       @default(3)
+  1098→  activatedAt     DateTime?
+  1099→  expiresAt       DateTime?
+  1100→  lastVerifiedAt  DateTime?
+  1101→  createdAt       DateTime  @default(now())
+  1102→  updatedAt       DateTime  @updatedAt
+  1103→
+  1104→  client    Client     @relation(fields: [clientId], references: [id])
+  1105→  erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id])
+  1106→}
+  1107→
+  1108→model Order {
+  1109→  id                String    @id @default(cuid())
+  1110→  orderNumber       String    @unique
+  1111→  clientId          String?
+  1112→  erpSystemId       String
+  1113→  plan              String    @default("starter")
+  1114→  billingCycle      String    @default("monthly")
+  1115→  quantity          Int       @default(1)
+  1116→  unitPrice         Float
+  1117→  discountAmount    Float     @default(0)
+  1118→  totalAmount       Float
+  1119→  currency          String    @default("PKR")
+  1120→  status            String    @default("pending")
+  1121→  paymentStatus     String    @default("pending")
+  1122→  stripeCheckoutSessionId String?
+  1123→  stripePaymentIntentId    String?
+  1124→  customerEmail     String
+  1125→  customerName      String
+  1126→  customerPhone     String?
+  1127→  companyName       String?
+  1128→  paymentMethod     String    @default("card")
+  1129→  paymentReference  String?
+  1130→  bankReference     String?
+  1131→  modules           String?
+  1132→  notes             String?
+  1133→  paidAt            DateTime?
+  1134→  createdAt         DateTime  @default(now())
+  1135→  updatedAt         DateTime  @updatedAt
+  1136→
+  1137→  client    Client?    @relation(fields: [clientId], references: [id])
+  1138→  erpSystem ErpSystem  @relation(fields: [erpSystemId], references: [id])
+  1139→  payments  Payment[]
+  1140→  invoice   Invoice?
+  1141→}
+  1142→
+  1143→model Payment {
+  1144→  id                String    @id @default(cuid())
+  1145→  orderId           String
+  1146→  clientId          String?
+  1147→  amount            Float
+  1148→  currency          String    @default("PKR")
+  1149→  method            String    @default("card")
+  1150→  status            String    @default("pending")
+  1151→  stripePaymentId   String?
+  1152→  stripeChargeId    String?
+  1153→  cardBrand         String?
+  1154→  cardLast4         String?
+  1155→  cardExpMonth      Int?
+  1156→  cardExpYear       Int?
+  1157→  receiptUrl        String?
+  1158→  refundReason      String?
+  1159→  refundedAt        DateTime?
+  1160→  metadata          String?
+  1161→  verifiedAt        DateTime?
+  1162→  createdAt         DateTime  @default(now())
+  1163→  updatedAt         DateTime  @updatedAt
+  1164→
+  1165→  order   Order     @relation(fields: [orderId], references: [id])
+  1166→  client  Client?   @relation(fields: [clientId], references: [id])
+  1167→}
+  1168→
+  1169→model Invoice {
+  1170→  id            String    @id @default(cuid())
+  1171→  orderId       String    @unique
+  1172→  invoiceNumber String    @unique
+  1173→  clientId      String?
+  1174→  amount        Float
+  1175→  currency      String    @default("PKR")
+  1176→  status        String    @default("draft")
+  1177→  dueDate       DateTime?
+  1178→  paidAt        DateTime?
+  1179→  pdfUrl        String?
+  1180→  createdAt     DateTime  @default(now())
+  1181→  updatedAt     DateTime  @updatedAt
+  1182→
+  1183→  order   Order    @relation(fields: [orderId], references: [id])
+  1184→  client  Client?  @relation(fields: [clientId], references: [id])
+  1185→}
+  1186→
+  1187→/* ═══════════════════════════════════════════════════════════════
+  1188→   Payment Accounts & Settings — Enterprise Payment Configuration
+  1189→   ═══════════════════════════════════════════════════════════════ */
+  1190→
+  1191→model PaymentAccount {
+  1192→  id            String    @id @default(cuid())
+  1193→  label         String
+  1194→  gateway       String    @default("stripe")
+  1195→  type          String    @default("bank_account")
+  1196→  currency      String    @default("PKR")
+  1197→  isActive      Boolean   @default(true)
+  1198→  isDefault     Boolean   @default(false)
+  1199→  sortOrder     Int       @default(0)
+  1200→
+  1201→  // Bank account details
+  1202→  bankName      String?
+  1203→  accountTitle  String?
+  1204→  accountNumber String?
+  1205→  iban          String?
+  1206→  swiftCode     String?
+  1207→  branchName    String?
+  1208→  routingNumber String?
+  1209→
+  1210→  // Correspondent bank (for international wires)
+  1211→  correspondentBank   String?
+  1212→  correspondentSwift  String?
+  1213→
+  1214→  // Mobile wallet details (JazzCash, EasyPaisa, etc.)
+  1215→  walletProvider String?
+  1216→  walletAccount  String?
+  1217→  walletAccountName String?
+  1218→
+  1219→  // Stripe configuration
+  1220→  stripeSecretKey       String?
+  1221→  stripePublishableKey  String?
+  1222→  stripeWebhookSecret   String?
+  1223→  stripeAccountId       String?
+  1224→
+  1225→  // PayPal configuration
+  1226→  paypalClientId     String?
+  1227→  paypalClientSecret String?
+  1228→  paypalMode         String?  @default("sandbox")
+  1229→
+  1230→  // Raast configuration
+  1231→  raastId            String?
+  1232→
+  1233→  // Metadata & audit
+  1234→  lastFourDigits     String?
+  1235→  notes              String?
+  1236→  lastVerifiedAt     DateTime?
+  1237→  verifiedBy         String?
+  1238→  createdAt          DateTime  @default(now())
+  1239→  updatedAt          DateTime  @updatedAt
+  1240→}
+  1241→
+  1242→model PaymentSettings {
+  1243→  id                    String   @id @default(cuid())
+  1244→  key                   String   @unique
+  1245→  value                 String
+  1246→  description           String?
+  1247→  isEncrypted           Boolean  @default(false)
+  1248→  updatedAt             DateTime @updatedAt
+  1249→  createdAt             DateTime @default(now())
+  1250→}
+  1251→
+  1252→model PaymentAuditLog {
+  1253→  id          String   @id @default(cuid())
+  1254→  action      String
+  1255→  entity      String
+  1256→  entityId    String?
+  1257→  changes     String?
+  1258→  performedBy String?
+  1259→  ip          String?
+  1260→  createdAt   DateTime @default(now())
+  1261→}
+  1262→
+  1263→/* ═══════════════════════════════════════════════════════════════
+  1264→   Site Settings — Complete Site Configuration
+  1265→   ═══════════════════════════════════════════════════════════════ */
+  1266→
+  1267→model SiteSetting {
+  1268→  id          String   @id @default(cuid())
+  1269→  key         String   @unique
+  1270→  value       String
+  1271→  category    String   @default("general")
+  1272→  description String?
+  1273→  createdAt   DateTime @default(now())
+  1274→  updatedAt   DateTime @updatedAt
+  1275→}
+  1276→
+  1277→/* ═══════════════════════════════════════════════════════════════
+  1278→   Sync Models — Integration Connectors & Sync Events
+  1279→   ═══════════════════════════════════════════════════════════════ */
+  1280→
+  1281→model SyncConnector {
+  1282→  id          String   @id @default(cuid())
+  1283→  name        String
+  1284→  type        String   @default("erp")
+  1285→  status      String   @default("active")
+  1286→  description String?
+  1287→  config      String?
+  1288→  lastSyncAt  DateTime?
+  1289→  recordsSynced Int    @default(0)
+  1290→  erpSystemId String?
+  1291→  createdAt   DateTime @default(now())
+  1292→  updatedAt   DateTime @updatedAt
+  1293→
+  1294→  erpSystem   ErpSystem?  @relation(fields: [erpSystemId], references: [id])
+  1295→  syncTenants SyncTenant[]
+  1296→  syncEvents  SyncEvent[]
+  1297→}
+  1298→
+  1299→model SyncTenant {
+  1300→  id           String   @id @default(cuid())
+  1301→  connectorId  String
+  1302→  clientId     String?
+  1303→  externalId   String?
+  1304→  externalName String?
+  1305→  status       String   @default("active")
+  1306→  lastSyncAt   DateTime?
+  1307→  syncCount    Int      @default(0)
+  1308→  errorCount   Int      @default(0)
+  1309→  config       String?
+  1310→  createdAt    DateTime @default(now())
+  1311→  updatedAt    DateTime @updatedAt
+  1312→
+  1313→  connector   SyncConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  1314→  client      Client?       @relation(fields: [clientId], references: [id])
+  1315→  syncEvents  SyncEvent[]
+  1316→}
+  1317→
+  1318→model SyncEvent {
+  1319→  id          String   @id @default(cuid())
+  1320→  connectorId String
+  1321→  tenantId    String?
+  1322→  eventType   String
+  1323→  status      String   @default("pending")
+  1324→  direction   String   @default("outbound")
+  1325→  payload     String?
+  1326→  result      String?
+  1327→  error       String?
+  1328→  duration    Int?
+  1329→  recordsAffected Int @default(0)
+  1330→  createdAt   DateTime @default(now())
+  1331→
+  1332→  connector   SyncConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  1333→  syncTenant  SyncTenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  1334→}
+  1335→
+  1336→// ============================================
+  1337→// Admin Panel Auth Models
+  1338→// ============================================
+  1339→
+  1340→model AdminRole {
+  1341→  id          String  @id @default(cuid())
+  1342→  name        String  @unique
+  1343→  description String?
+  1344→  permissions String  @default("[]")
+  1345→  createdAt   DateTime @default(now())
+  1346→  updatedAt   DateTime @updatedAt
+  1347→
+  1348→  users AdminUser[]
+  1349→}
+  1350→
+  1351→model AdminUser {
+  1352→  id        String   @id @default(cuid())
+  1353→  name      String
+  1354→  email     String   @unique
+  1355→  password  String
+  1356→  avatar    String?
+  1357→  role      String   @default("admin")
+  1358→  roleId    String?
+  1359→  isActive  Boolean  @default(true)
+  1360→  lastLogin DateTime?
+  1361→  createdAt DateTime @default(now())
+  1362→  updatedAt DateTime @updatedAt
+  1363→
+  1364→  adminRole AdminRole?      @relation(fields: [roleId], references: [id])
+  1365→  sessions  AdminSession[]
+  1366→  auditLogs AdminAuditLog[]
+  1367→}
+  1368→
+  1369→model AdminSession {
+  1370→  id        String   @id @default(cuid())
+  1371→  userId    String
+  1372→  token     String   @unique
+  1373→  ip        String?
+  1374→  device    String?
+  1375→  browser   String?
+  1376→  userAgent String?
+  1377→  expiresAt DateTime
+  1378→  createdAt DateTime @default(now())
+  1379→
+  1380→  user AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  1381→}
+  1382→
+  1383→model AdminAuditLog {
+  1384→  id        String   @id @default(cuid())
+  1385→  userId    String?
+  1386→  action    String
+  1387→  module    String?
+  1388→  entity    String?
+  1389→  entityId  String?
+  1390→  details   String?
+  1391→  ipAddress String?
+  1392→  createdAt DateTime @default(now())
+  1393→
+  1394→  user AdminUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  1395→}
+  1396→
