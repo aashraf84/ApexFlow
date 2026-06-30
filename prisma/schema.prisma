@@ -67,3 +67,26 @@ model AdminAuditLog {
 
   user AdminUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
+
+// ============================================
+// ERP System Registry (Multi-ERP Management)
+// ============================================
+
+model ErpSystem {
+  id          String   @id @default(cuid())
+  name        String
+  industry    String
+  description String?
+  dbHost      String
+  dbPort      Int      @default(5432)
+  dbName      String
+  dbUser      String
+  dbPassword  String
+  sslMode     String   @default("require")
+  status      String   @default("active")
+  color       String   @default("#6366f1")
+  sortOrder   Int      @default(0)
+  lastSyncAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
