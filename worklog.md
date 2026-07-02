@@ -70,3 +70,30 @@ Stage Summary:
 - Created: src/components/admin/system/settings/integration-settings.tsx (new tab content)
 - Modified: src/components/admin/system/settings/settings-page.tsx (added Integrations tab)
 - Zero changes to public website (only admin panel files touched)
+
+---
+Task ID: 6-7
+Agent: Main
+Task: Add CRUD buttons to the ACTUAL admin panel components user sees (integrations-tab.tsx and unified-settings-tab.tsx)
+
+Work Log:
+- Discovered user is on the OLD tab-based DashboardLayout (not the route-based admin)
+  - Integrations tab renders `IntegrationsTab` from `integrations-tab.tsx` (not integration-hub-page.tsx)
+  - Settings > Integrations renders `IntegrationsSection` from `unified-settings-tab.tsx`
+- Added full CRUD to `integrations-tab.tsx`:
+  - "Add Connector" button in header (green, calls POST /api/admin/integrations)
+  - "Edit" button (pencil icon) on each card with Dialog form
+  - "Delete" button (red trash icon) on each card with AlertDialog confirmation
+  - Shared Dialog for Add/Edit with ERP Name, auto-generated Slug, Type, Direction fields
+- Added Edit/Delete to `unified-settings-tab.tsx` ERP Connections section:
+  - "Edit" (pencil icon) button on each ERP row with Dialog for name/industry
+  - "Delete" (red trash icon) button with AlertDialog confirmation
+  - Imported AlertDialog and Dialog components
+  - Added handleEditErp, handleSaveErp, handleDeleteErp functions
+- Fixed framer-motion variants type error with `as any` cast
+- All pages compile with HTTP 200
+
+Stage Summary:
+- Modified: src/components/admin/integrations-tab.tsx (full CRUD: Add, Edit, Delete)
+- Modified: src/components/admin/unified-settings-tab.tsx (Edit, Delete on ERP Connections)
+- No changes to public website

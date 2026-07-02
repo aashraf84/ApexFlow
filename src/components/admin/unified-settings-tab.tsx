@@ -48,12 +48,32 @@ import {
   ChevronRight,
   ChevronDown,
   Clock,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { useSiteSettings } from '@/lib/site-settings-store'
@@ -1413,6 +1433,66 @@ function IntegrationsSection({
   const [erpDbUrls, setErpDbUrls] = useState<Record<string, string>>({})
   const [savingUrls, setSavingUrls] = useState<Record<string, boolean>>({})
 
+  // Edit/Delete state
+  const [editErp, setEditErp] = useState<ErpSystem | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editIndustry, setEditIndustry] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [deleteErp, setDeleteErp] = useState<ErpSystem | null>(null)
+  const [deleteSaving, setDeleteSaving] = useState(false)
+
+  const handleEditErp = (erp: ErpSystem) => {
+    setEditErp(erp)
+    setEditName(erp.name)
+    setEditIndustry(erp.industry || '')
+  }
+
+  const handleSaveErp = async () => {
+    if (!editErp || !editName.trim()) return
+    setEditSaving(true)
+    try {
+      const res = await fetch('/api/erp', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editErp.id, name: editName.trim(), industry: editIndustry.trim() }),
+      })
+      if (res.ok) {
+        toast.success(`${editErp.name} updated`)
+        setEditErp(null)
+        window.location.reload()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || 'Failed to update')
+      }
+    } catch {
+      toast.error('Network error')
+    }
+    setEditSaving(false)
+  }
+
+  const handleDeleteErp = async () => {
+    if (!deleteErp) return
+    setDeleteSaving(true)
+    try {
+      const res = await fetch('/api/erp', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deleteErp.id }),
+      })
+      if (res.ok) {
+        toast.success(`${deleteErp.name} deleted`)
+        setDeleteErp(null)
+        window.location.reload()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || 'Failed to delete')
+      }
+    } catch {
+      toast.error('Network error')
+    }
+    setDeleteSaving(false)
+  }
+
   // Load ERP database URLs on mount
   useEffect(() => {
     const loadErpDbUrls = async () => {
@@ -1587,12 +1667,30 @@ function IntegrationsSection({
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">{erp.industry}</p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-3">
+                  <div className="flex items-center gap-1.5 shrink-0 ml-3">
                     {status === 'connected' && details?.clientCount !== undefined && details.clientCount > 0 && (
                       <Badge variant="secondary" className="bg-[var(--gg-teal)]/10 text-[var(--gg-teal)] border-[var(--gg-teal)]/20 text-[10px]">
                         {details.clientCount} clients
                       </Badge>
                     )}
+                    {isActive && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => { e.stopPropagation(); handleEditErp(erp) }}
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-7 px-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteErp(erp) }}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
                     {isActive && (
                       <Button
                         variant="ghost"
@@ -1609,8 +1707,7 @@ function IntegrationsSection({
                         Test
                       </Button>
                     )}
-                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                  </div>
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />\n                  </div>
                 </div>
               </div>
 
@@ -1704,6 +1801,52 @@ function IntegrationsSection({
           {activeTab === 'erp' ? renderErpConnections() : renderSettingsForCategory(categoryMap[activeTab] || activeTab)}
         </motion.div>
       </AnimatePresence>
+
+      {/* Edit ERP Dialog */}
+      <Dialog open={!!editErp} onOpenChange={(open) => { if (!open) setEditErp(null) }}>
+        <DialogContent className="bg-card border-border max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit ERP System</DialogTitle>
+            <DialogDescription>Update the name and industry for this ERP system.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">ERP Name</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Industry</Label>
+              <Input value={editIndustry} onChange={(e) => setEditIndustry(e.target.value)} placeholder="e.g. Manufacturing" className="h-9 text-sm" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditErp(null)} className="border border-border">Cancel</Button>
+            <Button disabled={editSaving || !editName.trim()} onClick={handleSaveErp} className="bg-[var(--gg-vermillion)] text-white">
+              {editSaving ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete ERP AlertDialog */}
+      <AlertDialog open={!!deleteErp} onOpenChange={(open) => { if (!open) setDeleteErp(null) }}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete ERP System</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <span className="font-semibold text-foreground">{deleteErp?.name}</span>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteSaving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteErp} disabled={deleteSaving} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-1.5">
+              {deleteSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   )
 }

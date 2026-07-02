@@ -40,6 +40,9 @@ import {
   Route,
   Truck,
   Zap,
+  Plus,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -55,6 +58,23 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface RecentEvent {
   id: string
@@ -207,6 +227,19 @@ export function IntegrationsTab() {
   const [dbUrl, setDbUrl] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Add / Edit connector dialog
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [editingIntegration, setEditingIntegration] = useState<Integration | null>(null)
+  const [formName, setFormName] = useState('')
+  const [formSlug, setFormSlug] = useState('')
+  const [formType, setFormType] = useState('database')
+  const [formDirection, setFormDirection] = useState('bidirectional')
+  const [formSubmitting, setFormSubmitting] = useState(false)
+
+  // Delete confirmation dialog
+  const [deletingIntegration, setDeletingIntegration] = useState<Integration | null>(null)
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
+
   // Keep a ref to integrations so the WS callback can read the latest value
   const integrationsRef = useRef<Integration[]>(integrations)
   integrationsRef.current = integrations
@@ -253,6 +286,107 @@ export function IntegrationsTab() {
       toast.error(err instanceof Error ? err.message : 'Failed to save database URL')
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Generate slug from name
+  const generateSlug = (name: string) =>
+    name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+
+  const openAddDialog = () => {
+    setEditingIntegration(null)
+    setFormName('')
+    setFormSlug('')
+    setFormType('database')
+    setFormDirection('bidirectional')
+    setShowAddDialog(true)
+  }
+
+  const openEditDialog = (integration: Integration) => {
+    setEditingIntegration(integration)
+    setFormName(integration.erpName || integration.name)
+    setFormSlug(integration.slug)
+    setFormType(integration.type || 'database')
+    setFormDirection('bidirectional')
+    setShowAddDialog(true)
+  }
+
+  const handleFormNameChange = (value: string) => {
+    setFormName(value)
+    if (!editingIntegration) {
+      setFormSlug(generateSlug(value))
+    }
+  }
+
+  const handleFormSubmit = async () => {
+    if (!formName.trim() || !formSlug.trim()) return
+    setFormSubmitting(true)
+    try {
+      if (editingIntegration) {
+        // Edit existing
+        const res = await fetch('/api/admin/integrations', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingIntegration.id,
+            erpName: formName.trim(),
+            type: formType,
+            direction: formDirection,
+          }),
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || 'Failed to update connector')
+        }
+        toast.success(`Connector "${formName.trim()}" updated`)
+      } else {
+        // Add new
+        const res = await fetch('/api/admin/integrations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            erpSlug: formSlug.trim(),
+            erpName: formName.trim(),
+            type: formType,
+            direction: formDirection,
+          }),
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || 'Failed to add connector')
+        }
+        toast.success(`Connector "${formName.trim()}" added`)
+      }
+      setShowAddDialog(false)
+      setEditingIntegration(null)
+      fetchIntegrations(true)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Operation failed')
+    } finally {
+      setFormSubmitting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deletingIntegration) return
+    setDeleteSubmitting(true)
+    try {
+      const res = await fetch('/api/admin/integrations', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deletingIntegration.id }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to delete connector')
+      }
+      toast.success(`Connector "${deletingIntegration.name}" deleted`)
+      setDeletingIntegration(null)
+      fetchIntegrations(true)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Delete failed')
+    } finally {
+      setDeleteSubmitting(false)
     }
   }
 
@@ -448,6 +582,16 @@ export function IntegrationsTab() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Add Connector button */}
+          <Button
+            size="sm"
+            onClick={openAddDialog}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Connector
+          </Button>
+
           {/* Live indicator */}
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
             style={{
@@ -546,7 +690,7 @@ export function IntegrationsTab() {
             <motion.div
               key={integration.id}
               custom={i}
-              variants={cardVariants}
+              variants={cardVariants as any}
               initial="hidden"
               animate="visible"
               className={`bg-card/90 backdrop-blur border rounded-2xl p-5 hover:border-border transition-all duration-300 ${
@@ -657,6 +801,26 @@ export function IntegrationsTab() {
                   {integration.connected ? 'Database Settings' : 'Configure Database URL'}
                 </Button>
               )}
+
+              {/* Edit / Delete buttons */}
+              <div className="flex items-center justify-end gap-1 mt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                  onClick={() => openEditDialog(integration)}
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                  onClick={() => setDeletingIntegration(integration)}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
 
               {/* Error warning */}
               {hasErrors && (
@@ -787,6 +951,106 @@ export function IntegrationsTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Add / Edit Connector Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) { setShowAddDialog(false); setEditingIntegration(null) } }}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader>
+            <DialogTitle>{editingIntegration ? 'Edit Connector' : 'Add Connector'}</DialogTitle>
+            <DialogDescription>
+              {editingIntegration
+                ? `Update the settings for "${editingIntegration.name}".`
+                : 'Add a new ERP connector to the platform.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">ERP Name</Label>
+              <Input
+                placeholder="e.g. SAP, Oracle, Microsoft Dynamics"
+                value={formName}
+                onChange={(e) => handleFormNameChange(e.target.value)}
+                className="bg-secondary border-border rounded-xl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Slug</Label>
+              <Input
+                placeholder="auto-generated-from-name"
+                value={formSlug}
+                onChange={(e) => setFormSlug(e.target.value)}
+                disabled={!!editingIntegration}
+                className="bg-secondary border-border rounded-xl"
+              />
+              <p className="text-xs text-muted-foreground">
+                Unique identifier. {editingIntegration ? 'Cannot be changed after creation.' : 'Auto-generated from name.'}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Type</Label>
+              <Select value={formType} onValueChange={setFormType}>
+                <SelectTrigger className="bg-secondary border-border rounded-xl">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="database">Database</SelectItem>
+                  <SelectItem value="api">API</SelectItem>
+                  <SelectItem value="webhook">Webhook</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Direction</Label>
+              <Select value={formDirection} onValueChange={setFormDirection}>
+                <SelectTrigger className="bg-secondary border-border rounded-xl">
+                  <SelectValue placeholder="Select direction" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="bidirectional">Bidirectional</SelectItem>
+                  <SelectItem value="inbound">Inbound</SelectItem>
+                  <SelectItem value="outbound">Outbound</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setShowAddDialog(false); setEditingIntegration(null) }} className="border border-border">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleFormSubmit}
+              disabled={formSubmitting || !formName.trim() || !formSlug.trim()}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {formSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              {editingIntegration ? 'Save Changes' : 'Add Connector'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation AlertDialog */}
+      <AlertDialog open={!!deletingIntegration} onOpenChange={(open) => { if (!open) setDeletingIntegration(null) }}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Connector</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deletingIntegration?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border border-border">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleteSubmitting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleteSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
