@@ -24,10 +24,10 @@ export function ErpListPage() {
   useEffect(() => {
     const fetchErps = async () => {
       try {
-        const res = await fetch('/api/erp')
+        const res = await fetch('/api/erp-systems')
         if (res.ok) {
           const json = await res.json()
-          setErps(json.erpSystems || [])
+          setErps(json.data || json.erpSystems || [])
         }
       } catch {
         // silent

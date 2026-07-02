@@ -31,10 +31,29 @@ export function ErpDetailPage({ slug }: { slug: string }) {
   useEffect(() => {
     const fetchErp = async () => {
       try {
-        const res = await fetch(`/api/erp/${slug}`)
+        // Try database first
+        let res = await fetch(`/api/erp/${slug}`)
         if (res.ok) {
           const data = await res.json()
-          setErp(data)
+          if (data && !data.error) { setErp(data); return }
+        }
+        // Fallback: find in erp-systems catalog
+        res = await fetch('/api/erp-systems')
+        if (res.ok) {
+          const json = await res.json()
+          const list = json.data || json.erpSystems || []
+          const found = list.find((e: any) => e.slug === slug)
+          if (found) {
+            setErp({
+              ...found,
+              version: found.version || '1.0.0',
+              website: found.website || null,
+              features: found.features || null,
+              pricing: found.pricing || null,
+              createdAt: found.createdAt || new Date().toISOString(),
+              updatedAt: found.updatedAt || new Date().toISOString(),
+            })
+          }
         }
       } catch {
         // silent

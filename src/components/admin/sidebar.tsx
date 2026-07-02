@@ -14,6 +14,7 @@ import {
   Zap,
   ArrowLeft,
   Boxes,
+  Plug,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -21,6 +22,7 @@ import { motion } from 'framer-motion'
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+  { label: 'Integrations', icon: Plug, path: '/admin/integrations', badge: 'LIVE' },
   { label: 'Clients', icon: Users, path: '/admin/clients' },
   { label: 'Deals', icon: Handshake, path: '/admin/deals' },
   { label: 'Finance', icon: DollarSign, path: '/admin/finance' },
@@ -143,7 +145,18 @@ export function Sidebar({ className, onNavClick }: SidebarProps) {
                     )}
                     style={isActive ? { color: 'var(--gg-vermillion)' } : undefined}
                   />
-                  <span>{item.label}</span>
+                  <span className="flex-1">{item.label}</span>
+                  {'badge' in item && item.badge && (
+                    <span
+                      className="px-1.5 py-0.5 text-[9px] font-bold rounded-full leading-none animate-pulse"
+                      style={{
+                        background: 'color-mix(in srgb, #10b981 20%, transparent)',
+                        color: '#10b981',
+                      }}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
                   {isActive && (
                     <div
                       className="ml-auto h-1.5 w-1.5 rounded-full"

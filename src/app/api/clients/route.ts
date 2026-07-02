@@ -1,25 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, withRetry } from '@/lib/db'
-import { getAggregatedStats } from '@/lib/erp-connector'
+import { db } from '@/lib/db'
+
+/**
+ * Clients API
+ * GET: List all clients with ERP name resolution
+ * POST: Create a new client
+ */
+
+function getErpName(slug: string): string {
+  if (!slug) return null
+  const nameMap: Record<string, string> = {
+    apparelflow: 'ApparelFlow',
+    hotelflow: 'HotelFlow',
+    eduflow: 'EduFlow',
+    martflow: 'MartFlow',
+    pharmaflow: 'PharmaFlow',
+    buildflow: 'BuildFlow',
+    travelflow: 'TravelFlow',
+    tenantflow: 'TenantFlow',
+    factoryflow: 'FactoryFlow',
+    foodflow: 'FoodFlow',
+    autoflow: 'AutoFlow',
+    healthflow: 'HealthFlow',
+    textileflow: 'TextileFlow',
+    creativeflow: 'CreativeFlow',
+    logisticflow: 'LogisticFlow',
+    distriflow: 'DistriFlow',
+    fleetflow: 'FleetFlow',
+    electroflow: 'ElectroFlow',
+    bookflow: 'BookFlow',
+    fuelflow: 'FuelFlow',
+    salonflow: 'SalonFlow',
+  }
+  return nameMap[slug] || slug
+}
+
+function extractLicenseType(notes: string | null): string | null {
+  if (!notes) return null
+  try {
+    const parsed = JSON.parse(notes)
+    return parsed.licenseType || null
+  } catch {
+    return null
+  }
+}
 
 export async function GET() {
   try {
-    // Get local ApexFlow clients
-    const localClients = await withRetry((db) =>
-      db.client.findMany({
-        include: {
-          erpSystem: { select: { name: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-    )
+    const clients = await db.client.findMany({
+      include: {
+        erpSystem: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
 
-    // Get live clients from connected ERPs
-    const erpStats = await getAggregatedStats()
-
-    // Combine both sources
-    const allClients = [
-      ...localClients.map((c) => ({
+    const clientList = clients.map((c) => ({
         id: c.id,
         companyName: c.companyName,
         contactPerson: c.contactPerson,
@@ -29,33 +64,18 @@ export async function GET() {
         country: c.country,
         status: c.status,
         industry: c.industry,
-        erpName: c.erpSystem?.name || null,
+        erpName: c.erpSystem?.name || getErpName(c.erpSlug),
         erpSystemId: c.erpSystemId,
-        licenseType: null as string | null,
+        licenseType: extractLicenseType(c.notes),
         databaseStatus: null as string | null,
         source: 'local' as const,
         createdAt: c.createdAt,
-      })),
-      ...erpStats.clients.map((c) => ({
-        id: c.id,
-        companyName: c.companyName,
-        contactPerson: c.contactPerson,
-        email: c.email,
-        phone: c.phone,
-        city: c.city,
-        country: c.country,
-        status: c.status,
-        industry: c.industry,
-        erpName: c.erpName,
-        erpSystemId: null as string | null,
-        licenseType: c.licenseType,
-        databaseStatus: c.databaseStatus,
-        source: 'erp' as const,
-        createdAt: c.createdAt,
-      })),
-    ]
+      }))
 
-    return NextResponse.json({ clients: allClients })
+    return NextResponse.json({
+      data: clientList,
+      clients: clientList,
+    })
   } catch (error) {
     console.error('[CLIENTS] Failed to list:', error)
     return NextResponse.json(
@@ -79,30 +99,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const client = await withRetry((db) =>
-      db.client.create({
-        data: {
-          companyName: body.companyName,
-          contactPerson: body.contactPerson,
-          email: body.email,
-          phone: body.phone ?? null,
-          address: body.address ?? null,
-          city: body.city ?? null,
-          state: body.state ?? null,
-          country: body.country ?? null,
-          postalCode: body.postalCode ?? null,
-          website: body.website ?? null,
-          taxId: body.taxId ?? null,
-          status: body.status ?? 'trial',
-          industry: body.industry ?? null,
-          businessType: body.businessType ?? null,
-          companySize: body.companySize ?? null,
-          notes: body.notes ?? null,
-          erpSystemId: body.erpSystemId ?? null,
-          databaseName: body.databaseName ?? null,
-        },
-      })
-    )
+    const client = await db.client.create({
+      data: {
+        companyName: body.companyName,
+        contactPerson: body.contactPerson,
+        email: body.email,
+        phone: body.phone ?? null,
+        address: body.address ?? null,
+        city: body.city ?? null,
+        state: body.state ?? null,
+        country: body.country ?? null,
+        postalCode: body.postalCode ?? null,
+        website: body.website ?? null,
+        taxId: body.taxId ?? null,
+        status: body.status ?? 'trial',
+        industry: body.industry ?? null,
+        businessType: body.businessType ?? null,
+        companySize: body.companySize ?? null,
+        notes: body.notes ?? null,
+        erpSlug: body.erpSlug ?? null,
+        erpSystemId: body.erpSystemId ?? null,
+        databaseName: body.databaseName ?? null,
+      },
+    })
 
     return NextResponse.json({ client }, { status: 201 })
   } catch (error: unknown) {

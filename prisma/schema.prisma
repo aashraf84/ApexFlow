@@ -75,6 +75,7 @@ model AdminAuditLog {
 model ErpSystem {
   id          String   @id @default(cuid())
   name        String
+  slug        String   @unique
   industry    String
   description String?
   dbHost      String
@@ -89,4 +90,106 @@ model ErpSystem {
   lastSyncAt  DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  syncLogs       SyncLog[]
+  webhooks       WebhookConfig[]
+  integrations   IntegrationConnector[]
+  clients        Client[]
+}
+
+// ============================================
+// Sync & Integration Models
+// ============================================
+
+model SyncLog {
+  id            String   @id @default(cuid())
+  erpSystemId   String?
+  erpSlug       String
+  erpName       String
+  direction     String   @default("bidirectional") // inbound, outbound, bidirectional
+  status        String   @default("pending") // pending, running, success, failed, partial
+  syncType      String   @default("auto") // auto, manual, scheduled
+  recordsSynced Int      @default(0)
+  recordsFailed Int      @default(0)
+  durationMs    Int      @default(0)
+  errorMessage  String?
+  metadata      String?  // JSON string for extra details
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+
+  erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+}
+
+model WebhookConfig {
+  id          String   @id @default(cuid())
+  erpSystemId String?
+  name        String
+  url         String
+  secret      String?
+  events      String   @default("[]") // JSON array of event types
+  isActive    Boolean  @default(true)
+  lastTriggerAt  DateTime?
+  successCount  Int      @default(0)
+  failureCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+}
+
+// ============================================
+// Integration Connectors
+// ============================================
+
+model IntegrationConnector {
+  id            String   @id @default(cuid())
+  erpSystemId   String?
+  erpSlug       String
+  erpName       String
+  type          String   @default("database")
+  direction     String   @default("bidirectional")
+  status        String   @default("disconnected")
+  config        String?
+  autoSync      Boolean  @default(false)
+  syncInterval  Int      @default(300)
+  lastSyncAt    DateTime?
+  lastError     String?
+  latencyMs     Int?
+  clientCount   Int      @default(0)
+  tenantCount   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+}
+
+// ============================================
+// Client Management
+// ============================================
+
+model Client {
+  id            String   @id @default(cuid())
+  companyName   String
+  contactPerson String
+  email         String
+  phone         String?
+  address       String?
+  city          String?
+  state         String?
+  country       String?
+  postalCode    String?
+  website       String?
+  taxId         String?
+  status        String   @default("trial")
+  industry      String?
+  businessType  String?
+  companySize   String?
+  notes         String?
+  databaseName  String?
+  erpSlug       String?
+  erpSystemId   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
 }

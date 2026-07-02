@@ -18,10 +18,13 @@ import {
   Zap,
   ChevronLeft,
   ChevronRight,
+  Plug,
+  Radio,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+  { label: 'Integrations', href: '/admin/integrations', icon: Plug, badge: 'LIVE' },
   { label: 'Clients', href: '/admin/clients', icon: Building2 },
   { label: 'Deals', href: '/admin/deals', icon: Handshake },
   { label: 'Finance', href: '/admin/finance', icon: Wallet },
@@ -80,7 +83,17 @@ export function AdminSidebar() {
                 )}
               >
                 <item.icon className="h-4 w-4 shrink-0" />
-                {sidebarOpen && <span>{item.label}</span>}
+                {sidebarOpen && (
+                  <span className="flex-1">{item.label}</span>
+                )}
+                {sidebarOpen && 'badge' in item && item.badge && (
+                  <span className={cn(
+                    'px-1.5 py-0.5 text-[9px] font-bold rounded-full leading-none',
+                    item.badge === 'LIVE' && 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 animate-pulse'
+                  )}>
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             )
 

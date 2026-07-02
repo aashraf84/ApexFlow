@@ -1,7 +1,7 @@
 'use client'
 
-import { LandingPage } from '@/components/pages/landing-page'
+import { IntegrationHubPage } from '@/components/admin/integrations/integration-hub-page'
 
 export default function Home() {
-  return <LandingPage />
+  return <IntegrationHubPage />
 }

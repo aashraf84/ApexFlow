@@ -71,6 +71,24 @@ export async function GET(request: NextRequest) {
       allErpSystems.push(...toAdd as any[])
     }
 
+    // Enrich with client counts from local DB
+    try {
+      const clientCounts = await db.client.groupBy({
+        by: ['erpSlug'],
+        _count: { id: true },
+        where: { erpSlug: { not: null } },
+      })
+      const countMap: Record<string, number> = {}
+      for (const row of clientCounts) {
+        if (row.erpSlug) countMap[row.erpSlug] = row._count.id
+      }
+      for (const erp of allErpSystems as any[]) {
+        erp.clientCount = countMap[(erp as any).slug] || 0
+      }
+    } catch {
+      // Non-critical — cards will show 0 clients
+    }
+
     const result = {
       success: true,
       data: allErpSystems,
