@@ -1,7 +1,13 @@
 'use client'
 
-import { ErpListPage } from '@/components/admin/erp/erp-list-page'
+import { useRouter } from 'next/navigation'
+import { ErpCatalog } from '@/components/admin/panel/erp-catalog'
 
 export default function ErpPage() {
-  return <ErpListPage />
+  const router = useRouter()
+  return (
+    <ErpCatalog
+      onSelectErp={(slug) => router.push(`/admin/erp/${slug}`)}
+    />
+  )
 }
