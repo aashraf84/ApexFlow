@@ -41,3 +41,32 @@ Stage Summary:
 - All 21 ERPs show with clean data from static fallback (no DB dependency)
 - ERP detail views show rich content (modules, features, benefits, testimonials, FAQs)
 - Note: Could not browser-verify due to turbopack server instability in this environment
+
+---
+Task ID: 3-4
+Agent: Main
+Task: Integrate Add/Edit/Delete buttons in Integration module and Settings > Integrations tab
+
+Work Log:
+- Updated PATCH /api/admin/integrations API to support erpName, type, direction, config fields (previously only status/autoSync/syncInterval/lastError)
+- Rewrote integration-overview.tsx with full CRUD:
+  - Add Connector button with Dialog form (ERP Name, auto-generated Slug, Type, Direction, Auto-Sync, Sync Interval)
+  - Edit button on each ConnectorCard with pre-filled form
+  - Delete button on each ConnectorCard with AlertDialog confirmation
+  - All CRUD operations call existing API endpoints (POST/PATCH/DELETE)
+- Created integration-settings.tsx in system/settings/ with:
+  - Default Sync Configuration card (interval, global auto-sync, default direction, default type)
+  - Connection & Retry settings (API timeout, max retries, retry backoff)
+  - Security & Data settings (webhook secret rotation, audit logging, data retention)
+  - Danger Zone (Clear All Connectors, Reset to Defaults)
+  - Save/Reset buttons with toast feedback
+- Updated settings-page.tsx to add 5th "Integrations" tab
+- Fixed framer-motion variants type error with `as any` cast
+- All 3 pages compile with HTTP 200 and zero TypeScript errors
+
+Stage Summary:
+- Modified: src/app/api/admin/integrations/route.ts (PATCH extended)
+- Rewritten: src/components/admin/integrations/integration-overview.tsx (full CRUD)
+- Created: src/components/admin/system/settings/integration-settings.tsx (new tab content)
+- Modified: src/components/admin/system/settings/settings-page.tsx (added Integrations tab)
+- Zero changes to public website (only admin panel files touched)

@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, status, autoSync, syncInterval, lastError } = body
+    const { id, erpName, type, direction, config, status, autoSync, syncInterval, lastError } = body
 
     if (!id) {
       return NextResponse.json(
@@ -154,6 +154,10 @@ export async function PATCH(request: NextRequest) {
 
     // Build update payload
     const data: Record<string, unknown> = {}
+    if (erpName !== undefined) data.erpName = erpName
+    if (type !== undefined) data.type = type
+    if (direction !== undefined) data.direction = direction
+    if (config !== undefined) data.config = config ? JSON.stringify(config) : null
     if (status !== undefined) data.status = status
     if (autoSync !== undefined) data.autoSync = Boolean(autoSync)
     if (syncInterval !== undefined) data.syncInterval = Number(syncInterval)
@@ -172,13 +176,23 @@ export async function PATCH(request: NextRequest) {
         data,
         include: {
           erpSystem: {
-            select: { id: true, name: true, industry: true },
+            select: { id: true, name: true, industry: true, status: true, color: true },
           },
         },
       }),
     )
 
-    return NextResponse.json({ success: true, data: updated })
+    // Enrich like GET
+    const [syncCount, recentSync, webhookCount] = await Promise.all([
+      withRetry((d) => d.syncLog.count({ where: { erpSlug: updated.erpSlug } })),
+      withRetry((d) => d.syncLog.findFirst({ where: { erpSlug: updated.erpSlug }, orderBy: { startedAt: 'desc' } })),
+      withRetry((d) => d.webhookConfig.count({ where: { erpSlug: updated.erpSlug } })),
+    ])
+
+    return NextResponse.json({
+      success: true,
+      data: { ...updated, _syncCount: syncCount, _lastSync: recentSync || null, _webhookCount: webhookCount },
+    })
   } catch (error) {
     console.error('[ADMIN-INTEGRATIONS] Failed to update integration:', error)
     return NextResponse.json(

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
@@ -20,6 +20,9 @@ import {
   Radar,
   Settings,
   TestTube2,
+  Plus,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import { getErpIcon, getErpColor } from '@/lib/erp-data'
 import { Card, CardContent } from '@/components/ui/card'
@@ -29,7 +32,37 @@ import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { EmptyState } from '@/components/admin/shared/empty-state'
 import { FALLBACK_ERP_DATA } from '@/lib/erp-data'
 
@@ -56,6 +89,15 @@ interface ConnectorData {
   _webhookCount: number
 }
 
+interface ConnectorFormData {
+  erpName: string
+  erpSlug: string
+  type: string
+  direction: string
+  autoSync: boolean
+  syncInterval: number
+}
+
 /* ─── Direction config ─── */
 
 const directionConfig: Record<string, { label: string; icon: typeof ArrowRightLeft; className: string }> = {
@@ -63,6 +105,19 @@ const directionConfig: Record<string, { label: string; icon: typeof ArrowRightLe
   inbound: { label: 'Inbound', icon: ArrowDownToLine, className: 'bg-violet-500/10 text-violet-400 border-violet-500/20' },
   outbound: { label: 'Outbound', icon: ArrowUpFromLine, className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
 }
+
+/* ─── Sync interval options ─── */
+
+const SYNC_INTERVAL_OPTIONS = [
+  { value: 60, label: '1 minute' },
+  { value: 300, label: '5 minutes' },
+  { value: 900, label: '15 minutes' },
+  { value: 1800, label: '30 minutes' },
+  { value: 3600, label: '1 hour' },
+  { value: 21600, label: '6 hours' },
+  { value: 43200, label: '12 hours' },
+  { value: 86400, label: '24 hours' },
+]
 
 /* ─── Helpers ─── */
 
@@ -86,6 +141,23 @@ function getErpMeta(slug: string) {
   }
 }
 
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+const EMPTY_FORM: ConnectorFormData = {
+  erpName: '',
+  erpSlug: '',
+  type: 'database',
+  direction: 'bidirectional',
+  autoSync: false,
+  syncInterval: 300,
+}
+
 /* ─── Card animation variants ─── */
 
 const cardVariant = {
@@ -99,12 +171,289 @@ const cardVariant = {
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } },
 }
 
+/* ─── Connector Form Dialog ─── */
+
+function ConnectorFormDialog({
+  open,
+  onOpenChange,
+  mode,
+  initialData,
+  onSubmit,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  mode: 'add' | 'edit'
+  initialData?: ConnectorFormData | null
+  onSubmit: (data: ConnectorFormData) => Promise<void>
+}) {
+  const [form, setForm] = useState<ConnectorFormData>(EMPTY_FORM)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (open) {
+      setForm(initialData ? { ...initialData } : { ...EMPTY_FORM })
+    }
+  }, [open, initialData])
+
+  const updateField = <K extends keyof ConnectorFormData>(key: K, value: ConnectorFormData[K]) => {
+    setForm((prev) => {
+      const next = { ...prev, [key]: value }
+      // Auto-generate slug from name when creating
+      if (key === 'erpName' && mode === 'add') {
+        next.erpSlug = slugify(value as string)
+      }
+      return next
+    })
+  }
+
+  const isNameValid = form.erpName.trim().length >= 2
+  const isSlugValid = form.erpSlug.trim().length >= 2
+  const isValid = isNameValid && isSlugValid
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!isValid || submitting) return
+    setSubmitting(true)
+    try {
+      await onSubmit(form)
+      onOpenChange(false)
+    } catch {
+      // Error handling is done by the parent via toast
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{mode === 'add' ? 'Add Connector' : 'Edit Connector'}</DialogTitle>
+          <DialogDescription>
+            {mode === 'add'
+              ? 'Register a new ERP connector to the integration hub.'
+              : `Update settings for ${initialData?.erpName || 'this connector'}.`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 py-2">
+          {/* ERP Name */}
+          <div className="space-y-1.5">
+            <Label htmlFor="erp-name" className="text-sm font-medium">
+              ERP Name
+            </Label>
+            <Input
+              id="erp-name"
+              placeholder="e.g. SAP S/4HANA"
+              value={form.erpName}
+              onChange={(e) => updateField('erpName', e.target.value)}
+              className="h-9 text-sm"
+            />
+            {!isNameValid && form.erpName.length > 0 && (
+              <p className="text-[11px] text-destructive">Name must be at least 2 characters.</p>
+            )}
+          </div>
+
+          {/* ERP Slug */}
+          <div className="space-y-1.5">
+            <Label htmlFor="erp-slug" className="text-sm font-medium">
+              ERP Slug
+              {mode === 'add' && (
+                <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">(auto-generated)</span>
+              )}
+            </Label>
+            <Input
+              id="erp-slug"
+              placeholder="e.g. sap-s4hana"
+              value={form.erpSlug}
+              onChange={(e) => updateField('erpSlug', e.target.value)}
+              disabled={mode === 'add' && false}
+              className="h-9 text-sm font-mono"
+            />
+            {!isSlugValid && form.erpSlug.length > 0 && (
+              <p className="text-[11px] text-destructive">Slug must be at least 2 characters.</p>
+            )}
+          </div>
+
+          {/* Type */}
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Type</Label>
+            <Select value={form.type} onValueChange={(v) => updateField('type', v)}>
+              <SelectTrigger className="w-full h-9 text-sm">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="database">
+                  <Database className="w-3.5 h-3.5 mr-1.5 text-orange-400" />
+                  Database
+                </SelectItem>
+                <SelectItem value="api">
+                  <Zap className="w-3.5 h-3.5 mr-1.5 text-sky-400" />
+                  API
+                </SelectItem>
+                <SelectItem value="webhook">
+                  <Radar className="w-3.5 h-3.5 mr-1.5 text-fuchsia-400" />
+                  Webhook
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Direction */}
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Direction</Label>
+            <Select value={form.direction} onValueChange={(v) => updateField('direction', v)}>
+              <SelectTrigger className="w-full h-9 text-sm">
+                <SelectValue placeholder="Select direction" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bidirectional">
+                  <ArrowRightLeft className="w-3.5 h-3.5 mr-1.5 text-cyan-400" />
+                  Bidirectional
+                </SelectItem>
+                <SelectItem value="inbound">
+                  <ArrowDownToLine className="w-3.5 h-3.5 mr-1.5 text-violet-400" />
+                  Inbound
+                </SelectItem>
+                <SelectItem value="outbound">
+                  <ArrowUpFromLine className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
+                  Outbound
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Auto-Sync */}
+          <div className="flex items-center justify-between rounded-lg border border-border/50 p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="form-auto-sync" className="text-sm font-medium cursor-pointer">
+                Auto-Sync
+              </Label>
+              <p className="text-[11px] text-muted-foreground">Automatically sync data at the interval below</p>
+            </div>
+            <Switch
+              id="form-auto-sync"
+              checked={form.autoSync}
+              onCheckedChange={(checked) => updateField('autoSync', checked)}
+            />
+          </div>
+
+          {/* Sync Interval */}
+          {form.autoSync && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Sync Interval</Label>
+                <Select
+                  value={String(form.syncInterval)}
+                  onValueChange={(v) => updateField('syncInterval', Number(v))}
+                >
+                  <SelectTrigger className="w-full h-9 text-sm">
+                    <SelectValue placeholder="Select interval" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SYNC_INTERVAL_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={String(opt.value)}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </motion.div>
+          )}
+
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={!isValid || submitting} className="gap-1.5">
+              {submitting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : mode === 'add' ? (
+                <Plus className="w-3.5 h-3.5" />
+              ) : (
+                <Pencil className="w-3.5 h-3.5" />
+              )}
+              {mode === 'add' ? 'Add Connector' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/* ─── Delete Confirmation Dialog ─── */
+
+function DeleteConfirmDialog({
+  open,
+  onOpenChange,
+  connectorName,
+  onConfirm,
+  deleting,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  connectorName: string
+  onConfirm: () => Promise<void>
+  deleting: boolean
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Connector</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete <span className="font-semibold text-foreground">{connectorName}</span>?
+            This action cannot be undone. All associated sync history and configuration will be permanently
+            removed.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onConfirm}
+            disabled={deleting}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-1.5"
+          >
+            {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 /* ─── ConnectorCard ─── */
 
-function ConnectorCard({ connector, onAutoSyncToggle, onTestConnection }: {
+function ConnectorCard({
+  connector,
+  index,
+  onAutoSyncToggle,
+  onTestConnection,
+  onEdit,
+  onDelete,
+}: {
   connector: ConnectorData
+  index: number
   onAutoSyncToggle: (slug: string, enabled: boolean) => void
   onTestConnection: (slug: string) => void
+  onEdit: (connector: ConnectorData) => void
+  onDelete: (connector: ConnectorData) => void
 }) {
   const [configOpen, setConfigOpen] = useState(false)
   const [dbUrl, setDbUrl] = useState('')
@@ -155,7 +504,7 @@ function ConnectorCard({ connector, onAutoSyncToggle, onTestConnection }: {
   }
 
   return (
-    <motion.div variants={cardVariant} custom={0} layout>
+    <motion.div variants={cardVariant as any} custom={index} layout>
       <Card className="border-border/60 hover:border-border transition-all duration-300 overflow-hidden">
         <CardContent className="p-4 sm:p-5 space-y-4">
           {/* Header */}
@@ -235,7 +584,7 @@ function ConnectorCard({ connector, onAutoSyncToggle, onTestConnection }: {
                 onCheckedChange={handleToggleAutoSync}
               />
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -267,6 +616,38 @@ function ConnectorCard({ connector, onAutoSyncToggle, onTestConnection }: {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Configure Connector</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => onEdit(connector)}
+                    >
+                      <Pencil className="w-3 h-3" />
+                      <span className="ml-1 hidden sm:inline">Edit</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit Connector</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      onClick={() => onDelete(connector)}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span className="ml-1 hidden sm:inline">Delete</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete Connector</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
@@ -397,6 +778,15 @@ export function IntegrationOverview() {
   const [loading, setLoading] = useState(true)
   const [seeding, setSeeding] = useState(false)
 
+  // Dialog states
+  const [formDialogOpen, setFormDialogOpen] = useState(false)
+  const [formMode, setFormMode] = useState<'add' | 'edit'>('add')
+  const [editingConnector, setEditingConnector] = useState<ConnectorData | null>(null)
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deletingConnector, setDeletingConnector] = useState<ConnectorData | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
   const fetchConnectors = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/integrations')
@@ -448,7 +838,6 @@ export function IntegrationOverview() {
       const json = await res.json()
       if (json.success) {
         toast.success(json.message || `Connection test for ${erpSlug} succeeded`)
-        // Refresh to get updated status
         fetchConnectors()
       } else {
         toast.error(json.error || `Connection test for ${erpSlug} failed`)
@@ -475,22 +864,133 @@ export function IntegrationOverview() {
     setSeeding(false)
   }
 
+  /* ─── CRUD Handlers ─── */
+
+  const handleOpenAddDialog = () => {
+    setFormMode('add')
+    setEditingConnector(null)
+    setFormDialogOpen(true)
+  }
+
+  const handleOpenEditDialog = (connector: ConnectorData) => {
+    setFormMode('edit')
+    setEditingConnector(connector)
+    setFormDialogOpen(true)
+  }
+
+  const handleFormSubmit = async (data: ConnectorFormData) => {
+    if (formMode === 'add') {
+      // POST /api/admin/integrations
+      const res = await fetch('/api/admin/integrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast.success(`Connector "${data.erpName}" created successfully`)
+        fetchConnectors()
+      } else {
+        toast.error(json.error || 'Failed to create connector')
+        throw new Error(json.error)
+      }
+    } else {
+      // PATCH /api/admin/integrations
+      const res = await fetch('/api/admin/integrations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingConnector?.id,
+          erpName: data.erpName,
+          type: data.type,
+          direction: data.direction,
+          autoSync: data.autoSync,
+          syncInterval: data.syncInterval,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast.success(`Connector "${data.erpName}" updated successfully`)
+        fetchConnectors()
+      } else {
+        toast.error(json.error || 'Failed to update connector')
+        throw new Error(json.error)
+      }
+    }
+  }
+
+  const handleOpenDeleteDialog = (connector: ConnectorData) => {
+    setDeletingConnector(connector)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingConnector) return
+    setDeleting(true)
+    try {
+      const res = await fetch('/api/admin/integrations', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deletingConnector.id }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast.success(`Connector "${deletingConnector.erpName}" deleted successfully`)
+        setDeleteDialogOpen(false)
+        setDeletingConnector(null)
+        fetchConnectors()
+      } else {
+        toast.error(json.error || 'Failed to delete connector')
+      }
+    } catch {
+      toast.error('Network error while deleting connector')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  // Pre-fill form data for edit mode
+  const editingFormData = useMemo<ConnectorFormData | null>(() => {
+    if (formMode === 'edit' && editingConnector) {
+      return {
+        erpName: editingConnector.erpName,
+        erpSlug: editingConnector.erpSlug,
+        type: editingConnector.type,
+        direction: editingConnector.direction,
+        autoSync: editingConnector.autoSync,
+        syncInterval: editingConnector.syncInterval,
+      }
+    }
+    return null
+  }, [formMode, editingConnector])
+
   return (
     <div className="space-y-6">
       {/* Actions bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-sm font-medium text-muted-foreground">
           {connectors.length} connector{connectors.length !== 1 ? 's' : ''} registered
         </h2>
-        <Button
-          size="sm"
-          onClick={handleAutoDiscover}
-          disabled={seeding}
-          className="gap-1.5"
-        >
-          {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radar className="w-3.5 h-3.5" />}
-          Auto-Discover
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={handleOpenAddDialog}
+            className="gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Connector
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleAutoDiscover}
+            disabled={seeding}
+            className="gap-1.5"
+          >
+            {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radar className="w-3.5 h-3.5" />}
+            Auto-Discover
+          </Button>
+        </div>
       </div>
 
       {/* Summary bar */}
@@ -504,7 +1004,7 @@ export function IntegrationOverview() {
         <EmptyState
           icon={<Plug className="w-6 h-6" />}
           title="No integrations found"
-          description="Run Auto-Discover to scan for available ERP connectors and add them to the hub."
+          description="Run Auto-Discover to scan for available ERP connectors or add one manually."
           actionLabel="Auto-Discover Connectors"
           onAction={handleAutoDiscover}
         />
@@ -519,17 +1019,38 @@ export function IntegrationOverview() {
           variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
         >
           <AnimatePresence mode="popLayout">
-            {connectors.map((connector) => (
+            {connectors.map((connector, idx) => (
               <ConnectorCard
                 key={connector.id}
                 connector={connector}
+                index={idx}
                 onAutoSyncToggle={handleAutoSyncToggle}
                 onTestConnection={handleTestConnection}
+                onEdit={handleOpenEditDialog}
+                onDelete={handleOpenDeleteDialog}
               />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
+
+      {/* Add / Edit Dialog */}
+      <ConnectorFormDialog
+        open={formDialogOpen}
+        onOpenChange={setFormDialogOpen}
+        mode={formMode}
+        initialData={editingFormData}
+        onSubmit={handleFormSubmit}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        connectorName={deletingConnector?.erpName || ''}
+        onConfirm={handleDeleteConfirm}
+        deleting={deleting}
+      />
     </div>
   )
 }
