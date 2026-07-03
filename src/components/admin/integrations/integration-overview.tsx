@@ -584,14 +584,14 @@ function ConnectorCard({
                 onCheckedChange={handleToggleAutoSync}
               />
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 px-2 text-xs"
+                      className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
                       disabled={testing}
                       onClick={handleTestConnection}
                     >
@@ -606,9 +606,9 @@ function ConnectorCard({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 px-2 text-xs"
+                      className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
                       onClick={() => setConfigOpen((prev) => !prev)}
                     >
                       <Settings className="w-3 h-3" />
@@ -622,9 +622,9 @@ function ConnectorCard({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 px-2 text-xs"
+                      className="h-7 px-2.5 text-xs text-amber-400 border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-300"
                       onClick={() => onEdit(connector)}
                     >
                       <Pencil className="w-3 h-3" />
@@ -638,9 +638,9 @@ function ConnectorCard({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 px-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      className="h-7 px-2.5 text-xs text-red-400 border-red-500/30 hover:bg-red-500/10 hover:text-red-300"
                       onClick={() => onDelete(connector)}
                     >
                       <Trash2 className="w-3 h-3" />

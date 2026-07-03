@@ -193,3 +193,17 @@ model Client {
 
   erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
 }
+
+// ============================================
+// Site Settings (Key-Value Store)
+// ============================================
+
+model SiteSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String   @default("")
+  category    String   @default("general")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
