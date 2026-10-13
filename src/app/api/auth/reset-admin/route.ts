@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     const defaultEmail = 'admin@apexflow.com'
     const defaultPassword = 'Admin@180H'
-    const hashedPassword = bcrypt.hashSync(defaultPassword, 4)
+    const hashedPassword = await bcrypt.hash(defaultPassword, 12)
 
     // Try to find existing admin
     const existing = await withRetry((tx) =>

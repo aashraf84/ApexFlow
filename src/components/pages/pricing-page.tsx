@@ -534,12 +534,23 @@ function PricingCard({
               </div>
               <p className="text-sm text-muted-foreground mb-6">{tier.description}</p>
 
-              {/* Price — temporarily hidden, showing Get Quote instead */}
+              {/* Price */}
               <div className="mb-6">
-                <p className={`text-sm font-medium ${accent.badgeText} ${accent.badgeBg} inline-flex items-center gap-1.5 rounded-md px-2.5 py-1`}>
-                  <CreditCard className="w-3 h-3" />
-                  per ERP
-                </p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-3xl font-extrabold ${accent.badgeText}`}>
+                    {CURRENCIES[currency].symbol}{formatPrice(price, currency)}
+                  </span>
+                  <span className="text-sm text-muted-foreground">/mo per ERP</span>
+                </div>
+                {isAnnual ? (
+                  <p className="text-xs text-[var(--gg-green)] mt-1">
+                    {CURRENCIES[currency].symbol}{formatPrice(annualTotal, currency)}/yr billed annually · save {CURRENCIES[currency].symbol}{formatPrice(savingsAmount, currency)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    or {CURRENCIES[currency].symbol}{formatPrice(annualMonthlyRate, currency)}/mo billed annually (2 months free)
+                  </p>
+                )}
               </div>
 
               {/* Features */}
@@ -575,15 +586,13 @@ function PricingCard({
               </AnimatePresence>
               {!hasMoreFeatures && <div className="mb-4" />}
 
-              {/* CTA Button — Get Quote */}
+              {/* CTA Button */}
               <Button
                 size="lg"
-                className={`w-full h-12 rounded-xl font-semibold ${
-                  accent.btnClass
-                }`}
-                onClick={() => navigate('contact')}
+                className={`w-full h-12 rounded-xl font-semibold ${accent.btnClass}`}
+                onClick={() => (tier.id === 'enterprise' ? navigate('contact') : onSelectPlan(tier.id))}
               >
-                Get Quote
+                {tier.cta}
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </div>
