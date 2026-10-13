@@ -120,7 +120,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           return NextResponse.json({ data: responses })
         }
         if (id) {
-          const ticket = await db.ticket.findUnique({ where: { id }, include: { responses: { orderBy: { createdAt: 'asc' } }, client: true } })
+          const ticket = await db.supportTicket.findUnique({ where: { id }, include: { responses: { orderBy: { createdAt: 'asc' } }, client: true } })
           if (!ticket) return NextResponse.json({ error: 'Not found' }, { status: 404 })
           return NextResponse.json({ data: ticket })
         }

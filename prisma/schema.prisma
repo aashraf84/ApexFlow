@@ -3,6 +3,9 @@ generator client {
 }
 
 datasource db {
+  // NOTE: For local dev this is SQLite. Before deploying to Vercel + Neon,
+  // change to `provider = "postgresql"` and set DATABASE_URL to your Neon
+  // connection string, then run `prisma generate` + `prisma db push`.
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
@@ -12,10 +15,10 @@ datasource db {
 // ============================================
 
 model AdminRole {
-  id          String  @id @default(cuid())
-  name        String  @unique
+  id          String   @id @default(cuid())
+  name        String   @unique
   description String?
-  permissions String  @default("[]")
+  permissions String   @default("[]")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -23,17 +26,17 @@ model AdminRole {
 }
 
 model AdminUser {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
-  email     String   @unique
+  email     String    @unique
   password  String
   avatar    String?
-  role      String   @default("admin")
+  role      String    @default("admin")
   roleId    String?
-  isActive  Boolean  @default(true)
+  isActive  Boolean   @default(true)
   lastLogin DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   adminRole AdminRole?      @relation(fields: [roleId], references: [id])
   sessions  AdminSession[]
@@ -73,28 +76,42 @@ model AdminAuditLog {
 // ============================================
 
 model ErpSystem {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String
-  slug        String   @unique
+  slug        String    @unique
   industry    String
   description String?
-  dbHost      String
-  dbPort      Int      @default(5432)
-  dbName      String
-  dbUser      String
-  dbPassword  String
-  sslMode     String   @default("require")
-  status      String   @default("active")
-  color       String   @default("#6366f1")
-  sortOrder   Int      @default(0)
+  features    String?
+  pricing     String?
+  version     String?
+  website     String?
+  dbHost      String?
+  dbPort      Int       @default(5432)
+  dbName      String?
+  dbUser      String?
+  dbPassword  String?
+  sslMode     String    @default("require")
+  status      String    @default("active")
+  color       String    @default("#6366f1")
+  icon        String?
+  databaseUrl String?
+  isActive    Boolean   @default(true)
+  moduleCount Int       @default(0)
+  sortOrder   Int       @default(0)
   lastSyncAt  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   syncLogs       SyncLog[]
   webhooks       WebhookConfig[]
   integrations   IntegrationConnector[]
   clients        Client[]
+  orders         Order[]
+  invoices       Invoice[]
+  licenses       License[]
+  subscriptions  Subscription[]
+  packages       Package[]
+  syncConnectors SyncConnector[]
 }
 
 // ============================================
@@ -102,65 +119,112 @@ model ErpSystem {
 // ============================================
 
 model SyncLog {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   erpSystemId   String?
   erpSlug       String
   erpName       String
-  direction     String   @default("bidirectional") // inbound, outbound, bidirectional
-  status        String   @default("pending") // pending, running, success, failed, partial
-  syncType      String   @default("auto") // auto, manual, scheduled
-  recordsSynced Int      @default(0)
-  recordsFailed Int      @default(0)
-  durationMs    Int      @default(0)
+  direction     String    @default("bidirectional")
+  status        String    @default("pending")
+  syncType      String    @default("auto")
+  recordsSynced Int       @default(0)
+  recordsFailed Int       @default(0)
+  durationMs    Int       @default(0)
   errorMessage  String?
-  metadata      String?  // JSON string for extra details
-  startedAt     DateTime @default(now())
+  metadata      String?
+  startedAt     DateTime  @default(now())
   completedAt   DateTime?
 
   erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
 }
 
 model WebhookConfig {
-  id          String   @id @default(cuid())
-  erpSystemId String?
-  name        String
-  url         String
-  secret      String?
-  events      String   @default("[]") // JSON array of event types
-  isActive    Boolean  @default(true)
-  lastTriggerAt  DateTime?
-  successCount  Int      @default(0)
-  failureCount  Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String    @id @default(cuid())
+  erpSystemId   String?
+  erpSlug       String?
+  name          String
+  url           String
+  secret        String?
+  events        String    @default("[]")
+  isActive      Boolean   @default(true)
+  lastTriggerAt DateTime?
+  successCount  Int       @default(0)
+  failureCount  Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
 }
 
-// ============================================
-// Integration Connectors
-// ============================================
-
 model IntegrationConnector {
-  id            String   @id @default(cuid())
-  erpSystemId   String?
-  erpSlug       String
-  erpName       String
-  type          String   @default("database")
-  direction     String   @default("bidirectional")
-  status        String   @default("disconnected")
-  config        String?
-  autoSync      Boolean  @default(false)
-  syncInterval  Int      @default(300)
-  lastSyncAt    DateTime?
-  lastError     String?
-  latencyMs     Int?
-  clientCount   Int      @default(0)
-  tenantCount   Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String    @id @default(cuid())
+  erpSystemId  String?
+  erpSlug      String
+  erpName      String
+  type         String    @default("database")
+  direction    String    @default("bidirectional")
+  status       String    @default("disconnected")
+  config       String?
+  autoSync     Boolean   @default(false)
+  syncInterval Int       @default(300)
+  lastSyncAt   DateTime?
+  lastError    String?
+  latencyMs    Int?
+  clientCount  Int       @default(0)
+  tenantCount  Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+}
+
+model SyncConnector {
+  id            String    @id @default(cuid())
+  erpSystemId   String?
+  name          String
+  type          String    @default("database")
+  status        String    @default("active")
+  lastSyncAt    DateTime?
+  recordsSynced Int       @default(0)
+  config        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  erpSystem   ErpSystem?   @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+  syncEvents  SyncEvent[]
+  syncTenants SyncTenant[]
+}
+
+model SyncEvent {
+  id          String   @id @default(cuid())
+  connectorId String
+  tenantId    String?
+  eventType   String   @default("sync")
+  status      String   @default("pending")
+  direction   String   @default("inbound")
+  payload     String?
+  result      String?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  connector  SyncConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  syncTenant SyncTenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+}
+
+model SyncTenant {
+  id           String    @id @default(cuid())
+  connectorId  String
+  clientId     String?
+  externalId   String?
+  status       String    @default("active")
+  lastSyncedAt DateTime?
+  metadata     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  connector  SyncConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  client     Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  syncEvents SyncEvent[]
 }
 
 // ============================================
@@ -188,10 +252,493 @@ model Client {
   databaseName  String?
   erpSlug       String?
   erpSystemId   String?
+  // Alias fields used by the catch-all CRUD route + admin includes
+  name          String?
+  company       String?
+  zipCode       String?
+  afClientId    String?
+  hfClientId    String?
+  efClientId    String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  erpSystem      ErpSystem?       @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+  activities     ClientActivity[]
+  contacts       ClientContact[]
+  deals          Deal[]
+  supportTickets SupportTicket[]
+  orders         Order[]
+  invoices       Invoice[]
+  licenses       License[]
+  subscriptions  Subscription[]
+  payments       Payment[]
+  syncTenants    SyncTenant[]
+  devices        Device[]
+}
+
+model ClientActivity {
+  id        String   @id @default(cuid())
+  clientId  String
+  type      String   @default("note")
+  subject   String
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model ClientContact {
+  id        String   @id @default(cuid())
+  clientId  String
+  name      String
+  email     String?
+  phone     String?
+  role      String?
+  isPrimary Boolean  @default(false)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// CRM Deals
+// ============================================
+
+model Deal {
+  id                String    @id @default(cuid())
+  title             String
+  clientId          String?
+  value             Float     @default(0)
+  stage             String    @default("lead")
+  probability       Float     @default(0)
+  source            String?
+  expectedCloseDate DateTime?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  client     Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  activities DealActivity[]
+}
+
+model DealActivity {
+  id        String   @id @default(cuid())
+  dealId    String
+  type      String   @default("note")
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// Finance / Orders / Payments
+// ============================================
+
+model Order {
+  id                      String    @id @default(cuid())
+  orderNumber             String    @unique
+  erpSystemId             String?
+  clientId                String?
+  plan                    String
+  billingCycle            String    @default("monthly")
+  unitPrice               Float     @default(0)
+  totalAmount             Float     @default(0)
+  currency                String    @default("PKR")
+  status                  String    @default("pending")
+  paymentStatus           String    @default("pending")
+  stripeCheckoutSessionId String?   @unique
+  stripePaymentIntentId   String?
+  paymentMethod           String?
+  paymentReference        String?
+  modules                 String?
+  customerEmail           String
+  customerName            String
+  customerPhone           String?
+  companyName             String?
+  notes                   String?
+  paidAt                  DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
   erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+  client    Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  payments  Payment[]
+  invoice   Invoice?
+}
+
+model Payment {
+  id              String    @id @default(cuid())
+  orderId         String?
+  invoiceId       String?
+  clientId        String?
+  amount          Float     @default(0)
+  currency        String    @default("PKR")
+  method          String    @default("card")
+  status          String    @default("pending")
+  cardBrand       String?
+  cardLast4       String?
+  receiptUrl      String?
+  stripePaymentId String?
+  transactionId   String?
+  notes           String?
+  refundedAt      DateTime?
+  refundReason    String?
+  verifiedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  order   Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  client  Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+}
+
+model PaymentAccount {
+  id                   String    @id @default(cuid())
+  label                String
+  gateway              String    @default("stripe")
+  type                 String    @default("bank_account")
+  currency             String    @default("PKR")
+  isActive             Boolean   @default(true)
+  isDefault            Boolean   @default(false)
+  sortOrder            Int       @default(0)
+  bankName             String?
+  accountTitle         String?
+  accountNumber        String?
+  iban                 String?
+  swiftCode            String?
+  branchName           String?
+  routingNumber        String?
+  correspondentBank    String?
+  correspondentSwift   String?
+  walletProvider       String?
+  walletAccount        String?
+  walletAccountName    String?
+  raastId              String?
+  stripeSecretKey      String?
+  stripePublishableKey String?
+  stripeWebhookSecret  String?
+  stripeAccountId      String?
+  paypalClientId       String?
+  paypalClientSecret   String?
+  paypalMode           String?
+  lastFourDigits       String?
+  notes                String?
+  lastVerifiedAt       DateTime?
+  verifiedBy           String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+model PaymentAuditLog {
+  id          String   @id @default(cuid())
+  action      String
+  entity      String?
+  entityId    String?
+  changes     String?
+  performedBy String?
+  ip          String?
+  createdAt   DateTime @default(now())
+}
+
+model PaymentSettings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  isEncrypted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Invoice {
+  id             String    @id @default(cuid())
+  invoiceNumber  String?   @unique
+  orderId        String?   @unique
+  clientId       String?
+  subscriptionId String?
+  erpSystemId    String?
+  type           String    @default("subscription")
+  status         String    @default("draft")
+  amount         Float     @default(0)
+  tax            Float     @default(0)
+  discount       Float     @default(0)
+  totalAmount    Float     @default(0)
+  total          Float     @default(0)
+  number         String?
+  currency       String    @default("PKR")
+  dueDate        DateTime?
+  paidAt         DateTime?
+  notes          String?
+  items          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  order        Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  client       Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  erpSystem    ErpSystem?    @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+  payments     Payment[]
+}
+
+model License {
+  id             String    @id @default(cuid())
+  clientId       String?
+  erpSystemId    String?
+  serialKey      String    @unique
+  licenseKey     String    @unique
+  type           String    @default("standard")
+  status         String    @default("active")
+  maxUsers       Int       @default(5)
+  maxDevices     Int       @default(3)
+  activatedAt    DateTime?
+  expiresAt      DateTime?
+  lastVerifiedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  client    Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+}
+
+model Subscription {
+  id              String    @id @default(cuid())
+  clientId        String?
+  erpSystemId     String?
+  packageId       String?
+  plan            String    @default("starter")
+  status          String    @default("active")
+  startDate       DateTime  @default(now())
+  endDate         DateTime?
+  trialEndsAt     DateTime?
+  monthlyFee      Float     @default(0)
+  currency        String    @default("PKR")
+  billingCycle    String    @default("monthly")
+  maxUsers        Int       @default(5)
+  maxLocations    Int?
+  maxItems        Int?
+  includedModules String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  client    Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+  package   Package?   @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  invoices  Invoice[]
+}
+
+model Package {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  description     String?
+  price           Float    @default(0)
+  currency        String   @default("PKR")
+  plan            String   @default("starter")
+  billingCycle    String   @default("monthly")
+  erpSystemId     String?
+  features        String   @default("[]")
+  includedOSSlugs String?
+  maxUsers        Int?
+  maxLocations    Int?
+  maxItems        Int?
+  isPopular       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  erpSystem     ErpSystem?     @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+  subscriptions Subscription[]
+}
+
+// ============================================
+// Communications
+// ============================================
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  subject   String
+  body      String
+  category  String   @default("general")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmailLog {
+  id           String    @id @default(cuid())
+  to           String
+  from         String?
+  subject      String
+  body         String?
+  status       String    @default("sent")
+  provider     String?
+  providerId   String?
+  errorMessage String?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model SmsConfig {
+  id         String   @id @default(cuid())
+  provider   String
+  apiKey     String
+  apiSecret  String?
+  fromNumber String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model SmsLog {
+  id           String    @id @default(cuid())
+  to           String
+  body         String
+  status       String    @default("sent")
+  provider     String?
+  providerId   String?
+  errorMessage String?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model SupportTicket {
+  id        String   @id @default(cuid())
+  subject   String
+  clientId  String?
+  name      String
+  email     String
+  category  String   @default("general")
+  priority  String   @default("medium")
+  status    String   @default("open")
+  message   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client    Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  responses TicketResponse[]
+}
+
+model TicketResponse {
+  id        String   @id @default(cuid())
+  ticketId  String
+  author    String
+  message   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// Marketing
+// ============================================
+
+model Campaign {
+  id             String    @id @default(cuid())
+  name           String
+  type           String    @default("email")
+  status         String    @default("draft")
+  subject        String?
+  content        String
+  targetAudience String?
+  scheduleAt     DateTime?
+  sentAt         DateTime?
+  stats          String    @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  socialPosts SocialPost[]
+}
+
+model SocialPost {
+  id              String    @id @default(cuid())
+  campaignId      String?
+  socialAccountId String?
+  accountId       String?
+  platform        String
+  content         String
+  mediaUrls       String?
+  mediaUrl        String?
+  platformPostId  String?
+  errorMessage    String?
+  status          String    @default("draft")
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  likes           Int       @default(0)
+  comments        Int       @default(0)
+  shares          Int       @default(0)
+  reach           Int       @default(0)
+  stats           String    @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  campaign      Campaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  socialAccount SocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+}
+
+model SocialAccount {
+  id             String    @id @default(cuid())
+  platform       String
+  handle         String?
+  accountName    String?
+  accessToken    String?
+  token          String?
+  refreshToken   String?
+  followerCount  Int       @default(0)
+  followingCount Int       @default(0)
+  profileUrl     String?
+  avatarUrl      String?
+  isConnected    Boolean   @default(false)
+  isActive       Boolean   @default(true)
+  lastSyncedAt   DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  posts SocialPost[]
+}
+
+// ============================================
+// Reports
+// ============================================
+
+model SavedReport {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  dateRange   String   @default("last_30_days")
+  data        String   @default("{}")
+  generatedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============================================
+// Devices (client sessions)
+// ============================================
+
+model Device {
+  id           String    @id @default(cuid())
+  clientId     String?
+  name         String?
+  os           String?
+  browser      String?
+  ip           String?
+  userAgent    String?
+  status       String    @default("active")
+  lastActiveAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 }
 
 // ============================================
@@ -203,6 +750,7 @@ model SiteSetting {
   key         String   @unique
   value       String   @default("")
   category    String   @default("general")
+  group       String?
   description String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

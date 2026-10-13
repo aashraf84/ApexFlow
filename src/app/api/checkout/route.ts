@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       const order = await db.order.create({
         data: {
           orderNumber: `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-          erpSystemId: erpSystem?.id ?? 'unknown',
+          erpSystemId: erpSystem?.id ?? null,
           plan: planKey,
           billingCycle: billingCycle || 'monthly',
           unitPrice: amount,
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       const order = await db.order.create({
         data: {
           orderNumber: `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-          erpSystemId: erpSystem?.id ?? 'unknown',
+          erpSystemId: erpSystem?.id ?? null,
           plan: planKey,
           billingCycle: billingCycle || 'monthly',
           unitPrice: amount,
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
     await db.order.create({
       data: {
         orderNumber: `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-        erpSystemId: erpSystem?.id ?? 'unknown',
+        erpSystemId: erpSystem?.id ?? null,
         plan: planKey,
         billingCycle: billingCycle || 'monthly',
         unitPrice: amount,

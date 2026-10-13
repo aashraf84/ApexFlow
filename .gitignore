@@ -69,3 +69,19 @@ keep-running.sh
 
 # Uploads
 upload/
+
+# === sandbox dev helpers (not part of the app) ===
+.env
+dev.log
+dev.pid
+dev.out.log
+server.log
+watchdog.py
+watchdog.pid
+watchdog.err
+start-dev.py
+verify-*.png
+db/*.db
+db/*.db-journal
+tool-results/
+upload/

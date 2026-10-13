@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
         ))
 
     // ── Find or default the ERP system ──
-    let erpSystemId = 'unknown'
+    let erpSystemId: string | null = null
     try {
       if (erpSlug) {
         const erp = await db.erpSystem.findUnique({ where: { slug: erpSlug } })

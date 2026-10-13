@@ -94,7 +94,7 @@ export async function GET() {
     // Recent activity (using AuditLog since Activity model doesn't exist)
     const activityRows = await withTimeout(
       withRetry((db) =>
-        db.auditLog.findMany({
+        db.adminAuditLog.findMany({
           take: 15,
           orderBy: { createdAt: 'desc' },
           include: {
