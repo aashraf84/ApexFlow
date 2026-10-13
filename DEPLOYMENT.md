@@ -15,18 +15,11 @@ This project is **build-verified and deploy-ready**. Follow these steps to deplo
 
 ## Pre-deploy checklist (IMPORTANT)
 
-### 1. Switch the Prisma provider to PostgreSQL
+### 1. Prisma provider is set to PostgreSQL ✅ (already done in the repo)
 
-In `prisma/schema.prisma`, change the `datasource db` block:
-
-```prisma
-datasource db {
-  provider = "postgresql"   // was "sqlite" for local dev
-  url      = env("DATABASE_URL")
-}
-```
-
-(Local dev used SQLite to verify functionality; Vercel + Neon needs the PostgreSQL provider. The schema MODELS are identical for both — only the `provider` line changes.)
+`prisma/schema.prisma` already has `provider = "postgresql"` for Neon/Vercel.
+(To run locally on SQLite instead, temporarily switch it to `"sqlite"` and set
+`DATABASE_URL="file:./db/apexflow.db"` — the model definitions are identical.)
 
 ### 2. Create a Neon database
 

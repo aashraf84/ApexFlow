@@ -3,10 +3,11 @@ generator client {
 }
 
 datasource db {
-  // NOTE: For local dev this is SQLite. Before deploying to Vercel + Neon,
-  // change to `provider = "postgresql"` and set DATABASE_URL to your Neon
-  // connection string, then run `prisma generate` + `prisma db push`.
-  provider = "sqlite"
+  // Production: PostgreSQL on Neon (Vercel). The same model definitions work
+  // for both SQLite (local dev) and PostgreSQL (production) — only this
+  // `provider` line differs. To run locally on SQLite, temporarily switch
+  // this to "sqlite" and set DATABASE_URL="file:./db/apexflow.db".
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
