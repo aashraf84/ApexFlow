@@ -103,6 +103,12 @@ export function IntegrationManager() {
   const [selectedTable, setSelectedTable] = useState('')
   const [columns, setColumns] = useState<Array<{ name: string; dataType: string }>>([])
   const [mapping, setMapping] = useState<{ id: string; name: string; email: string; phone: string; company: string; status: string }>({ id: '', name: '', email: '', phone: '', company: '', status: '' })
+  // Serials (optional) mapping state
+  const [syncSerials, setSyncSerials] = useState(false)
+  const [serialTable, setSerialTable] = useState('')
+  const [serialColumns, setSerialColumns] = useState<Array<{ name: string; dataType: string }>>([])
+  const [serialMapping, setSerialMapping] = useState<{ serialId: string; serialKey: string; licenseKey: string; serialClientRef: string; serialProduct: string; serialStatus: string }>({ serialId: '', serialKey: '', licenseKey: '', serialClientRef: '', serialProduct: '', serialStatus: '' })
+  const [serialDiscovering, setSerialDiscovering] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // List action state
@@ -144,6 +150,38 @@ export function IntegrationManager() {
     setStep(1); setSelectedErpId(''); setConnectionUrl(''); setApiKey('')
     setTestResult(null); setTables([]); setSelectedTable(''); setColumns([])
     setMapping({ id: '', name: '', email: '', phone: '', company: '', status: '' })
+    setSyncSerials(false); setSerialTable(''); setSerialColumns([])
+    setSerialMapping({ serialId: '', serialKey: '', licenseKey: '', serialClientRef: '', serialProduct: '', serialStatus: '' })
+  }
+
+  const handleSerialTableSelect = async (table: string) => {
+    setSerialTable(table)
+    setSerialMapping({ serialId: '', serialKey: '', licenseKey: '', serialClientRef: '', serialProduct: '', serialStatus: '' })
+    setSerialDiscovering(true)
+    try {
+      const res = await fetch('/api/admin/integrations/discover-schema', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connectionUrl, table }),
+      })
+      const json = await res.json()
+      const cols = (json.columns || []).map((c: { name: string }) => c.name)
+      setSerialColumns(json.columns || [])
+      // Auto-suggest common serial-field names
+      const find = (candidates: string[]) => cols.find((c: string) => candidates.some((can) => c.toLowerCase() === can || c.toLowerCase().includes(can)))
+      setSerialMapping({
+        serialId: find(['id', 'uuid', 'cuid']) || '',
+        serialKey: find(['serial', 'serialkey', 'serialnumber', 'imei', 'licensekey', 'key']) || '',
+        licenseKey: find(['license', 'licensekey', 'activationkey']) || '',
+        serialClientRef: find(['clientid', 'customerid', 'ownerid', 'tenantid', 'userid']) || '',
+        serialProduct: find(['product', 'productname', 'sku', 'item']) || '',
+        serialStatus: find(['status', 'isactive', 'activated']) || '',
+      })
+    } catch {
+      toast.error('Serial column discovery failed')
+    } finally {
+      setSerialDiscovering(false)
+    }
   }
 
   const handleTest = async () => {
@@ -220,8 +258,22 @@ export function IntegrationManager() {
       toast.error('Map at least the id, name, and email columns')
       return
     }
+    if (syncSerials && (!serialTable || !serialMapping.serialKey)) {
+      toast.error('For serials, pick a serial table + map the serialKey column')
+      return
+    }
     setSaving(true)
     try {
+      const schemaMapping: Record<string, string> = { clientTable: selectedTable, ...mapping }
+      if (syncSerials && serialTable && serialMapping.serialKey) {
+        schemaMapping.serialTable = serialTable
+        schemaMapping.serialId = serialMapping.serialId
+        schemaMapping.serialKey = serialMapping.serialKey
+        schemaMapping.licenseKey = serialMapping.licenseKey
+        schemaMapping.serialClientRef = serialMapping.serialClientRef
+        schemaMapping.serialProduct = serialMapping.serialProduct
+        schemaMapping.serialStatus = serialMapping.serialStatus
+      }
       const res = await fetch('/api/admin/integrations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -233,7 +285,7 @@ export function IntegrationManager() {
           direction: 'bidirectional',
           connectionUrl,
           apiKey: apiKey || undefined,
-          schemaMapping: { clientTable: selectedTable, ...mapping },
+          schemaMapping,
           autoSync: false,
           syncInterval: 300,
         }),
@@ -611,11 +663,68 @@ export function IntegrationManager() {
                 </div>
               )}
 
+              {/* Optional: serials mapping */}
+              <div className="p-3 rounded-lg border" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Also sync serials/licenses?</p>
+                    <p className="text-xs text-muted-foreground">Pull the ERP&apos;s serial/license table into ApexFlow Licenses.</p>
+                  </div>
+                  <Switch checked={syncSerials} onCheckedChange={setSyncSerials} aria-label="Toggle serials sync" />
+                </div>
+
+                {syncSerials && (
+                  <div className="space-y-3 mt-3">
+                    <div>
+                      <Label className="text-foreground text-xs">Serial / License Table</Label>
+                      {serialDiscovering ? (
+                        <div className="flex items-center gap-2 mt-1 text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Discovering…</div>
+                      ) : (
+                        <Select value={serialTable} onValueChange={handleSerialTableSelect}>
+                          <SelectTrigger className="mt-1 text-foreground text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }}>
+                            <SelectValue placeholder="Pick the serials table" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-60">
+                            {tables.map((t) => (
+                              <SelectItem key={t} value={t}>{t}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+
+                    {serialTable && serialColumns.length > 0 && (
+                      <div className="space-y-2">
+                        {(['serialKey', 'serialId', 'serialClientRef', 'licenseKey', 'serialProduct', 'serialStatus'] as const).map((field) => (
+                          <div key={field} className="grid grid-cols-3 items-center gap-2">
+                            <Label className="text-muted-foreground text-xs uppercase">{field.replace('serial', '').replace('Ref', ' client ref')}</Label>
+                            <Select
+                              value={serialMapping[field]}
+                              onValueChange={(v) => setSerialMapping((m) => ({ ...m, [field]: v }))}
+                            >
+                              <SelectTrigger className="col-span-2 text-foreground text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }}>
+                                <SelectValue placeholder={`select ${field} column`} />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                {serialColumns.map((c) => (
+                                  <SelectItem key={c.name} value={c.name}>{c.name} ({c.dataType})</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ))}
+                        <p className="text-xs text-muted-foreground">serialKey is required. serialClientRef links each serial to a synced client (the ERP column referencing the client id).</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-between gap-2 pt-2">
                 <Button variant="outline" onClick={() => setStep(1)} className="text-muted-foreground">Back</Button>
                 <Button
                   onClick={handleSave}
-                  disabled={saving || !selectedTable || !mapping.id || !mapping.name || !mapping.email}
+                  disabled={saving || !selectedTable || !mapping.id || !mapping.name || !mapping.email || (syncSerials && (!serialTable || !serialMapping.serialKey))}
                   className="text-white"
                   style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
                 >
