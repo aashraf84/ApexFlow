@@ -173,7 +173,7 @@ export function IntegrationManager() {
     if (!connectionUrl) { toast.error('Enter the API base URL first'); return }
     setApiTesting(true); setTestResult(null)
     try {
-      const res = await fetch('/api/admin/integrations/test-api', {
+      const res = await fetch('/api/admin/integrations/test-rest-api', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ baseUrl: connectionUrl, apiKey: apiKey || undefined, endpoint: apiMapping.clientsEndpoint }),
