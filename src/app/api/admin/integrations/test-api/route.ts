@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-helpers'
 import { testApiConnection } from '@/lib/erp-sync'
 
-// POST /api/admin/integrations/test-api
+// POST /api/admin/integrations/test-api — wizard endpoint (DB vs API mode test)
 // Body: { baseUrl, apiKey?, endpoint? } — wizard endpoint for API-mode connection test
 // Fetches the endpoint, returns {connected, status, sampleFields}
 export async function POST(request: NextRequest) {
