@@ -27,6 +27,14 @@ export interface ClientSchemaMapping {
   phone?: string
   company?: string
   status?: string
+  // Optional serial/license mapping (syncs ERP serials → ApexFlow License)
+  serialTable?: string
+  serialId?: string
+  serialKey?: string
+  licenseKey?: string
+  serialClientRef?: string // ERP column referencing the client id
+  serialProduct?: string
+  serialStatus?: string
 }
 
 function parseMapping(mappingJson: string | null | undefined): ClientSchemaMapping | null {
@@ -411,6 +419,200 @@ export async function registerClientInErp(
     ).catch(() => {})
     return { success: false, error: msg }
   }
+}
+
+// ============================================
+// Inbound sync: ERP → ApexFlow (serials/licenses)
+// ============================================
+
+export async function syncSerialsFromErp(connectorId: string): Promise<SyncResult> {
+  const connector = await withRetry((tx) =>
+    tx.integrationConnector.findUnique({ where: { id: connectorId } })
+  )
+  if (!connector) return { synced: 0, failed: 0, total: 0, error: 'Connector not found' }
+  if (!connector.connectionUrl) {
+    return { synced: 0, failed: 0, total: 0, error: 'No connection URL on connector' }
+  }
+  const mapping = parseMapping(connector.schemaMapping)
+  if (!mapping || !mapping.serialTable || !mapping.serialKey) {
+    return { synced: 0, failed: 0, total: 0, error: 'No serial table/key mapping configured' }
+  }
+
+  const startedAt = new Date()
+  let synced = 0
+  let failed = 0
+  let total = 0
+  let errMsg: string | undefined
+
+  try {
+    const sql = neon(connector.connectionUrl)
+    const colId = quoteIdent(mapping.serialId || mapping.id)
+    const colKey = quoteIdent(mapping.serialKey)
+    const colLic = mapping.licenseKey ? quoteIdent(mapping.licenseKey) : 'NULL'
+    const colClientRef = mapping.serialClientRef ? quoteIdent(mapping.serialClientRef) : 'NULL'
+    const colProduct = mapping.serialProduct ? quoteIdent(mapping.serialProduct) : 'NULL'
+    const colStatus = mapping.serialStatus ? quoteIdent(mapping.serialStatus) : "'active'"
+    const table = quoteIdent(mapping.serialTable)
+
+    const rows = (await withTimeout(
+      sql.unsafe(
+        `SELECT ${colId} AS id, ${colKey} AS serialKey, ${colLic} AS licenseKey, ${colClientRef} AS clientRef, ${colProduct} AS product, ${colStatus} AS status FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`
+      ),
+      SYNC_TIMEOUT_MS
+    )) as Array<{
+      id: string | number
+      serialKey: string | null
+      licenseKey?: string | null
+      clientRef?: string | number | null
+      product?: string | null
+      status?: string | null
+    }>
+
+    total = rows.length
+
+    // Build a lookup of SyncTenant externalId → ApexFlow clientId (for linking serials to clients)
+    const tenants = await withRetry((tx) =>
+      tx.syncTenant.findMany({ where: { connectorId }, select: { externalId: true, clientId: true } })
+    )
+    const refToClient = new Map(tenants.filter((t) => t.clientId && t.externalId).map((t) => [String(t.externalId), t.clientId!]))
+
+    for (const row of rows) {
+      try {
+        const serialKey = row.serialKey?.trim()
+        if (!serialKey) { failed++; continue }
+        // Resolve the ApexFlow clientId from the ERP clientRef via SyncTenant
+        let clientId: string | null = null
+        if (row.clientRef != null) {
+          clientId = refToClient.get(String(row.clientRef)) || null
+        }
+        await withRetry((tx) =>
+          tx.license.upsert({
+            where: { serialKey },
+            update: {
+              licenseKey: row.licenseKey || undefined,
+              clientId: clientId || undefined,
+              erpSystemId: connector.erpSystemId || undefined,
+              status: (row.status as string) || undefined,
+              type: row.product || undefined,
+            },
+            create: {
+              serialKey,
+              licenseKey: row.licenseKey || serialKey,
+              clientId: clientId || undefined,
+              erpSystemId: connector.erpSystemId || undefined,
+              status: (row.status as string) || 'active',
+              type: row.product || 'standard',
+            },
+          })
+        )
+        synced++
+      } catch (rowErr) {
+        failed++
+        if (!errMsg) errMsg = `Serial sync failed: ${rowErr instanceof Error ? rowErr.message : String(rowErr)}`
+      }
+    }
+
+    await withRetry((tx) =>
+      tx.syncLog.create({
+        data: {
+          erpSystemId: connector.erpSystemId || undefined,
+          erpSlug: connector.erpSlug,
+          erpName: connector.erpName,
+          direction: 'inbound',
+          status: failed === 0 ? 'success' : 'partial',
+          syncType: 'manual',
+          recordsSynced: synced,
+          recordsFailed: failed,
+          durationMs: Date.now() - startedAt.getTime(),
+          metadata: JSON.stringify({ entity: 'serials' }),
+          errorMessage: errMsg,
+        },
+      })
+    )
+    return { synced, failed, total, error: errMsg }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    await withRetry((tx) =>
+      tx.syncLog.create({
+        data: {
+          erpSystemId: connector.erpSystemId || undefined,
+          erpSlug: connector.erpSlug,
+          erpName: connector.erpName,
+          direction: 'inbound',
+          status: 'failed',
+          syncType: 'manual',
+          recordsSynced: 0,
+          recordsFailed: 0,
+          durationMs: Date.now() - startedAt.getTime(),
+          metadata: JSON.stringify({ entity: 'serials' }),
+          errorMessage: msg,
+        },
+      })
+    ).catch(() => {})
+    return { synced: 0, failed: 0, total: 0, error: msg }
+  }
+}
+
+// ============================================
+// Unified connector sync (clients + serials) + auto-sync scheduler
+// ============================================
+
+export interface ConnectorSyncResult {
+  connectorId: string
+  erpName: string
+  clients: SyncResult
+  serials: SyncResult
+}
+
+/** Sync clients + serials (if mapped) for a connector. Used by the cron + manual Sync. */
+export async function syncConnector(connectorId: string): Promise<ConnectorSyncResult> {
+  const connector = await withRetry((tx) =>
+    tx.integrationConnector.findUnique({ where: { id: connectorId }, select: { id: true, erpName: true, schemaMapping: true } })
+  )
+  const clients = await syncClientsFromErp(connectorId)
+  let serials: SyncResult = { synced: 0, failed: 0, total: 0 }
+  const mapping = parseMapping(connector?.schemaMapping)
+  if (mapping?.serialTable && mapping?.serialKey) {
+    serials = await syncSerialsFromErp(connectorId)
+  }
+  return { connectorId, erpName: connector?.erpName || 'Unknown', clients, serials }
+}
+
+/**
+ * syncDueConnectors — finds autoSync connectors whose lastSyncAt + syncInterval
+ * is in the past (or never synced), syncs up to `limit` of them. Used by the
+ * Vercel Cron route so each cron run processes a bounded batch (stays within
+ * the function timeout) and cycles through all due connectors over time.
+ */
+export async function syncDueConnectors(limit = 2): Promise<{
+  processed: number
+  results: ConnectorSyncResult[]
+  skipped: number
+}> {
+  const now = new Date()
+  // Find autoSync connectors that are due: never synced OR lastSyncAt + syncInterval < now
+  const all = await withRetry((tx) =>
+    tx.integrationConnector.findMany({
+      where: { autoSync: true, connectionUrl: { not: null } },
+      select: { id: true, lastSyncAt: true, syncInterval: true },
+    })
+  )
+  const due = all.filter((c) => {
+    if (!c.lastSyncAt) return true
+    const dueAt = new Date(c.lastSyncAt.getTime() + c.syncInterval * 1000)
+    return dueAt < now
+  })
+  const toProcess = due.slice(0, limit)
+  const results: ConnectorSyncResult[] = []
+  for (const c of toProcess) {
+    try {
+      const res = await syncConnector(c.id)
+      results.push(res)
+    } catch (e) {
+      // continue — the individual sync logs the error
+    }
+  }
+  return { processed: toProcess.length, results, skipped: due.length - toProcess.length }
 }
 
 // re-export db for convenience

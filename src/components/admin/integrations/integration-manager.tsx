@@ -20,6 +20,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import {
   Plug,
@@ -270,17 +271,51 @@ export function IntegrationManager() {
 
   const handleSync = async (id: string, name: string) => {
     setSyncingId(id)
-    toast.info(`Syncing clients from ${name}…`)
+    toast.info(`Syncing ${name}…`)
     try {
       const res = await fetch(`/api/admin/integrations/${id}/sync`, { method: 'POST' })
       const json = await res.json()
-      if (json.synced > 0) toast.success(`${name}: synced ${json.synced} clients${json.failed ? `, ${json.failed} failed` : ''}`)
-      else toast.error(`${name}: ${json.error || 'no clients synced'}`)
+      const clients = json.clients || {}
+      const serials = json.serials || {}
+      const totalSynced = (clients.synced || 0) + (serials.synced || 0)
+      if (totalSynced > 0) {
+        const parts = []
+        if (clients.synced) parts.push(`${clients.synced} clients`)
+        if (serials.synced) parts.push(`${serials.synced} serials`)
+        toast.success(`${name}: synced ${parts.join(' + ')}${(clients.failed || serials.failed) ? ` (${(clients.failed || 0) + (serials.failed || 0)} failed)` : ''}`)
+      } else {
+        toast.error(`${name}: ${(clients.error || serials.error || 'no records synced')}`)
+      }
       fetchConnectors()
     } catch {
       toast.error(`${name}: sync failed`)
     } finally {
       setSyncingId(null)
+    }
+  }
+
+  const handleSyncAll = async () => {
+    if (connectors.length === 0) { toast.info('No integrations to sync'); return }
+    toast.info(`Syncing all ${connectors.length} integrations…`)
+    for (const c of connectors) {
+      await handleSync(c.id, c.erpName)
+    }
+  }
+
+  const handleToggleAutoSync = async (id: string, erpName: string, current: boolean) => {
+    try {
+      const res = await fetch('/api/admin/integrations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, autoSync: !current }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast.success(`${erpName}: auto-sync ${!current ? 'enabled' : 'disabled'}`)
+        fetchConnectors()
+      } else toast.error(json.error || 'Failed to toggle')
+    } catch {
+      toast.error('Failed to toggle auto-sync')
     }
   }
 
@@ -331,14 +366,22 @@ export function IntegrationManager() {
           <h2 className="text-2xl font-bold text-foreground">ERP Integrations</h2>
           <p className="text-muted-foreground mt-1">Link your ERP systems, sync clients, and register new clients from here.</p>
         </div>
-        <Button
-          onClick={() => { resetWizard(); setWizardOpen(true) }}
-          className="hover:opacity-90 text-white"
-          style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Integration
-        </Button>
+        <div className="flex gap-2">
+          {connectors.length > 0 && (
+            <Button variant="outline" onClick={handleSyncAll} className="text-foreground">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Sync All
+            </Button>
+          )}
+          <Button
+            onClick={() => { resetWizard(); setWizardOpen(true) }}
+            className="hover:opacity-90 text-white"
+            style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Integration
+          </Button>
+        </div>
       </div>
 
       {/* Connectors list */}
@@ -403,6 +446,18 @@ export function IntegrationManager() {
                 {c.lastError && (
                   <p className="text-xs text-red-400 mb-3 truncate" title={c.lastError}>⚠ {c.lastError}</p>
                 )}
+
+                <div className="flex items-center justify-between mb-3 p-2 rounded-lg" style={{ background: 'var(--secondary)' }}>
+                  <div>
+                    <p className="text-xs font-medium text-foreground">Auto-sync</p>
+                    <p className="text-[10px] text-muted-foreground">every {Math.round(c.syncInterval / 60)} min{c.autoSync ? ' · enabled' : ' · off'}</p>
+                  </div>
+                  <Switch
+                    checked={c.autoSync}
+                    onCheckedChange={() => handleToggleAutoSync(c.id, c.erpName, c.autoSync)}
+                    aria-label={`Toggle auto-sync for ${c.erpName}`}
+                  />
+                </div>
 
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => handleTestConnector(c.id)} disabled={testingId === c.id} className="text-foreground">

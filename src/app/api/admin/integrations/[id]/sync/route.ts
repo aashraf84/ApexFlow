@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-helpers'
-import { syncClientsFromErp } from '@/lib/erp-sync'
+import { syncConnector } from '@/lib/erp-sync'
 
-// POST /api/admin/integrations/[id]/sync — real inbound client sync (ERP → ApexFlow)
+// POST /api/admin/integrations/[id]/sync — real inbound sync (ERP → ApexFlow)
+// Syncs clients + serials (if mapped) for the connector.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -12,11 +13,18 @@ export async function POST(
 
   try {
     const { id } = await params
-    const result = await syncClientsFromErp(id)
-    const status = result.error ? (result.synced > 0 ? 200 : 500) : 200
+    const result = await syncConnector(id)
+    const clientsOk = !result.clients.error || result.clients.synced > 0
+    const serialsOk = !result.serials.error || result.serials.synced > 0
+    const ok = clientsOk && serialsOk
     return NextResponse.json(
-      { success: !result.error || result.synced > 0, ...result },
-      { status }
+      {
+        success: ok,
+        erpName: result.erpName,
+        clients: { synced: result.clients.synced, failed: result.clients.failed, total: result.clients.total, error: result.clients.error },
+        serials: { synced: result.serials.synced, failed: result.serials.failed, total: result.serials.total, error: result.serials.error },
+      },
+      { status: ok ? 200 : 500 }
     )
   } catch (error) {
     return NextResponse.json(
