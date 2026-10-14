@@ -3,7 +3,7 @@ import { requirePermission } from '@/lib/api-helpers'
 import { syncConnector } from '@/lib/erp-sync'
 
 // POST /api/admin/integrations/[id]/sync — real inbound sync (ERP → ApexFlow)
-// Syncs clients + serials (if mapped) for the connector.
+// Syncs clients + serials + devices (if mapped) for the connector.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -16,13 +16,15 @@ export async function POST(
     const result = await syncConnector(id)
     const clientsOk = !result.clients.error || result.clients.synced > 0
     const serialsOk = !result.serials.error || result.serials.synced > 0
-    const ok = clientsOk && serialsOk
+    const devicesOk = !result.devices.error || result.devices.synced > 0
+    const ok = clientsOk && serialsOk && devicesOk
     return NextResponse.json(
       {
         success: ok,
         erpName: result.erpName,
         clients: { synced: result.clients.synced, failed: result.clients.failed, total: result.clients.total, error: result.clients.error },
         serials: { synced: result.serials.synced, failed: result.serials.failed, total: result.serials.total, error: result.serials.error },
+        devices: { synced: result.devices.synced, failed: result.devices.failed, total: result.devices.total, error: result.devices.error },
       },
       { status: ok ? 200 : 500 }
     )

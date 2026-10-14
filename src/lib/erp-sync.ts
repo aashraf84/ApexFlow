@@ -35,6 +35,14 @@ export interface ClientSchemaMapping {
   serialClientRef?: string // ERP column referencing the client id
   serialProduct?: string
   serialStatus?: string
+  // Optional device mapping (syncs ERP hardware devices → ApexFlow ErpDevice)
+  deviceTable?: string
+  deviceId?: string
+  deviceSerial?: string
+  deviceName?: string
+  deviceType?: string
+  deviceStatus?: string
+  deviceClientRef?: string
 }
 
 function parseMapping(mappingJson: string | null | undefined): ClientSchemaMapping | null {
@@ -562,6 +570,142 @@ export interface ConnectorSyncResult {
   erpName: string
   clients: SyncResult
   serials: SyncResult
+  devices: SyncResult
+}
+
+// ============================================
+// Inbound sync: ERP → ApexFlow (devices)
+// ============================================
+
+export async function syncDevicesFromErp(connectorId: string): Promise<SyncResult> {
+  const connector = await withRetry((tx) =>
+    tx.integrationConnector.findUnique({ where: { id: connectorId } })
+  )
+  if (!connector) return { synced: 0, failed: 0, total: 0, error: 'Connector not found' }
+  if (!connector.connectionUrl) {
+    return { synced: 0, failed: 0, total: 0, error: 'No connection URL on connector' }
+  }
+  const mapping = parseMapping(connector.schemaMapping)
+  if (!mapping || !mapping.deviceTable || !mapping.deviceSerial) {
+    return { synced: 0, failed: 0, total: 0, error: 'No device table/serial mapping configured' }
+  }
+
+  const startedAt = new Date()
+  let synced = 0
+  let failed = 0
+  let total = 0
+  let errMsg: string | undefined
+
+  try {
+    const sql = neon(connector.connectionUrl)
+    const colId = quoteIdent(mapping.deviceId || 'id')
+    const colSerial = quoteIdent(mapping.deviceSerial)
+    const colName = mapping.deviceName ? quoteIdent(mapping.deviceName) : 'NULL'
+    const colType = mapping.deviceType ? quoteIdent(mapping.deviceType) : 'NULL'
+    const colStatus = mapping.deviceStatus ? quoteIdent(mapping.deviceStatus) : "'active'"
+    const colClientRef = mapping.deviceClientRef ? quoteIdent(mapping.deviceClientRef) : 'NULL'
+    const table = quoteIdent(mapping.deviceTable)
+
+    const rows = (await withTimeout(
+      sql.unsafe(
+        `SELECT ${colId} AS id, ${colSerial} AS serial, ${colName} AS name, ${colType} AS type, ${colStatus} AS status, ${colClientRef} AS clientRef FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`
+      ),
+      SYNC_TIMEOUT_MS
+    )) as Array<{
+      id: string | number
+      serial: string | null
+      name?: string | null
+      type?: string | null
+      status?: string | null
+      clientRef?: string | number | null
+    }>
+
+    total = rows.length
+
+    // SyncTenant lookup: externalId (client) → ApexFlow clientId
+    const tenants = await withRetry((tx) =>
+      tx.syncTenant.findMany({ where: { connectorId }, select: { externalId: true, clientId: true } })
+    )
+    const refToClient = new Map(tenants.filter((t) => t.clientId && t.externalId).map((t) => [String(t.externalId), t.clientId!]))
+
+    for (const row of rows) {
+      try {
+        const serial = row.serial?.trim()
+        if (!serial) { failed++; continue }
+        let clientId: string | null = null
+        if (row.clientRef != null) {
+          clientId = refToClient.get(String(row.clientRef)) || null
+        }
+        await withRetry((tx) =>
+          tx.erpDevice.upsert({
+            where: { serialNumber: serial },
+            update: {
+              externalId: String(row.id),
+              name: row.name || undefined,
+              type: row.type || undefined,
+              status: (row.status as string) || undefined,
+              clientId: clientId || undefined,
+              erpSystemId: connector.erpSystemId || undefined,
+              lastSyncedAt: new Date(),
+            },
+            create: {
+              serialNumber: serial,
+              externalId: String(row.id),
+              name: row.name || null,
+              type: row.type || null,
+              status: (row.status as string) || 'active',
+              clientId: clientId || null,
+              erpSystemId: connector.erpSystemId || null,
+              lastSyncedAt: new Date(),
+            },
+          })
+        )
+        synced++
+      } catch (rowErr) {
+        failed++
+        if (!errMsg) errMsg = `Device sync failed: ${rowErr instanceof Error ? rowErr.message : String(rowErr)}`
+      }
+    }
+
+    await withRetry((tx) =>
+      tx.syncLog.create({
+        data: {
+          erpSystemId: connector.erpSystemId || undefined,
+          erpSlug: connector.erpSlug,
+          erpName: connector.erpName,
+          direction: 'inbound',
+          status: failed === 0 ? 'success' : 'partial',
+          syncType: 'manual',
+          recordsSynced: synced,
+          recordsFailed: failed,
+          durationMs: Date.now() - startedAt.getTime(),
+          metadata: JSON.stringify({ entity: 'devices' }),
+          errorMessage: errMsg,
+        },
+      })
+    )
+    return { synced, failed, total, error: errMsg }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    await withRetry((tx) =>
+      tx.syncLog.create({
+        data: {
+          erpSystemId: connector.erpSystemId || undefined,
+          erpSlug: connector.erpSlug,
+          erpName: connector.erpName,
+          direction: 'inbound',
+          status: 'failed',
+          syncType: 'manual',
+          recordsSynced: 0,
+          recordsFailed: 0,
+          durationMs: Date.now() - startedAt.getTime(),
+          metadata: JSON.stringify({ entity: 'devices' }),
+          errorMessage: msg,
+        },
+      })
+    ).catch(() => {})
+    return { synced: 0, failed: 0, total: 0, error: msg }
+  }
 }
 
 /** Sync clients + serials (if mapped) for a connector. Used by the cron + manual Sync. */
@@ -571,11 +715,15 @@ export async function syncConnector(connectorId: string): Promise<ConnectorSyncR
   )
   const clients = await syncClientsFromErp(connectorId)
   let serials: SyncResult = { synced: 0, failed: 0, total: 0 }
+  let devices: SyncResult = { synced: 0, failed: 0, total: 0 }
   const mapping = parseMapping(connector?.schemaMapping)
   if (mapping?.serialTable && mapping?.serialKey) {
     serials = await syncSerialsFromErp(connectorId)
   }
-  return { connectorId, erpName: connector?.erpName || 'Unknown', clients, serials }
+  if (mapping?.deviceTable && mapping?.deviceSerial) {
+    devices = await syncDevicesFromErp(connectorId)
+  }
+  return { connectorId, erpName: connector?.erpName || 'Unknown', clients, serials, devices }
 }
 
 /**

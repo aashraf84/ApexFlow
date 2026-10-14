@@ -113,6 +113,7 @@ model ErpSystem {
   subscriptions  Subscription[]
   packages       Package[]
   syncConnectors SyncConnector[]
+  erpDevices     ErpDevice[]
 }
 
 // ============================================
@@ -280,6 +281,7 @@ model Client {
   payments       Payment[]
   syncTenants    SyncTenant[]
   devices        Device[]
+  erpDevices     ErpDevice[]
 }
 
 model ClientActivity {
@@ -745,6 +747,29 @@ model Device {
   updatedAt    DateTime  @updatedAt
 
   client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+}
+
+// ============================================
+// ERP Devices (hardware devices synced from linked ERPs)
+// Distinct from the session-Device model above — these are ERP hardware
+// units (e.g. ElectroFlow devices with serial/IMEI) synced into ApexFlow.
+// ============================================
+
+model ErpDevice {
+  id           String    @id @default(cuid())
+  clientId     String?
+  erpSystemId  String?
+  externalId   String?
+  serialNumber String?   @unique
+  name         String?
+  type         String?
+  status       String    @default("active")
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  client    Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
 }
 
 // ============================================

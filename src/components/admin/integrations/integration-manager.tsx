@@ -109,6 +109,12 @@ export function IntegrationManager() {
   const [serialColumns, setSerialColumns] = useState<Array<{ name: string; dataType: string }>>([])
   const [serialMapping, setSerialMapping] = useState<{ serialId: string; serialKey: string; licenseKey: string; serialClientRef: string; serialProduct: string; serialStatus: string }>({ serialId: '', serialKey: '', licenseKey: '', serialClientRef: '', serialProduct: '', serialStatus: '' })
   const [serialDiscovering, setSerialDiscovering] = useState(false)
+  // Devices (optional) mapping state
+  const [syncDevices, setSyncDevices] = useState(false)
+  const [deviceTable, setDeviceTable] = useState('')
+  const [deviceColumns, setDeviceColumns] = useState<Array<{ name: string; dataType: string }>>([])
+  const [deviceMapping, setDeviceMapping] = useState<{ deviceId: string; deviceSerial: string; deviceName: string; deviceType: string; deviceStatus: string; deviceClientRef: string }>({ deviceId: '', deviceSerial: '', deviceName: '', deviceType: '', deviceStatus: '', deviceClientRef: '' })
+  const [deviceDiscovering, setDeviceDiscovering] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // List action state
@@ -152,6 +158,37 @@ export function IntegrationManager() {
     setMapping({ id: '', name: '', email: '', phone: '', company: '', status: '' })
     setSyncSerials(false); setSerialTable(''); setSerialColumns([])
     setSerialMapping({ serialId: '', serialKey: '', licenseKey: '', serialClientRef: '', serialProduct: '', serialStatus: '' })
+    setSyncDevices(false); setDeviceTable(''); setDeviceColumns([])
+    setDeviceMapping({ deviceId: '', deviceSerial: '', deviceName: '', deviceType: '', deviceStatus: '', deviceClientRef: '' })
+  }
+
+  const handleDeviceTableSelect = async (table: string) => {
+    setDeviceTable(table)
+    setDeviceMapping({ deviceId: '', deviceSerial: '', deviceName: '', deviceType: '', deviceStatus: '', deviceClientRef: '' })
+    setDeviceDiscovering(true)
+    try {
+      const res = await fetch('/api/admin/integrations/discover-schema', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connectionUrl, table }),
+      })
+      const json = await res.json()
+      const cols = (json.columns || []).map((c: { name: string }) => c.name)
+      setDeviceColumns(json.columns || [])
+      const find = (candidates: string[]) => cols.find((c: string) => candidates.some((can) => c.toLowerCase() === can || c.toLowerCase().includes(can)))
+      setDeviceMapping({
+        deviceId: find(['id', 'uuid', 'cuid']) || '',
+        deviceSerial: find(['serial', 'serialnumber', 'imei', 'deviceid', 'mac']) || '',
+        deviceName: find(['name', 'devicename', 'model', 'product']) || '',
+        deviceType: find(['type', 'devicetype', 'category', 'model']) || '',
+        deviceStatus: find(['status', 'isactive', 'state']) || '',
+        deviceClientRef: find(['clientid', 'customerid', 'ownerid', 'tenantid', 'userid']) || '',
+      })
+    } catch {
+      toast.error('Device column discovery failed')
+    } finally {
+      setDeviceDiscovering(false)
+    }
   }
 
   const handleSerialTableSelect = async (table: string) => {
@@ -262,6 +299,10 @@ export function IntegrationManager() {
       toast.error('For serials, pick a serial table + map the serialKey column')
       return
     }
+    if (syncDevices && (!deviceTable || !deviceMapping.deviceSerial)) {
+      toast.error('For devices, pick a device table + map the deviceSerial column')
+      return
+    }
     setSaving(true)
     try {
       const schemaMapping: Record<string, string> = { clientTable: selectedTable, ...mapping }
@@ -273,6 +314,15 @@ export function IntegrationManager() {
         schemaMapping.serialClientRef = serialMapping.serialClientRef
         schemaMapping.serialProduct = serialMapping.serialProduct
         schemaMapping.serialStatus = serialMapping.serialStatus
+      }
+      if (syncDevices && deviceTable && deviceMapping.deviceSerial) {
+        schemaMapping.deviceTable = deviceTable
+        schemaMapping.deviceId = deviceMapping.deviceId
+        schemaMapping.deviceSerial = deviceMapping.deviceSerial
+        schemaMapping.deviceName = deviceMapping.deviceName
+        schemaMapping.deviceType = deviceMapping.deviceType
+        schemaMapping.deviceStatus = deviceMapping.deviceStatus
+        schemaMapping.deviceClientRef = deviceMapping.deviceClientRef
       }
       const res = await fetch('/api/admin/integrations', {
         method: 'POST',
@@ -329,14 +379,17 @@ export function IntegrationManager() {
       const json = await res.json()
       const clients = json.clients || {}
       const serials = json.serials || {}
-      const totalSynced = (clients.synced || 0) + (serials.synced || 0)
+      const devices = json.devices || {}
+      const totalSynced = (clients.synced || 0) + (serials.synced || 0) + (devices.synced || 0)
       if (totalSynced > 0) {
         const parts = []
         if (clients.synced) parts.push(`${clients.synced} clients`)
         if (serials.synced) parts.push(`${serials.synced} serials`)
-        toast.success(`${name}: synced ${parts.join(' + ')}${(clients.failed || serials.failed) ? ` (${(clients.failed || 0) + (serials.failed || 0)} failed)` : ''}`)
+        if (devices.synced) parts.push(`${devices.synced} devices`)
+        const failed = (clients.failed || 0) + (serials.failed || 0) + (devices.failed || 0)
+        toast.success(`${name}: synced ${parts.join(' + ')}${failed ? ` (${failed} failed)` : ''}`)
       } else {
-        toast.error(`${name}: ${(clients.error || serials.error || 'no records synced')}`)
+        toast.error(`${name}: ${(clients.error || serials.error || devices.error || 'no records synced')}`)
       }
       fetchConnectors()
     } catch {
@@ -720,11 +773,68 @@ export function IntegrationManager() {
                 )}
               </div>
 
+              {/* Optional: devices mapping */}
+              <div className="p-3 rounded-lg border" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Also sync devices?</p>
+                    <p className="text-xs text-muted-foreground">Pull the ERP&apos;s hardware device table into ApexFlow ErpDevices.</p>
+                  </div>
+                  <Switch checked={syncDevices} onCheckedChange={setSyncDevices} aria-label="Toggle devices sync" />
+                </div>
+
+                {syncDevices && (
+                  <div className="space-y-3 mt-3">
+                    <div>
+                      <Label className="text-foreground text-xs">Device Table</Label>
+                      {deviceDiscovering ? (
+                        <div className="flex items-center gap-2 mt-1 text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Discovering…</div>
+                      ) : (
+                        <Select value={deviceTable} onValueChange={handleDeviceTableSelect}>
+                          <SelectTrigger className="mt-1 text-foreground text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }}>
+                            <SelectValue placeholder="Pick the devices table" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-60">
+                            {tables.map((t) => (
+                              <SelectItem key={t} value={t}>{t}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+
+                    {deviceTable && deviceColumns.length > 0 && (
+                      <div className="space-y-2">
+                        {(['deviceSerial', 'deviceId', 'deviceName', 'deviceType', 'deviceStatus', 'deviceClientRef'] as const).map((field) => (
+                          <div key={field} className="grid grid-cols-3 items-center gap-2">
+                            <Label className="text-muted-foreground text-xs uppercase">{field.replace('device', '').replace('Ref', ' client ref') || 'serial'}</Label>
+                            <Select
+                              value={deviceMapping[field]}
+                              onValueChange={(v) => setDeviceMapping((m) => ({ ...m, [field]: v }))}
+                            >
+                              <SelectTrigger className="col-span-2 text-foreground text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }}>
+                                <SelectValue placeholder={`select ${field} column`} />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                {deviceColumns.map((c) => (
+                                  <SelectItem key={c.name} value={c.name}>{c.name} ({c.dataType})</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ))}
+                        <p className="text-xs text-muted-foreground">deviceSerial is required. deviceClientRef links each device to a synced client.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-between gap-2 pt-2">
                 <Button variant="outline" onClick={() => setStep(1)} className="text-muted-foreground">Back</Button>
                 <Button
                   onClick={handleSave}
-                  disabled={saving || !selectedTable || !mapping.id || !mapping.name || !mapping.email || (syncSerials && (!serialTable || !serialMapping.serialKey))}
+                  disabled={saving || !selectedTable || !mapping.id || !mapping.name || !mapping.email || (syncSerials && (!serialTable || !serialMapping.serialKey)) || (syncDevices && (!deviceTable || !deviceMapping.deviceSerial))}
                   className="text-white"
                   style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
                 >

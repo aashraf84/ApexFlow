@@ -35,8 +35,10 @@ export async function GET(request: NextRequest) {
         erpName: r.erpName,
         clients: r.clients.synced,
         serials: r.serials.synced,
+        devices: r.devices.synced,
         clientErrors: r.clients.failed,
         serialErrors: r.serials.failed,
+        deviceErrors: r.devices.failed,
       })),
     })
   } catch (error) {
