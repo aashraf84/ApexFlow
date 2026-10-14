@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 type SyncAction = 'trigger' | 'enable-auto' | 'disable-auto'
 
@@ -18,6 +19,8 @@ interface SyncControlBody {
  */
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'integrations')
+    if (!auth.ok) return auth.response
     const body: SyncControlBody = await request.json()
     const { action, erpSlug } = body
 

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { invalidateErpUrlCache } from '@/lib/erp-connector'
+import { requirePermission } from '@/lib/api-helpers'
 
 // PATCH /api/admin/erp-database-urls/bulk — update multiple ERP database URLs at once
 export async function PATCH(req: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'integrations')
+    if (!auth.ok) return auth.response
     const body = await req.json()
     const { urls } = body as { urls: Record<string, string> }
 

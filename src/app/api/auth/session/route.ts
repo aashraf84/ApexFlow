@@ -18,7 +18,13 @@ export async function GET(request: NextRequest) {
       session = await withRetry((tx) =>
         tx.adminSession.findUnique({
           where: { token },
-          include: { user: true },
+          include: {
+            user: {
+              include: {
+                adminRole: { select: { name: true, permissions: true } },
+              },
+            },
+          },
         }),
         5 // More retries for session checks
       )
@@ -70,6 +76,15 @@ export async function GET(request: NextRequest) {
       return response
     }
 
+    // Parse the user's role permissions for client-side UI gating
+    let permissions: string[] = []
+    try {
+      const raw = session.user.adminRole?.permissions
+      permissions = raw ? (Array.isArray(JSON.parse(raw)) ? JSON.parse(raw) : []) : []
+    } catch {
+      permissions = []
+    }
+
     return NextResponse.json(
       {
         authenticated: true,
@@ -79,6 +94,7 @@ export async function GET(request: NextRequest) {
           email: session.user.email,
           role: session.user.role,
           avatar: session.user.avatar,
+          permissions,
         },
       },
       { status: 200 }

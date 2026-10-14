@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 const defaultSettings = [
   { key: 'sandbox_mode', value: 'true', description: 'Enable sandbox/test mode for payments', isEncrypted: false },
@@ -39,6 +40,8 @@ export async function GET() {
 // PATCH /api/admin/payment-settings
 export async function PATCH(req: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'finance')
+    if (!auth.ok) return auth.response
     const body = await req.json()
     const updated: string[] = []
 

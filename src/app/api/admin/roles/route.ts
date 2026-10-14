@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 // GET /api/admin/roles — List roles with user count
 export async function GET() {
@@ -21,6 +22,8 @@ export async function GET() {
 // POST /api/admin/roles — Create role
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'system')
+    if (!auth.ok) return auth.response
     const body = await request.json()
     if (!body.name) return NextResponse.json({ error: 'Role name is required' }, { status: 400 })
 
@@ -50,6 +53,8 @@ export async function POST(request: NextRequest) {
 // PUT /api/admin/roles — Update role permissions
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'system')
+    if (!auth.ok) return auth.response
     const body = await request.json()
     if (!body.id) return NextResponse.json({ error: 'Role id is required' }, { status: 400 })
 

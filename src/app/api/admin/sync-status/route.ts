@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-helpers'
 import { db, withRetry } from '@/lib/db'
 
 /**
@@ -9,8 +10,10 @@ import { db, withRetry } from '@/lib/db'
  * - Recent 20 SyncLog entries
  * - Summary stats: totalConnectors, activeConnectors, totalSyncs, failedSyncs, avgLatencyMs
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'integrations')
+    if (!auth.ok) return auth.response
     const [connectors, recentSyncLogs, totalSyncs, failedSyncs] = await Promise.all([
       // All connectors
       withRetry((d) =>

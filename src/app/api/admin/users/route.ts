@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 // GET /api/admin/users — List users with search and role filter
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'system')
+    if (!auth.ok) return auth.response
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
     const role = searchParams.get('role') || ''
@@ -40,6 +43,8 @@ export async function GET(request: NextRequest) {
 // POST /api/admin/users — Create/invite user
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'system')
+    if (!auth.ok) return auth.response
     const body = await request.json()
     if (!body.email || !body.name) {
       return NextResponse.json({ error: 'Name and email are required' }, { status: 400 })
@@ -78,6 +83,8 @@ export async function POST(request: NextRequest) {
 // PATCH /api/admin/users — Update user (activate/deactivate, change role)
 export async function PATCH(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'system')
+    if (!auth.ok) return auth.response
     const body = await request.json()
     if (!body.id) return NextResponse.json({ error: 'User id is required' }, { status: 400 })
 
@@ -105,6 +112,8 @@ export async function PATCH(request: NextRequest) {
 // DELETE /api/admin/users — Delete user
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'system')
+    if (!auth.ok) return auth.response
     const body = await request.json()
     if (!body.id) return NextResponse.json({ error: 'User id is required' }, { status: 400 })
 

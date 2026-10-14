@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 // ─── POST /api/admin/payment-accounts/seed ──────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'finance')
+    if (!auth.ok) return auth.response
     // Check if payment accounts already exist
     const existingCount = await db.paymentAccount.count()
 

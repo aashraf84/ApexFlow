@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 // GET /api/admin/payment-audit
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'finance')
+    if (!auth.ok) return auth.response
     const { searchParams } = new URL(req.url)
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '50')))

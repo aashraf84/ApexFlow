@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 /**
  * GET /api/admin/integrations
@@ -72,6 +73,8 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'integrations')
+    if (!auth.ok) return auth.response
     const body = await request.json()
     const { erpSlug, erpName, type, direction, config, autoSync, syncInterval } = body
 
@@ -131,6 +134,8 @@ export async function POST(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'integrations')
+    if (!auth.ok) return auth.response
     const body = await request.json()
     const { id, erpName, type, direction, config, status, autoSync, syncInterval, lastError } = body
 
@@ -210,6 +215,8 @@ export async function PATCH(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'integrations')
+    if (!auth.ok) return auth.response
     const body = await request.json()
     const { id } = body
 

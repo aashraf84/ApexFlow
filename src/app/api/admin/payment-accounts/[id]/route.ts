@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -33,6 +34,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requirePermission(_request, 'finance')
+    if (!auth.ok) return auth.response
     const { id } = await params
 
     const account = await db.paymentAccount.findUnique({
@@ -63,6 +66,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requirePermission(request, 'finance')
+    if (!auth.ok) return auth.response
     const { id } = await params
     const body = await request.json()
 
@@ -137,6 +142,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requirePermission(request, 'finance')
+    if (!auth.ok) return auth.response
     const { id } = await params
 
     // Verify the account exists

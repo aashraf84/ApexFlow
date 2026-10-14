@@ -37,8 +37,8 @@ export async function POST() {
         tx.adminRole.createMany({
           data: [
             { name: 'super_admin', description: 'Full system access', permissions: JSON.stringify(['all']) },
-            { name: 'admin', description: 'Standard admin access', permissions: JSON.stringify(['clients', 'deals', 'finance', 'reports']) },
-            { name: 'manager', description: 'Manager access', permissions: JSON.stringify(['clients', 'deals', 'reports']) },
+            { name: 'admin', description: 'Standard admin access (no system-admin)', permissions: JSON.stringify(['clients', 'deals', 'finance', 'communications', 'marketing', 'erp', 'reports', 'integrations']) },
+            { name: 'manager', description: 'Manager access', permissions: JSON.stringify(['clients', 'deals', 'reports', 'marketing']) },
             { name: 'viewer', description: 'Read-only access', permissions: JSON.stringify(['reports']) },
           ],
         })

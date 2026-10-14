@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-helpers'
 import { db, withRetry } from '@/lib/db'
 
 /**
@@ -61,8 +62,10 @@ function randomTenantCount(): number {
  * Sets random statuses (mostly "connected"), random latencies (50-300ms),
  * and random clientCounts.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'integrations')
+    if (!auth.ok) return auth.response
     // Fetch existing connectors to avoid duplicates
     const existing = await withRetry((d) =>
       d.integrationConnector.findMany({

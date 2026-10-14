@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 /**
  * GET /api/admin/sync-history?erpSlug=xxx&status=xxx&limit=50&offset=0
@@ -9,6 +10,8 @@ import { db, withRetry } from '@/lib/db'
  */
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'integrations')
+    if (!auth.ok) return auth.response
     const { searchParams } = new URL(request.url)
 
     const erpSlug = searchParams.get('erpSlug') || undefined

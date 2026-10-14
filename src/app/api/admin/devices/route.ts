@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 // GET /api/admin/devices — List devices (derived from sessions)
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'system')
+    if (!auth.ok) return auth.response
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
     const status = searchParams.get('status') || ''
@@ -48,6 +51,8 @@ export async function GET(request: NextRequest) {
 // PATCH /api/admin/devices — Block/unblock device
 export async function PATCH(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'system')
+    if (!auth.ok) return auth.response
     const body = await request.json()
     const { id, status, reason } = body
 

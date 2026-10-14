@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 // GET /api/admin/payment-accounts?type=bank_account
 export async function GET(req: NextRequest) {
@@ -25,6 +26,8 @@ export async function GET(req: NextRequest) {
 // POST /api/admin/payment-accounts
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'finance')
+    if (!auth.ok) return auth.response
     const body = await req.json()
 
     if (!body.label?.trim()) {
@@ -122,6 +125,8 @@ export async function POST(req: NextRequest) {
 // PATCH /api/admin/payment-accounts?id=xxx
 export async function PATCH(req: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'finance')
+    if (!auth.ok) return auth.response
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
 
@@ -231,6 +236,8 @@ export async function PATCH(req: NextRequest) {
 // DELETE /api/admin/payment-accounts?id=xxx
 export async function DELETE(req: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'finance')
+    if (!auth.ok) return auth.response
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
 

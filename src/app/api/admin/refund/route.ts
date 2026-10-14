@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStripe } from '@/lib/stripe'
 import { db } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'finance')
+    if (!auth.ok) return auth.response
     const { paymentIntentId, reason } = await req.json()
     if (!paymentIntentId) {
       return NextResponse.json({ error: 'Payment intent ID required' }, { status: 400 })

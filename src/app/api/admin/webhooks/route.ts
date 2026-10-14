@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 /**
  * GET /api/admin/webhooks
@@ -40,6 +41,8 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'integrations')
+    if (!auth.ok) return auth.response
     const body = await request.json()
     const { erpSlug, name, url, secret, events, erpSystemId } = body
 

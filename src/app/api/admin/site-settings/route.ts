@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
+import { requirePermission } from '@/lib/api-helpers'
 
 // ─── Default settings that are seeded on first load ──────────────────────────
 const DEFAULT_SETTINGS: { key: string; value: string; category: string; description?: string }[] = [
@@ -233,6 +234,8 @@ export async function GET() {
 // ─── PATCH: Update one or more settings ──────────────────────────────────────
 export async function PATCH(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'system')
+    if (!auth.ok) return auth.response
     const body = await request.json()
     const { updates } = body as { updates: { key: string; value: string }[] }
 
@@ -262,6 +265,8 @@ export async function PATCH(request: NextRequest) {
 // ─── POST: Upload logo image ─────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'system')
+    if (!auth.ok) return auth.response
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const settingKey = formData.get('key') as string | null
@@ -319,6 +324,8 @@ export async function POST(request: NextRequest) {
 // ─── DELETE: Reset a setting to default ──────────────────────────────────────
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'system')
+    if (!auth.ok) return auth.response
     const { searchParams } = new URL(request.url)
     const key = searchParams.get('key')
 

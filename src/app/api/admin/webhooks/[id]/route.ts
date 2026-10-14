@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 /**
  * GET /api/admin/webhooks/[id]
@@ -11,6 +12,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const auth = await requirePermission(_request, 'integrations')
+    if (!auth.ok) return auth.response
     const { id } = await params
 
     const webhook = await withRetry((d) =>
@@ -51,6 +54,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const auth = await requirePermission(request, 'integrations')
+    if (!auth.ok) return auth.response
     const { id } = await params
     const body = await request.json()
 
@@ -123,6 +128,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const auth = await requirePermission(_request, 'integrations')
+    if (!auth.ok) return auth.response
     const { id } = await params
 
     // Verify it exists before deleting

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { invalidateErpUrlCache } from '@/lib/erp-connector'
+import { requirePermission } from '@/lib/api-helpers'
 
 // GET /api/admin/erp-database-urls — list all ERP database URLs
 export async function GET() {
@@ -27,6 +28,8 @@ export async function GET() {
 // PATCH /api/admin/erp-database-urls — update database URL for an ERP
 export async function PATCH(req: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'integrations')
+    if (!auth.ok) return auth.response
     const body = await req.json()
     const { slug, databaseUrl } = body
 
