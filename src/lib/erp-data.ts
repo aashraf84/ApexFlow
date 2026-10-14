@@ -94,7 +94,7 @@ export const ERP_WEBSITE_MAP: Record<string, string> = {
   electroflow: 'https://electroflowerp.vercel.app/',
   bookflow:    'https://bookflowerp.vercel.app/',
   fuelflow:    'https://fuelflowerp.vercel.app/',
-  salonflow:   'https://github.com/apexflowerp/SalonFlow',
+  salonflow:   'https://salonflowerp.vercel.app/',
 }
 
 /* ────────────────────────────────────────────────────────── */
@@ -350,7 +350,7 @@ export const FALLBACK_ERP_DATA: ErpSystemData[] = [
     ],
   },
   {
-    id: 'fallback-fuelflow', name: 'FuelFlow', slug: 'fuelflow', description: 'Comprehensive fuel station management platform with IoT-enabled dispenser control, ATG tank monitoring, forecourt automation, fuel delivery tracking, and multi-station support for petroleum retailers and CNG/EV operators.', icon: 'fuel', color: 'orange', status: 'active', industry: 'Fuel & Energy', features: 'Station Management,Dispenser Control,Tank Monitoring (ATG),Fuel Delivery Tracking,CNG Management,EV Charging,Forecourt Automation,Shift Management,Car Wash,Loyalty Programs', pricing: 'Starting from PKR 30,000/mo', sortOrder: 20, version: '1.0.0', website: 'https://github.com/apexflowerp/FuelFlow', moduleCount: 10,
+    id: 'fallback-fuelflow', name: 'FuelFlow', slug: 'fuelflow', description: 'Comprehensive fuel station management platform with IoT-enabled dispenser control, ATG tank monitoring, forecourt automation, fuel delivery tracking, and multi-station support for petroleum retailers and CNG/EV operators.', icon: 'fuel', color: 'orange', status: 'active', industry: 'Fuel & Energy', features: 'Station Management,Dispenser Control,Tank Monitoring (ATG),Fuel Delivery Tracking,CNG Management,EV Charging,Forecourt Automation,Shift Management,Car Wash,Loyalty Programs', pricing: 'Starting from PKR 30,000/mo', sortOrder: 20, version: '1.0.0', website: 'https://fuelflowerp.vercel.app/', moduleCount: 10,
     modules: [
       { id: 'mod-fuelflow-station', name: 'Station Management', slug: 'station-management', description: 'Multi-station operations with real-time monitoring and analytics.', category: 'Operations', price: 0, isActive: true },
       { id: 'mod-fuelflow-dispenser', name: 'Dispenser Control', slug: 'dispenser-control', description: 'IoT-enabled dispenser management with real-time flow monitoring.', category: 'Operations', price: 0, isActive: true },
@@ -365,7 +365,7 @@ export const FALLBACK_ERP_DATA: ErpSystemData[] = [
     ],
   },
   {
-    id: 'fallback-salonflow', name: 'SalonFlow', slug: 'salonflow', description: 'Complete salon and beauty business management platform with appointment scheduling, staff management, loyalty programs, membership plans, and multi-branch support.', icon: 'scissors', color: 'pink', status: 'active', industry: 'Salon & Beauty', features: 'Appointment Management,Staff Scheduling,Customer CRM,Loyalty Programs,Membership Plans,Service Catalog,Inventory Control,Multi-Branch,Commission Tracking,Billing & Invoicing', pricing: 'Starting from PKR 20,000/mo', sortOrder: 21, version: '1.0.0', website: 'https://github.com/apexflowerp/SalonFlow', moduleCount: 10,
+    id: 'fallback-salonflow', name: 'SalonFlow', slug: 'salonflow', description: 'Complete salon and beauty business management platform with appointment scheduling, staff management, loyalty programs, membership plans, and multi-branch support.', icon: 'scissors', color: 'pink', status: 'active', industry: 'Salon & Beauty', features: 'Appointment Management,Staff Scheduling,Customer CRM,Loyalty Programs,Membership Plans,Service Catalog,Inventory Control,Multi-Branch,Commission Tracking,Billing & Invoicing', pricing: 'Starting from PKR 20,000/mo', sortOrder: 21, version: '1.0.0', website: 'https://salonflowerp.vercel.app/', moduleCount: 10,
     modules: [
       { id: 'mod-salonflow-appointment', name: 'Appointment Management', slug: 'appointment-management', description: 'Online booking, walk-in management, recurring appointments, and waitlist handling.', category: 'Operations', price: 0, isActive: true },
       { id: 'mod-salonflow-staff', name: 'Staff Scheduling', slug: 'staff-scheduling', description: 'Shift planning, attendance tracking, commission management, and payroll integration.', category: 'HR', price: 0, isActive: true },

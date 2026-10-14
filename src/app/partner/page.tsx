@@ -1,8 +1,7 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import { PartnerPage } from '@/components/pages/become-partner-page'
-
+// /partner is a duplicate of /become-partner — redirect to the canonical route
+// (both previously rendered the same PartnerPage component).
 export default function PartnerRoute() {
-  // Redirects to /become-partner via ROUTE_MAP
-  return <PartnerPage />
+  redirect('/become-partner')
 }
