@@ -1,7 +1,6 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import { LoginPage } from '@/components/admin/login-page'
-
+// /login redirected to the canonical /admin/login (legacy duplicate route retired)
 export default function LoginRoute() {
-  return <LoginPage />
+  redirect('/admin/login')
 }

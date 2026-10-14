@@ -1,7 +1,9 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import { DashboardLayout } from '@/components/admin/dashboard-layout'
-
+// /dashboard redirected to the canonical /admin/dashboard
+// (legacy tab-based DashboardLayout retired — it was an unauthenticated
+// public route with a broken logout; the route-based /admin/* shell is
+// the single canonical admin UI, gated by src/middleware.ts)
 export default function DashboardRoute() {
-  return <DashboardLayout />
+  redirect('/admin/dashboard')
 }
