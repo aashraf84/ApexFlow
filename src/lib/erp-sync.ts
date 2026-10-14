@@ -43,6 +43,31 @@ export interface ClientSchemaMapping {
   deviceType?: string
   deviceStatus?: string
   deviceClientRef?: string
+  // API-mode (mode='api'): connectionUrl = base URL, apiKey = bearer token,
+  // endpoints + response field paths replace table/column mappings.
+  mode?: string
+  clientsEndpoint?: string
+  clientFieldId?: string
+  clientFieldName?: string
+  clientFieldEmail?: string
+  clientFieldPhone?: string
+  clientFieldCompany?: string
+  clientFieldStatus?: string
+  serialsEndpoint?: string
+  serialFieldId?: string
+  serialFieldKey?: string
+  serialFieldLicenseKey?: string
+  serialFieldClientRef?: string
+  serialFieldProduct?: string
+  serialFieldStatus?: string
+  devicesEndpoint?: string
+  deviceFieldId?: string
+  deviceFieldSerial?: string
+  deviceFieldName?: string
+  deviceFieldType?: string
+  deviceFieldStatus?: string
+  deviceFieldClientRef?: string
+  registerClientEndpoint?: string
 }
 
 function parseMapping(mappingJson: string | null | undefined): ClientSchemaMapping | null {
@@ -133,6 +158,79 @@ export async function discoverColumns(
     return { columns: rows.map((r) => ({ name: r.name, dataType: r.dataType })) }
   } catch (e) {
     return { columns: [], error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+// ============================================
+// API-mode helpers (fetch-based, for ERPs without DB access)
+// ============================================
+
+/** Extract the first array found in a JSON response (handles [..], {data:[..]}, {clients:[..]}). */
+function extractJsonArray(json: unknown): unknown[] {
+  if (Array.isArray(json)) return json
+  if (json && typeof json === 'object') {
+    const obj = json as Record<string, unknown>
+    // common wrappers
+    for (const key of ['data', 'items', 'results', 'rows', 'clients', 'serials', 'devices', 'records']) {
+      if (Array.isArray(obj[key])) return obj[key] as unknown[]
+    }
+    // any array value
+    for (const v of Object.values(obj)) {
+      if (Array.isArray(v)) return v as unknown[]
+    }
+  }
+  return []
+}
+
+/** Read a (possibly dotted) field path from an object: getJsonField({a:{b:1}}, 'a.b') → 1. */
+function getJsonField(obj: unknown, path: string): unknown {
+  if (!obj || !path) return undefined
+  const parts = path.split('.')
+  let cur: unknown = obj
+  for (const p of parts) {
+    if (cur && typeof cur === 'object' && p in (cur as Record<string, unknown>)) {
+      cur = (cur as Record<string, unknown>)[p]
+    } else {
+      return undefined
+    }
+  }
+  return cur
+}
+
+/** Build the Authorization header for an API-mode connector. */
+function apiAuthHeaders(apiKey?: string | null): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (apiKey) h['Authorization'] = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`
+  return h
+}
+
+/** Join a base URL + an endpoint path safely. */
+function joinUrl(base: string, endpoint: string): string {
+  if (!endpoint) return base
+  if (/^https?:\/\//.test(endpoint)) return endpoint
+  return (base.replace(/\/$/, '')) + (endpoint.startsWith('/') ? endpoint : '/' + endpoint)
+}
+
+/** Test an API-mode connection by fetching an endpoint (defaults to the clients endpoint). */
+export async function testApiConnection(
+  baseUrl: string,
+  apiKey?: string | null,
+  endpoint?: string
+): Promise<{ connected: boolean; status?: number; sampleFields?: string[]; error?: string }> {
+  if (!baseUrl) return { connected: false, error: 'No base URL' }
+  const ep = endpoint || '/api/clients'
+  const url = joinUrl(baseUrl, ep)
+  try {
+    const res = await withTimeout(fetch(url, { headers: apiAuthHeaders(apiKey) }), SYNC_TIMEOUT_MS)
+    if (!res.ok) return { connected: false, status: res.status, error: `HTTP ${res.status}` }
+    const json = await res.json().catch(() => null)
+    const arr = extractJsonArray(json)
+    const sampleFields = arr.length > 0 && typeof arr[0] === 'object'
+      ? Object.keys(arr[0] as Record<string, unknown>).slice(0, 30)
+      : []
+    return { connected: true, status: res.status, sampleFields }
+  } catch (e) {
+    return { connected: false, error: e instanceof Error ? e.message : String(e) }
   }
 }
 
@@ -364,6 +462,10 @@ export async function registerClientInErp(
   const mapping = parseMapping(connector.schemaMapping)
   if (!mapping) {
     return { success: false, error: 'No schema mapping configured' }
+  }
+  // API-mode: delegate to the fetch-based register path
+  if (mapping.mode === 'api') {
+    return registerClientInErpApi(connectorId, clientData)
   }
 
   const startedAt = new Date()
@@ -713,15 +815,17 @@ export async function syncConnector(connectorId: string): Promise<ConnectorSyncR
   const connector = await withRetry((tx) =>
     tx.integrationConnector.findUnique({ where: { id: connectorId }, select: { id: true, erpName: true, schemaMapping: true } })
   )
-  const clients = await syncClientsFromErp(connectorId)
+  const mapping = parseMapping(connector?.schemaMapping)
+  const isApi = mapping?.mode === 'api'
+  const clients = isApi ? await syncClientsFromErpApi(connectorId) : await syncClientsFromErp(connectorId)
   let serials: SyncResult = { synced: 0, failed: 0, total: 0 }
   let devices: SyncResult = { synced: 0, failed: 0, total: 0 }
-  const mapping = parseMapping(connector?.schemaMapping)
-  if (mapping?.serialTable && mapping?.serialKey) {
-    serials = await syncSerialsFromErp(connectorId)
-  }
-  if (mapping?.deviceTable && mapping?.deviceSerial) {
-    devices = await syncDevicesFromErp(connectorId)
+  if (isApi) {
+    if (mapping?.serialsEndpoint && mapping?.serialFieldKey) serials = await syncSerialsFromErpApi(connectorId)
+    if (mapping?.devicesEndpoint && mapping?.deviceFieldSerial) devices = await syncDevicesFromErpApi(connectorId)
+  } else {
+    if (mapping?.serialTable && mapping?.serialKey) serials = await syncSerialsFromErp(connectorId)
+    if (mapping?.deviceTable && mapping?.deviceSerial) devices = await syncDevicesFromErp(connectorId)
   }
   return { connectorId, erpName: connector?.erpName || 'Unknown', clients, serials, devices }
 }
@@ -761,6 +865,158 @@ export async function syncDueConnectors(limit = 2): Promise<{
     }
   }
   return { processed: toProcess.length, results, skipped: due.length - toProcess.length }
+}
+
+// ============================================
+// API-mode sync (fetch-based, mode='api')
+// ============================================
+
+async function syncClientsFromErpApi(connectorId: string): Promise<SyncResult> {
+  const connector = await withRetry((tx) => tx.integrationConnector.findUnique({ where: { id: connectorId } }))
+  if (!connector || !connector.connectionUrl || !connector.apiKey && !connector.connectionUrl) {
+    return { synced: 0, failed: 0, total: 0, error: 'No base URL on connector' }
+  }
+  const mapping = parseMapping(connector.schemaMapping)
+  if (!mapping || !mapping.clientsEndpoint || !mapping.clientFieldId || !mapping.clientFieldName || !mapping.clientFieldEmail) {
+    return { synced: 0, failed: 0, total: 0, error: 'No clients endpoint/field mapping configured' }
+  }
+  const startedAt = new Date()
+  let synced = 0, failed = 0, total = 0, errMsg: string | undefined
+  try {
+    const res = await withTimeout(fetch(joinUrl(connector.connectionUrl, mapping.clientsEndpoint), { headers: apiAuthHeaders(connector.apiKey) }), SYNC_TIMEOUT_MS)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const json = await res.json()
+    const rows = extractJsonArray(json)
+    total = rows.length
+    for (const row of rows) {
+      try {
+        const externalId = String(getJsonField(row, mapping.clientFieldId) ?? '')
+        const email = String(getJsonField(row, mapping.clientFieldEmail) ?? '').trim() || null
+        const name = String(getJsonField(row, mapping.clientFieldName) ?? 'Unknown')
+        const phone = mapping.clientFieldPhone ? String(getJsonField(row, mapping.clientFieldPhone) ?? '') || null : null
+        const company = mapping.clientFieldCompany ? String(getJsonField(row, mapping.clientFieldCompany) ?? '') || null : null
+        const status = mapping.clientFieldStatus ? String(getJsonField(row, mapping.clientFieldStatus) ?? '') || 'active' : 'active'
+        // Upsert by externalId via SyncTenant, fallback to email
+        let client = null
+        const existingTenant = await withRetry((tx) => tx.syncTenant.findFirst({ where: { connectorId, externalId }, include: { client: true } }))
+        if (existingTenant?.client) client = existingTenant.client
+        else if (email) client = await withRetry((tx) => tx.client.findUnique({ where: { email } }))
+        if (client) {
+          client = await withRetry((tx) => tx.client.update({ where: { id: client!.id }, data: { contactPerson: name, name, company: company || client.company, companyName: company || client.companyName, phone: phone || client.phone, status, erpSlug: connector.erpSlug, erpSystemId: connector.erpSystemId || undefined } }))
+        } else {
+          client = await withRetry((tx) => tx.client.create({ data: { companyName: company || name, contactPerson: name, name, email: email || `${externalId}@${connector.erpSlug}.erp`, phone, status, erpSlug: connector.erpSlug, erpSystemId: connector.erpSystemId || undefined } }))
+        }
+        if (!existingTenant) { await withRetry((tx) => tx.syncTenant.create({ data: { connectorId, clientId: client.id, externalId, status: 'active', lastSyncedAt: new Date() } }).catch(() => {})) }
+        synced++
+      } catch (e) { failed++; if (!errMsg) errMsg = `Row sync failed: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    await withRetry((tx) => tx.integrationConnector.update({ where: { id: connectorId }, data: { status: failed === 0 ? 'connected' : 'partial', clientCount: synced, lastSyncAt: new Date(), lastError: errMsg || null } }))
+    await logSync(connector, 'inbound', 'clients', synced, failed, startedAt, errMsg)
+    return { synced, failed, total, error: errMsg }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    await withRetry((tx) => tx.integrationConnector.update({ where: { id: connectorId }, data: { status: 'error', lastError: msg, lastSyncAt: new Date() } })).catch(() => {})
+    await logSync(connector, 'inbound', 'clients', 0, 0, startedAt, msg)
+    return { synced: 0, failed: 0, total: 0, error: msg }
+  }
+}
+
+async function syncSerialsFromErpApi(connectorId: string): Promise<SyncResult> {
+  const connector = await withRetry((tx) => tx.integrationConnector.findUnique({ where: { id: connectorId } }))
+  if (!connector || !connector.connectionUrl) return { synced: 0, failed: 0, total: 0, error: 'No base URL' }
+  const mapping = parseMapping(connector.schemaMapping)
+  if (!mapping || !mapping.serialsEndpoint || !mapping.serialFieldKey) return { synced: 0, failed: 0, total: 0, error: 'No serials endpoint/key mapping' }
+  const startedAt = new Date()
+  let synced = 0, failed = 0, total = 0, errMsg: string | undefined
+  try {
+    const res = await withTimeout(fetch(joinUrl(connector.connectionUrl, mapping.serialsEndpoint), { headers: apiAuthHeaders(connector.apiKey) }), SYNC_TIMEOUT_MS)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const rows = extractJsonArray(await res.json())
+    total = rows.length
+    const tenants = await withRetry((tx) => tx.syncTenant.findMany({ where: { connectorId }, select: { externalId: true, clientId: true } }))
+    const refToClient = new Map(tenants.filter((t) => t.clientId && t.externalId).map((t) => [String(t.externalId), t.clientId!]))
+    for (const row of rows) {
+      try {
+        const serialKey = String(getJsonField(row, mapping.serialFieldKey) ?? '').trim()
+        if (!serialKey) { failed++; continue }
+        const clientId = mapping.serialFieldClientRef ? refToClient.get(String(getJsonField(row, mapping.serialFieldClientRef) ?? '')) || null : null
+        await withRetry((tx) => tx.license.upsert({
+          where: { serialKey },
+          update: { licenseKey: mapping.serialFieldLicenseKey ? String(getJsonField(row, mapping.serialFieldLicenseKey) ?? '') || undefined : undefined, clientId: clientId || undefined, erpSystemId: connector.erpSystemId || undefined, status: mapping.serialFieldStatus ? String(getJsonField(row, mapping.serialFieldStatus) ?? '') || undefined : undefined, type: mapping.serialFieldProduct ? String(getJsonField(row, mapping.serialFieldProduct) ?? '') || undefined : undefined },
+          create: { serialKey, licenseKey: (mapping.serialFieldLicenseKey ? String(getJsonField(row, mapping.serialFieldLicenseKey) ?? '') : '') || serialKey, clientId: clientId || undefined, erpSystemId: connector.erpSystemId || undefined, status: mapping.serialFieldStatus ? String(getJsonField(row, mapping.serialFieldStatus) ?? '') || 'active' : 'active', type: mapping.serialFieldProduct ? String(getJsonField(row, mapping.serialFieldProduct) ?? '') || 'standard' : 'standard' },
+        }))
+        synced++
+      } catch (e) { failed++; if (!errMsg) errMsg = `Serial sync failed: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    await logSync(connector, 'inbound', 'serials', synced, failed, startedAt, errMsg)
+    return { synced, failed, total, error: errMsg }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    await logSync(connector, 'inbound', 'serials', 0, 0, startedAt, msg)
+    return { synced: 0, failed: 0, total: 0, error: msg }
+  }
+}
+
+async function syncDevicesFromErpApi(connectorId: string): Promise<SyncResult> {
+  const connector = await withRetry((tx) => tx.integrationConnector.findUnique({ where: { id: connectorId } }))
+  if (!connector || !connector.connectionUrl) return { synced: 0, failed: 0, total: 0, error: 'No base URL' }
+  const mapping = parseMapping(connector.schemaMapping)
+  if (!mapping || !mapping.devicesEndpoint || !mapping.deviceFieldSerial) return { synced: 0, failed: 0, total: 0, error: 'No devices endpoint/serial mapping' }
+  const startedAt = new Date()
+  let synced = 0, failed = 0, total = 0, errMsg: string | undefined
+  try {
+    const res = await withTimeout(fetch(joinUrl(connector.connectionUrl, mapping.devicesEndpoint), { headers: apiAuthHeaders(connector.apiKey) }), SYNC_TIMEOUT_MS)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const rows = extractJsonArray(await res.json())
+    total = rows.length
+    const tenants = await withRetry((tx) => tx.syncTenant.findMany({ where: { connectorId }, select: { externalId: true, clientId: true } }))
+    const refToClient = new Map(tenants.filter((t) => t.clientId && t.externalId).map((t) => [String(t.externalId), t.clientId!]))
+    for (const row of rows) {
+      try {
+        const serial = String(getJsonField(row, mapping.deviceFieldSerial) ?? '').trim()
+        if (!serial) { failed++; continue }
+        const clientId = mapping.deviceFieldClientRef ? refToClient.get(String(getJsonField(row, mapping.deviceFieldClientRef) ?? '')) || null : null
+        const externalId = mapping.deviceFieldId ? String(getJsonField(row, mapping.deviceFieldId) ?? '') : serial
+        await withRetry((tx) => tx.erpDevice.upsert({
+          where: { serialNumber: serial },
+          update: { externalId, name: mapping.deviceFieldName ? String(getJsonField(row, mapping.deviceFieldName) ?? '') || undefined : undefined, type: mapping.deviceFieldType ? String(getJsonField(row, mapping.deviceFieldType) ?? '') || undefined : undefined, status: mapping.deviceFieldStatus ? String(getJsonField(row, mapping.deviceFieldStatus) ?? '') || undefined : undefined, clientId: clientId || undefined, erpSystemId: connector.erpSystemId || undefined, lastSyncedAt: new Date() },
+          create: { serialNumber: serial, externalId, name: mapping.deviceFieldName ? String(getJsonField(row, mapping.deviceFieldName) ?? '') || null : null, type: mapping.deviceFieldType ? String(getJsonField(row, mapping.deviceFieldType) ?? '') || null : null, status: mapping.deviceFieldStatus ? String(getJsonField(row, mapping.deviceFieldStatus) ?? '') || 'active' : 'active', clientId: clientId || null, erpSystemId: connector.erpSystemId || null, lastSyncedAt: new Date() },
+        }))
+        synced++
+      } catch (e) { failed++; if (!errMsg) errMsg = `Device sync failed: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    await logSync(connector, 'inbound', 'devices', synced, failed, startedAt, errMsg)
+    return { synced, failed, total, error: errMsg }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    await logSync(connector, 'inbound', 'devices', 0, 0, startedAt, msg)
+    return { synced: 0, failed: 0, total: 0, error: msg }
+  }
+}
+
+async function registerClientInErpApi(connectorId: string, data: { name: string; email: string; phone?: string; company?: string; status?: string }): Promise<RegisterResult> {
+  const connector = await withRetry((tx) => tx.integrationConnector.findUnique({ where: { id: connectorId } }))
+  if (!connector || !connector.connectionUrl) return { success: false, error: 'No base URL' }
+  const mapping = parseMapping(connector.schemaMapping)
+  if (!mapping || !mapping.registerClientEndpoint) return { success: false, error: 'No register-client endpoint configured' }
+  const startedAt = new Date()
+  try {
+    const res = await withTimeout(fetch(joinUrl(connector.connectionUrl, mapping.registerClientEndpoint!), { method: 'POST', headers: apiAuthHeaders(connector.apiKey), body: JSON.stringify(data) }), SYNC_TIMEOUT_MS)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const json = await res.json().catch(() => ({}))
+    const externalId = String(getJsonField(json, mapping.clientFieldId || 'id') ?? '') || undefined
+    await withRetry((tx) => tx.syncLog.create({ data: { erpSystemId: connector.erpSystemId || undefined, erpSlug: connector.erpSlug, erpName: connector.erpName, direction: 'outbound', status: 'success', syncType: 'manual', recordsSynced: 1, recordsFailed: 0, durationMs: Date.now() - startedAt.getTime(), metadata: JSON.stringify({ clientEmail: data.email, externalId }) } })).catch(() => {})
+    return { success: true, externalId }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    await withRetry((tx) => tx.syncLog.create({ data: { erpSystemId: connector.erpSystemId || undefined, erpSlug: connector.erpSlug, erpName: connector.erpName, direction: 'outbound', status: 'failed', syncType: 'manual', recordsSynced: 0, recordsFailed: 1, durationMs: Date.now() - startedAt.getTime(), errorMessage: msg } })).catch(() => {})
+    return { success: false, error: msg }
+  }
+}
+
+/** Shared SyncLog writer for API-mode syncs. */
+async function logSync(connector: { erpSystemId?: string | null; erpSlug: string; erpName: string }, direction: string, entity: string, synced: number, failed: number, startedAt: Date, errMsg?: string) {
+  await withRetry((tx) => tx.syncLog.create({ data: { erpSystemId: connector.erpSystemId || undefined, erpSlug: connector.erpSlug, erpName: connector.erpName, direction, status: failed === 0 ? 'success' : 'partial', syncType: 'manual', recordsSynced: synced, recordsFailed: failed, durationMs: Date.now() - startedAt.getTime(), metadata: JSON.stringify({ entity, mode: 'api' }), errorMessage: errMsg } })).catch(() => {})
 }
 
 // re-export db for convenience

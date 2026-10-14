@@ -115,6 +115,11 @@ export function IntegrationManager() {
   const [deviceColumns, setDeviceColumns] = useState<Array<{ name: string; dataType: string }>>([])
   const [deviceMapping, setDeviceMapping] = useState<{ deviceId: string; deviceSerial: string; deviceName: string; deviceType: string; deviceStatus: string; deviceClientRef: string }>({ deviceId: '', deviceSerial: '', deviceName: '', deviceType: '', deviceStatus: '', deviceClientRef: '' })
   const [deviceDiscovering, setDeviceDiscovering] = useState(false)
+  // API-mode state (mode='api')
+  const [connectionMode, setConnectionMode] = useState<'database' | 'api'>('database')
+  const [apiSampleFields, setApiSampleFields] = useState<string[]>([])
+  const [apiTesting, setApiTesting] = useState(false)
+  const [apiMapping, setApiMapping] = useState<{ clientsEndpoint: string; clientFieldId: string; clientFieldName: string; clientFieldEmail: string; clientFieldPhone: string; clientFieldCompany: string; clientFieldStatus: string; serialsEndpoint: string; serialFieldKey: string; serialFieldClientRef: string; devicesEndpoint: string; deviceFieldSerial: string; deviceFieldClientRef: string; registerClientEndpoint: string }>({ clientsEndpoint: '/api/clients', clientFieldId: 'id', clientFieldName: 'name', clientFieldEmail: 'email', clientFieldPhone: 'phone', clientFieldCompany: 'company', clientFieldStatus: 'status', serialsEndpoint: '', serialFieldKey: '', serialFieldClientRef: '', devicesEndpoint: '', deviceFieldSerial: '', deviceFieldClientRef: '', registerClientEndpoint: '/api/clients' })
   const [saving, setSaving] = useState(false)
 
   // List action state
@@ -160,6 +165,33 @@ export function IntegrationManager() {
     setSerialMapping({ serialId: '', serialKey: '', licenseKey: '', serialClientRef: '', serialProduct: '', serialStatus: '' })
     setSyncDevices(false); setDeviceTable(''); setDeviceColumns([])
     setDeviceMapping({ deviceId: '', deviceSerial: '', deviceName: '', deviceType: '', deviceStatus: '', deviceClientRef: '' })
+    setConnectionMode('database'); setApiSampleFields([])
+    setApiMapping({ clientsEndpoint: '/api/clients', clientFieldId: 'id', clientFieldName: 'name', clientFieldEmail: 'email', clientFieldPhone: 'phone', clientFieldCompany: 'company', clientFieldStatus: 'status', serialsEndpoint: '', serialFieldKey: '', serialFieldClientRef: '', devicesEndpoint: '', deviceFieldSerial: '', deviceFieldClientRef: '', registerClientEndpoint: '/api/clients' })
+  }
+
+  const handleTestApi = async () => {
+    if (!connectionUrl) { toast.error('Enter the API base URL first'); return }
+    setApiTesting(true); setTestResult(null)
+    try {
+      const res = await fetch('/api/admin/integrations/test-api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseUrl: connectionUrl, apiKey: apiKey || undefined, endpoint: apiMapping.clientsEndpoint }),
+      })
+      const json = await res.json()
+      setTestResult({ connected: json.connected, latency: json.status, error: json.error })
+      if (json.connected) {
+        setApiSampleFields(json.sampleFields || [])
+        toast.success(`API reachable (HTTP ${json.status})`)
+      } else {
+        toast.error(json.error || 'API test failed')
+      }
+    } catch (e) {
+      setTestResult({ connected: false, error: String(e) })
+      toast.error('API test failed')
+    } finally {
+      setApiTesting(false)
+    }
   }
 
   const handleDeviceTableSelect = async (table: string) => {
@@ -291,6 +323,29 @@ export function IntegrationManager() {
     const erp = erpSystems.find((e) => e.id === selectedErpId)
     if (!erp) { toast.error('Select an ERP'); return }
     if (!connectionUrl) { toast.error('Connection URL is required'); return }
+
+    // API-mode validation + schemaMapping
+    if (connectionMode === 'api') {
+      if (!apiMapping.clientsEndpoint || !apiMapping.clientFieldId || !apiMapping.clientFieldName || !apiMapping.clientFieldEmail) {
+        toast.error('Map the clients endpoint + id/name/email field paths')
+        return
+      }
+      setSaving(true)
+      try {
+        const schemaMapping: Record<string, string> = { mode: 'api', ...apiMapping }
+        const res = await fetch('/api/admin/integrations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ erpSlug: erp.slug, erpName: erp.name, erpSystemId: erp.id, type: 'api', direction: 'bidirectional', connectionUrl, apiKey: apiKey || undefined, schemaMapping, autoSync: false, syncInterval: 300 }),
+        })
+        const json = await res.json()
+        if (json.success) { toast.success(`Integration with ${erp.name} created`); setWizardOpen(false); resetWizard(); fetchConnectors() }
+        else toast.error(json.error || 'Failed to create integration')
+      } catch { toast.error('Failed to save integration') } finally { setSaving(false) }
+      return
+    }
+
+    // DB-mode validation (existing)
     if (!mapping.id || !mapping.name || !mapping.email) {
       toast.error('Map at least the id, name, and email columns')
       return
@@ -613,12 +668,25 @@ export function IntegrationManager() {
                 </Select>
               </div>
 
+              {/* Connection mode toggle */}
+              <div className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'var(--secondary)' }}>
+                <span className="text-xs font-medium text-foreground">Mode:</span>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input type="radio" name="cmode" checked={connectionMode === 'database'} onChange={() => { setConnectionMode('database'); setTestResult(null) }} className="accent-[var(--gg-vermillion)]" />
+                  Database (Neon URL)
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input type="radio" name="cmode" checked={connectionMode === 'api'} onChange={() => { setConnectionMode('api'); setTestResult(null) }} className="accent-[var(--gg-vermillion)]" />
+                  REST API
+                </label>
+              </div>
+
               <div>
-                <Label className="text-foreground">Connection URL (Neon/Postgres)</Label>
+                <Label className="text-foreground">{connectionMode === 'api' ? 'API Base URL' : 'Connection URL (Neon/Postgres)'}</Label>
                 <Input
                   value={connectionUrl}
                   onChange={(e) => { setConnectionUrl(e.target.value); setTestResult(null) }}
-                  placeholder="postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require"
+                  placeholder={connectionMode === 'api' ? 'https://your-erp.vercel.app' : 'postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require'}
                   className="mt-1 text-foreground font-mono text-xs"
                   style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }}
                 />
@@ -648,12 +716,19 @@ export function IntegrationManager() {
               <div className="flex justify-between gap-2 pt-2">
                 <Button variant="outline" onClick={() => setWizardOpen(false)} className="text-muted-foreground">Cancel</Button>
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={handleTest} disabled={testing || !connectionUrl} className="text-foreground">
-                    {testing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
-                    Test Connection
-                  </Button>
+                  {connectionMode === 'api' ? (
+                    <Button variant="outline" onClick={handleTestApi} disabled={apiTesting || !connectionUrl} className="text-foreground">
+                      {apiTesting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
+                      Test API
+                    </Button>
+                  ) : (
+                    <Button variant="outline" onClick={handleTest} disabled={testing || !connectionUrl} className="text-foreground">
+                      {testing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
+                      Test Connection
+                    </Button>
+                  )}
                   <Button
-                    onClick={() => { handleDiscoverTables(); setStep(2) }}
+                    onClick={() => { if (connectionMode === 'database') { handleDiscoverTables() }; setStep(2) }}
                     disabled={!testResult?.connected}
                     className="text-white"
                     style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
@@ -667,10 +742,65 @@ export function IntegrationManager() {
             <div className="space-y-4">
               {selectedErp && (
                 <div className="p-3 rounded-lg" style={{ background: 'var(--secondary)' }}>
-                  <p className="text-sm text-foreground"><strong>{selectedErp.name}</strong> · connected</p>
+                  <p className="text-sm text-foreground"><strong>{selectedErp.name}</strong> · {connectionMode === 'api' ? 'API reachable' : 'connected'}</p>
                 </div>
               )}
 
+              {connectionMode === 'api' ? (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-lg" style={{ background: 'var(--secondary)' }}>
+                    <p className="text-sm font-semibold text-foreground mb-2">Clients endpoint + field paths</p>
+                    <div className="grid grid-cols-3 items-center gap-2 mb-2">
+                      <Label className="text-muted-foreground text-xs uppercase">Endpoint</Label>
+                      <Input value={apiMapping.clientsEndpoint} onChange={(e) => setApiMapping((m) => ({ ...m, clientsEndpoint: e.target.value }))} placeholder="/api/clients" className="col-span-2 text-foreground font-mono text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }} list="api-fields" />
+                    </div>
+                    {(['clientFieldId', 'clientFieldName', 'clientFieldEmail', 'clientFieldPhone', 'clientFieldCompany', 'clientFieldStatus'] as const).map((f) => (
+                      <div key={f} className="grid grid-cols-3 items-center gap-2 mb-1.5">
+                        <Label className="text-muted-foreground text-xs uppercase">{f.replace('clientField', '').toLowerCase()}</Label>
+                        <Input value={apiMapping[f]} onChange={(e) => setApiMapping((m) => ({ ...m, [f]: e.target.value }))} placeholder={f.replace('clientField', '').toLowerCase()} className="col-span-2 text-foreground font-mono text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }} list="api-fields" />
+                      </div>
+                    ))}
+                    {apiSampleFields.length > 0 && (
+                      <p className="text-[10px] text-muted-foreground mt-1">Detected fields: {apiSampleFields.join(', ')}</p>
+                    )}
+                    <datalist id="api-fields">{apiSampleFields.map((f) => <option key={f} value={f} />)}</datalist>
+                  </div>
+
+                  <div className="p-3 rounded-lg" style={{ background: 'var(--secondary)' }}>
+                    <p className="text-sm font-semibold text-foreground mb-2">Register-client endpoint (POST)</p>
+                    <Input value={apiMapping.registerClientEndpoint} onChange={(e) => setApiMapping((m) => ({ ...m, registerClientEndpoint: e.target.value }))} placeholder="/api/clients" className="text-foreground font-mono text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }} list="api-fields" />
+                  </div>
+
+                  <div className="p-3 rounded-lg border" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }}>
+                    <p className="text-sm font-semibold text-foreground mb-2">Optional: serials + devices endpoints</p>
+                    <div className="grid grid-cols-3 items-center gap-2 mb-1.5">
+                      <Label className="text-muted-foreground text-xs uppercase">serials ep</Label>
+                      <Input value={apiMapping.serialsEndpoint} onChange={(e) => setApiMapping((m) => ({ ...m, serialsEndpoint: e.target.value }))} placeholder="/api/serials (leave empty to skip)" className="col-span-2 text-foreground font-mono text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }} list="api-fields" />
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-2 mb-1.5">
+                      <Label className="text-muted-foreground text-xs uppercase">serial key</Label>
+                      <Input value={apiMapping.serialFieldKey} onChange={(e) => setApiMapping((m) => ({ ...m, serialFieldKey: e.target.value }))} placeholder="serialKey field" className="col-span-2 text-foreground font-mono text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }} list="api-fields" />
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-2 mb-1.5">
+                      <Label className="text-muted-foreground text-xs uppercase">serial client ref</Label>
+                      <Input value={apiMapping.serialFieldClientRef} onChange={(e) => setApiMapping((m) => ({ ...m, serialFieldClientRef: e.target.value }))} placeholder="clientId field" className="col-span-2 text-foreground font-mono text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }} list="api-fields" />
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-2 mb-1.5">
+                      <Label className="text-muted-foreground text-xs uppercase">devices ep</Label>
+                      <Input value={apiMapping.devicesEndpoint} onChange={(e) => setApiMapping((m) => ({ ...m, devicesEndpoint: e.target.value }))} placeholder="/api/devices (leave empty to skip)" className="col-span-2 text-foreground font-mono text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }} list="api-fields" />
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-2 mb-1.5">
+                      <Label className="text-muted-foreground text-xs uppercase">device serial</Label>
+                      <Input value={apiMapping.deviceFieldSerial} onChange={(e) => setApiMapping((m) => ({ ...m, deviceFieldSerial: e.target.value }))} placeholder="serialNumber field" className="col-span-2 text-foreground font-mono text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }} list="api-fields" />
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-2">
+                      <Label className="text-muted-foreground text-xs uppercase">device client ref</Label>
+                      <Input value={apiMapping.deviceFieldClientRef} onChange={(e) => setApiMapping((m) => ({ ...m, deviceFieldClientRef: e.target.value }))} placeholder="clientId field" className="col-span-2 text-foreground font-mono text-xs" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }} list="api-fields" />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
               <div>
                 <Label className="text-foreground">Client Table</Label>
                 {discovering ? (
@@ -842,6 +972,8 @@ export function IntegrationManager() {
                   Save Integration
                 </Button>
               </div>
+            </div>
+          )}
             </div>
           )}
         </DialogContent>
