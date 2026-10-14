@@ -309,7 +309,16 @@ export default function AdminClientsPage() {
       const res = await fetch(`/api/clients?${params.toString()}`)
       if (res.ok) {
         const json = await res.json()
-        setClients(json.data || [])
+        // Normalize alias fields: the canonical API writes contactPerson/companyName,
+        // while legacy/catch-all routes + this UI read name/company. Fall back so the
+        // table (client.name.charAt(0), client.company) never crashes on null.
+        setClients(
+          (json.data || []).map((c: any) => ({
+            ...c,
+            name: c.name || c.contactPerson || '',
+            company: c.company || c.companyName || '',
+          }))
+        )
       }
     } catch {
       toast.error('Failed to load clients')
