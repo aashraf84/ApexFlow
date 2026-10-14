@@ -165,6 +165,11 @@ model IntegrationConnector {
   direction    String    @default("bidirectional")
   status       String    @default("disconnected")
   config       String?
+  // Advanced integration fields (data-driven, per-ERP mapping)
+  connectionUrl String?
+  apiKey        String?
+  schemaMapping String?
+  capabilities  String?
   autoSync     Boolean   @default(false)
   syncInterval Int       @default(300)
   lastSyncAt   DateTime?

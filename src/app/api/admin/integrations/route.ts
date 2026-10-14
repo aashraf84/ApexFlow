@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     const auth = await requirePermission(request, 'integrations')
     if (!auth.ok) return auth.response
     const body = await request.json()
-    const { erpSlug, erpName, type, direction, config, autoSync, syncInterval } = body
+    const { erpSlug, erpName, erpSystemId, type, direction, config, connectionUrl, apiKey, schemaMapping, capabilities, autoSync, syncInterval } = body
 
     if (!erpSlug || !erpName) {
       return NextResponse.json(
@@ -101,12 +101,17 @@ export async function POST(request: NextRequest) {
         data: {
           erpSlug,
           erpName,
+          erpSystemId: erpSystemId || null,
           type: type || 'database',
           direction: direction || 'bidirectional',
           config: config ? JSON.stringify(config) : null,
+          connectionUrl: connectionUrl || null,
+          apiKey: apiKey || null,
+          schemaMapping: schemaMapping ? (typeof schemaMapping === 'string' ? schemaMapping : JSON.stringify(schemaMapping)) : null,
+          capabilities: capabilities ? (typeof capabilities === 'string' ? capabilities : JSON.stringify(capabilities)) : null,
           autoSync: Boolean(autoSync),
           syncInterval: syncInterval || 300,
-          status: 'disconnected',
+          status: connectionUrl ? 'disconnected' : 'disconnected',
         },
         include: {
           erpSystem: {
@@ -137,7 +142,7 @@ export async function PATCH(request: NextRequest) {
     const auth = await requirePermission(request, 'integrations')
     if (!auth.ok) return auth.response
     const body = await request.json()
-    const { id, erpName, type, direction, config, status, autoSync, syncInterval, lastError } = body
+    const { id, erpName, erpSystemId, type, direction, config, connectionUrl, apiKey, schemaMapping, capabilities, status, autoSync, syncInterval, lastError } = body
 
     if (!id) {
       return NextResponse.json(
@@ -160,9 +165,14 @@ export async function PATCH(request: NextRequest) {
     // Build update payload
     const data: Record<string, unknown> = {}
     if (erpName !== undefined) data.erpName = erpName
+    if (erpSystemId !== undefined) data.erpSystemId = erpSystemId || null
     if (type !== undefined) data.type = type
     if (direction !== undefined) data.direction = direction
     if (config !== undefined) data.config = config ? JSON.stringify(config) : null
+    if (connectionUrl !== undefined) data.connectionUrl = connectionUrl || null
+    if (apiKey !== undefined) data.apiKey = apiKey || null
+    if (schemaMapping !== undefined) data.schemaMapping = schemaMapping ? (typeof schemaMapping === 'string' ? schemaMapping : JSON.stringify(schemaMapping)) : null
+    if (capabilities !== undefined) data.capabilities = capabilities ? (typeof capabilities === 'string' ? capabilities : JSON.stringify(capabilities)) : null
     if (status !== undefined) data.status = status
     if (autoSync !== undefined) data.autoSync = Boolean(autoSync)
     if (syncInterval !== undefined) data.syncInterval = Number(syncInterval)

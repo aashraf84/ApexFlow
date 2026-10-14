@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/admin/shared/page-header'
+import { IntegrationManager } from './integration-manager'
 import { IntegrationOverview } from './integration-overview'
 import { SyncScheduler } from './sync-scheduler'
 import { WebhookManager } from './webhook-manager'
@@ -12,10 +13,12 @@ import {
   Clock,
   Webhook,
   History,
+  Plug,
 } from 'lucide-react'
 
 const TABS = [
-  { value: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { value: 'integrations', label: 'Integrations', icon: Plug },
+  { value: 'overview', label: 'Legacy', icon: LayoutDashboard },
   { value: 'scheduler', label: 'Sync Scheduler', icon: Clock },
   { value: 'webhooks', label: 'Webhooks', icon: Webhook },
   { value: 'history', label: 'Sync History', icon: History },
@@ -46,7 +49,7 @@ export function IntegrationHubPage() {
       </motion.div>
 
       <motion.div variants={fadeUp} custom={1}>
-        <Tabs defaultValue="overview" className="space-y-4">
+        <Tabs defaultValue="integrations" className="space-y-4">
           <TabsList className="w-full sm:w-auto">
             {TABS.map((tab) => {
               const Icon = tab.icon
@@ -59,6 +62,10 @@ export function IntegrationHubPage() {
               )
             })}
           </TabsList>
+
+          <TabsContent value="integrations" className="mt-4">
+            <IntegrationManager />
+          </TabsContent>
 
           <TabsContent value="overview" className="mt-4">
             <IntegrationOverview />
