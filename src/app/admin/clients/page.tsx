@@ -46,9 +46,11 @@ import {
 } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Checkbox } from '@/components/ui/checkbox'
 import { toast } from 'sonner'
 import {
   Users,
+  Download,
   Plus,
   Search,
   ArrowLeft,
@@ -254,6 +256,7 @@ export default function AdminClientsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   // View state
   const [selectedClient, setSelectedClient] = useState<ClientData | null>(null)
@@ -439,6 +442,67 @@ export default function AdminClientsPage() {
   }
 
   // ============================================
+  // Bulk operations
+  // ============================================
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const allSelected = clients.length > 0 && selectedIds.size === clients.length
+  const selectAll = () => {
+    if (allSelected) setSelectedIds(new Set())
+    else setSelectedIds(new Set(clients.map((c) => c.id)))
+  }
+
+  const clearSelection = () => setSelectedIds(new Set())
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return
+    if (!confirm(`Delete ${selectedIds.size} client(s)? This cannot be undone.`)) return
+    try {
+      const results = await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          fetch(`/api/clients/${id}`, { method: 'DELETE' }).then((r) => r.ok)
+        )
+      )
+      const ok = results.filter(Boolean).length
+      const fail = results.length - ok
+      if (fail === 0) toast.success(`Deleted ${ok} client(s)`)
+      else toast.warning(`Deleted ${ok}, ${fail} failed`)
+      if (selectedClient && selectedIds.has(selectedClient.id)) setSelectedClient(null)
+      clearSelection()
+      fetchClients()
+    } catch {
+      toast.error('Bulk delete failed')
+    }
+  }
+
+  const exportClientsCSV = () => {
+    const selected = clients.filter((c) => selectedIds.has(c.id))
+    const rows = selected.length > 0 ? selected : clients
+    const header = ['Name', 'Email', 'Company', 'Status', 'Industry', 'Phone', 'City', 'Country', 'CreatedAt']
+    const lines = rows.map((c) =>
+      [c.name, c.email, c.company, c.status, c.industry, c.phone, c.city, c.country, c.createdAt]
+        .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
+        .join(',')
+    )
+    const csv = [header.join(','), ...lines].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `apexflow-clients-${Date.now()}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success(`Exported ${rows.length} client(s) to CSV`)
+  }
+
+  // ============================================
   // Contact CRUD
   // ============================================
   const handleAddContact = async () => {
@@ -617,6 +681,34 @@ export default function AdminClientsPage() {
         </Select>
       </div>
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div
+          className="flex items-center justify-between gap-3 p-3 rounded-xl border flex-wrap"
+          style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}
+        >
+          <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={exportClientsCSV} className="text-foreground">
+              <Download className="h-4 w-4 mr-1.5" />
+              Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBulkDelete}
+              className="text-red-400 border-red-500/30 hover:bg-red-500/10 hover:text-red-300"
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              Delete
+            </Button>
+            <Button variant="ghost" size="sm" onClick={clearSelection} className="text-muted-foreground">
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Client Table / Cards */}
       <Card
         style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
@@ -627,21 +719,35 @@ export default function AdminClientsPage() {
           ) : clients.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Users className="h-12 w-12 text-gray-600 mb-4" />
-              <p className="text-muted-foreground text-lg font-medium">No clients found</p>
-              <p className="text-gray-500 text-sm mt-1">
-                {search || statusFilter !== 'all'
-                  ? 'Try adjusting your filters'
-                  : 'Get started by adding your first client'}
-              </p>
-              {!search && statusFilter === 'all' && (
-                <Button
-                  onClick={openCreateDialog}
-                  className="mt-4 hover:opacity-90 text-white"
-                  style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Client
-                </Button>
+              {search ? (
+                <>
+                  <p className="text-muted-foreground text-lg font-medium">No results for “{search}”</p>
+                  <p className="text-gray-500 text-sm mt-1">No clients match your search</p>
+                  <Button variant="outline" onClick={() => setSearch('')} className="mt-4 text-foreground">
+                    Clear search
+                  </Button>
+                </>
+              ) : statusFilter !== 'all' ? (
+                <>
+                  <p className="text-muted-foreground text-lg font-medium">No {statusFilter} clients</p>
+                  <p className="text-gray-500 text-sm mt-1">No clients match this status filter</p>
+                  <Button variant="outline" onClick={() => setStatusFilter('all')} className="mt-4 text-foreground">
+                    Clear filter
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-muted-foreground text-lg font-medium">No clients yet</p>
+                  <p className="text-gray-500 text-sm mt-1">Get started by adding your first client</p>
+                  <Button
+                    onClick={openCreateDialog}
+                    className="mt-4 hover:opacity-90 text-white"
+                    style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Client
+                  </Button>
+                </>
               )}
             </div>
           ) : (
@@ -654,6 +760,13 @@ export default function AdminClientsPage() {
                       className="hover:bg-transparent"
                       style={{ borderColor: 'var(--gg-separator)' }}
                     >
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={allSelected}
+                          onCheckedChange={selectAll}
+                          aria-label="Select all clients"
+                        />
+                      </TableHead>
                       <TableHead className="text-muted-foreground font-medium">Name</TableHead>
                       <TableHead className="text-muted-foreground font-medium">Email</TableHead>
                       <TableHead className="text-muted-foreground font-medium">Company</TableHead>
@@ -671,6 +784,13 @@ export default function AdminClientsPage() {
                         style={{ borderColor: 'var(--gg-separator)' }}
                         onClick={() => fetchClientDetail(client.id)}
                       >
+                        <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedIds.has(client.id)}
+                            onCheckedChange={() => toggleSelect(client.id)}
+                            aria-label={`Select ${client.name}`}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium text-foreground">
                           <div className="flex items-center gap-3">
                             <div
@@ -711,6 +831,13 @@ export default function AdminClientsPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
+                        <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+                          <Checkbox
+                            checked={selectedIds.has(client.id)}
+                            onCheckedChange={() => toggleSelect(client.id)}
+                            aria-label={`Select ${client.name}`}
+                          />
+                        </span>
                         <div
                           className="h-10 w-10 rounded-full flex items-center justify-center"
                           style={{ background: 'color-mix(in srgb, var(--gg-vermillion) 10%, transparent)' }}
