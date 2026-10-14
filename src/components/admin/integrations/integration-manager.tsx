@@ -100,7 +100,7 @@ export function IntegrationManager() {
   const [discovering, setDiscovering] = useState(false)
   const [tables, setTables] = useState<string[]>([])
   const [selectedTable, setSelectedTable] = useState('')
-  const [columns, setColumns] = useState<Array<{ name: string; dataType: string }>([])
+  const [columns, setColumns] = useState<Array<{ name: string; dataType: string }>>([])
   const [mapping, setMapping] = useState<{ id: string; name: string; email: string; phone: string; company: string; status: string }>({ id: '', name: '', email: '', phone: '', company: '', status: '' })
   const [saving, setSaving] = useState(false)
 
