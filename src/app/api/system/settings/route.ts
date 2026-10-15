@@ -5,18 +5,26 @@ export async function GET() {
   try {
     const settings = await withRetry((tx) =>
       tx.siteSetting.findMany({
-        orderBy: [{ group: 'asc' }, { key: 'asc' }],
+        orderBy: [{ category: 'asc' }, { group: 'asc' }, { key: 'asc' }],
       })
     )
 
-    // Group by group name
+    // Group by group name (fall back to category when group is null)
     const grouped: Record<string, typeof settings> = {}
     for (const s of settings) {
-      if (!grouped[s.group]) grouped[s.group] = []
-      grouped[s.group].push(s)
+      const groupName = s.group || s.category || 'general'
+      if (!grouped[groupName]) grouped[groupName] = []
+      grouped[groupName].push(s)
     }
 
-    return NextResponse.json({ settings, grouped })
+    // Return settings with a normalized group field (group || category) so the
+    // frontend never sees "null" as a group name
+    const normalized = settings.map((s) => ({
+      ...s,
+      group: s.group || s.category || 'general',
+    }))
+
+    return NextResponse.json({ settings: normalized, grouped })
   } catch (error) {
     console.error('[Settings] GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 })
