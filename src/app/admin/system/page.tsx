@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Card,
   CardContent,
@@ -48,6 +49,8 @@ import {
   Shield,
   FileText,
   User,
+  Users,
+  Monitor,
   Plus,
   Pencil,
   Loader2,
@@ -127,6 +130,15 @@ const GROUP_COLORS: Record<string, { className?: string; style?: React.CSSProper
 // ─── Main Page ─────────────────────────────────────────────────────────────
 export default function AdminSystemPage() {
   const [activeTab, setActiveTab] = useState('settings')
+  const router = useRouter()
+
+  const managementPages = [
+    { label: 'User Management', desc: 'Manage admin users + passwords', icon: Users, route: '/admin/system/users', color: 'var(--gg-vermillion)' },
+    { label: 'Roles & Permissions', desc: 'Configure RBAC roles', icon: Shield, route: '/admin/system/roles', color: 'var(--gg-teal)' },
+    { label: 'Audit Logs', desc: 'View admin activity history', icon: FileText, route: '/admin/system/audit', color: 'var(--gg-amber)' },
+    { label: 'Devices', desc: 'Manage connected devices', icon: Monitor, route: '/admin/system/devices', color: 'var(--gg-violet)' },
+    { label: 'Settings', desc: 'System key-value config', icon: Settings, route: '/admin/system/settings', color: 'var(--gg-green)' },
+  ]
 
   return (
     <div className="space-y-6">
@@ -134,8 +146,42 @@ export default function AdminSystemPage() {
       <div>
         <h2 className="text-2xl font-bold text-foreground">System Administration</h2>
         <p className="text-muted-foreground mt-1">
-          Manage settings, audit logs, and your admin profile.
+          Manage users, roles, settings, audit logs, and your admin profile.
         </p>
+      </div>
+
+      {/* Management navigation grid */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {managementPages.map((page) => {
+          const Icon = page.icon
+          return (
+            <Card
+              key={page.label}
+              className="cursor-pointer hover:border-[var(--gg-vermillion)]/40 transition-colors group"
+              style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+              onClick={() => router.push(page.route)}
+            >
+              <CardContent className="p-4 flex items-center gap-3">
+                <div
+                  className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform"
+                  style={{ background: `color-mix(in srgb, ${page.color} 12%, transparent)` }}
+                >
+                  <Icon className="h-5 w-5" style={{ color: page.color }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">{page.label}</p>
+                  <p className="text-xs text-muted-foreground truncate">{page.desc}</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      {/* Quick-access inline tabs */}
+      <div>
+        <p className="text-xs text-muted-foreground mb-3 uppercase tracking-wider">Quick Access</p>
       </div>
 
       {/* Tabs */}

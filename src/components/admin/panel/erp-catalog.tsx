@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { createElement } from 'react'
-import { Search, LayoutGrid, List, Plus, Database, ExternalLink, Eye, Zap, Settings2 } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { Database, Plus, RefreshCw, Loader2, Plug, ExternalLink, Zap, Server } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,63 +10,72 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/admin/shared/page-header'
 import { EmptyState } from '@/components/admin/shared/empty-state'
 import { StatusBadge } from '@/components/admin/shared/status-badge'
-import { FALLBACK_ERP_DATA, getErpIcon, getErpColor } from '@/lib/erp-data'
-import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
+
+interface Connector {
+  id: string
+  erpSlug: string
+  erpName: string
+  status: string
+  type: string
+  direction: string
+  connectionUrl: string | null
+  clientCount: number
+  lastSyncAt: string | null
+  lastError: string | null
+  latencyMs: number | null
+  autoSync: boolean
+  erpSystem?: { id: string; name: string; industry: string; color: string } | null
+}
+
+const STATUS_STYLES: Record<string, string> = {
+  connected: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  disconnected: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30',
+  error: 'bg-red-500/15 text-red-400 border-red-500/30',
+  partial: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+}
+
+function formatDate(d: string | null) {
+  if (!d) return 'never'
+  return new Date(d).toLocaleString()
+}
 
 interface ErpCatalogProps {
-  onSelectErp: (slug: string) => void
+  onSelectErp?: (slug: string) => void
 }
-
-const fadeUp: any = {
-  hidden: { opacity: 0, y: 16 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.03, duration: 0.4, ease: [0.21, 0.47, 0.32, 0.98] },
-  }),
-}
-
-const cardVariants: any = {
-  hidden: { opacity: 0, scale: 0.95 },
-  visible: { opacity: 1, scale: 1, transition: { duration: 0.3 } },
-  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } },
-}
-
-/* Industry filter options derived from data */
-const INDUSTRIES = Array.from(
-  new Set(FALLBACK_ERP_DATA.map((e) => e.industry))
-).sort()
 
 export function ErpCatalog({ onSelectErp }: ErpCatalogProps) {
-  const [search, setSearch] = useState('')
-  const [view, setView] = useState<'grid' | 'list'>('grid')
-  const [industryFilter, setIndustryFilter] = useState<string | null>(null)
-  const [mounted, setMounted] = useState(false)
+  const router = useRouter()
+  const [connectors, setConnectors] = useState<Connector[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Small delay for mount animation
-  useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 50)
-    return () => clearTimeout(t)
+  const fetchConnectors = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/integrations')
+      const json = await res.json()
+      setConnectors(json.data || [])
+    } catch {
+      toast.error('Failed to load integrated ERPs')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  const filtered = useMemo(() => {
-    return FALLBACK_ERP_DATA.filter((erp) => {
-      const matchSearch =
-        erp.name.toLowerCase().includes(search.toLowerCase()) ||
-        erp.industry?.toLowerCase().includes(search.toLowerCase()) ||
-        erp.description?.toLowerCase().includes(search.toLowerCase())
-      const matchIndustry = !industryFilter || erp.industry === industryFilter
-      return matchSearch && matchIndustry
-    })
-  }, [search, industryFilter])
+  useEffect(() => {
+    fetchConnectors()
+  }, [fetchConnectors])
 
-  if (!mounted) {
+  const handleIntegrate = () => {
+    router.push('/admin/integrations')
+  }
+
+  if (loading) {
     return (
       <div className="space-y-6">
-        <PageHeader title="ERP Ecosystem" description="Loading..." />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-52 rounded-xl" />
+        <PageHeader title="ERP Systems" description="Integrated ERP systems connected to your ApexFlow hub" />
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-48 rounded-xl" />
           ))}
         </div>
       </div>
@@ -76,297 +84,120 @@ export function ErpCatalog({ onSelectErp }: ErpCatalogProps) {
 
   return (
     <div className="space-y-6">
-      <motion.div initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.04 } } }}>
-        <motion.div variants={fadeUp} custom={0}>
-          <PageHeader
-            title="ERP Ecosystem"
-            description={`${FALLBACK_ERP_DATA.length} industry-specific ERP systems — click any system to view details, modules, and integration status`}
-            actions={
-              <Button size="sm" className="gap-1.5" style={{ background: 'var(--gg-vermillion)', color: 'white' }}>
-                <Plus className="w-4 h-4" /> Add Custom ERP
-              </Button>
-            }
-          />
-        </motion.div>
+      <PageHeader
+        title="ERP Systems"
+        description="Integrated ERP systems connected to your ApexFlow hub"
+      />
 
-        {/* Stats row */}
-        <motion.div variants={fadeUp} custom={1} className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[
-            { label: 'Total ERPs', value: FALLBACK_ERP_DATA.length, color: 'var(--gg-vermillion)' },
-            { label: 'Active', value: FALLBACK_ERP_DATA.filter(e => e.status === 'active').length, color: 'var(--gg-green)' },
-            { label: 'Industries', value: INDUSTRIES.length, color: 'var(--gg-amber)' },
-            { label: 'Total Modules', value: FALLBACK_ERP_DATA.reduce((sum, e) => sum + (e.moduleCount || e.modules?.length || 0), 0), color: 'var(--gg-teal)' },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="rounded-xl border p-4"
-              style={{ borderColor: 'var(--gg-separator)', background: 'var(--card)' }}
-            >
+      {/* Stats row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Integrated', value: connectors.length, color: 'var(--gg-vermillion)' },
+          { label: 'Connected', value: connectors.filter((c) => c.status === 'connected').length, color: 'var(--gg-green)' },
+          { label: 'Total Clients', value: connectors.reduce((s, c) => s + c.clientCount, 0), color: 'var(--gg-teal)' },
+          { label: 'Auto-Sync', value: connectors.filter((c) => c.autoSync).length, color: 'var(--gg-amber)' },
+        ].map((stat) => (
+          <Card key={stat.label} style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}>
+            <CardContent className="p-4 text-center">
               <p className="text-2xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{stat.label}</p>
-            </div>
-          ))}
-        </motion.div>
-
-        {/* Search & filters */}
-        <motion.div variants={fadeUp} custom={2} className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          <div className="relative flex-1 w-full max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search ERP systems..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-
-          {/* Industry filter pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-            <button
-              onClick={() => setIndustryFilter(null)}
-              className={`shrink-0 px-2.5 py-1 text-xs rounded-full border transition-all ${
-                !industryFilter
-                  ? 'border-[var(--gg-vermillion)] text-[var(--gg-vermillion)] bg-[var(--gg-vermillion)]/10 font-medium'
-                  : 'border-border text-muted-foreground hover:border-foreground/30'
-              }`}
-            >
-              All
-            </button>
-            {INDUSTRIES.map((ind) => (
-              <button
-                key={ind}
-                onClick={() => setIndustryFilter(industryFilter === ind ? null : ind)}
-                className={`shrink-0 px-2.5 py-1 text-xs rounded-full border transition-all whitespace-nowrap ${
-                  industryFilter === ind
-                    ? 'border-[var(--gg-vermillion)] text-[var(--gg-vermillion)] bg-[var(--gg-vermillion)]/10 font-medium'
-                    : 'border-border text-muted-foreground hover:border-foreground/30'
-                }`}
-              >
-                {ind}
-              </button>
-            ))}
-          </div>
-
-          {/* View toggle */}
-          <div className="flex items-center border rounded-lg overflow-hidden shrink-0" style={{ borderColor: 'var(--gg-separator)' }}>
-            <Button
-              variant={view === 'grid' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setView('grid')}
-              className="rounded-none"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </Button>
-            <Button
-              variant={view === 'list' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setView('list')}
-              className="rounded-none"
-            >
-              <List className="w-4 h-4" />
-            </Button>
-          </div>
-        </motion.div>
-      </motion.div>
-
-      {/* Results count */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{filtered.length} system{filtered.length !== 1 ? 's' : ''} found</span>
-        {industryFilter && (
-          <button onClick={() => setIndustryFilter(null)} className="hover:text-foreground transition-colors">
-            Clear filter
-          </button>
-        )}
+              <p className="text-[10px] text-muted-foreground uppercase mt-1">{stat.label}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* ERP Grid / List */}
-      {filtered.length === 0 ? (
-        <EmptyState
-          icon={<Database className="w-6 h-6" />}
-          title="No ERP systems found"
-          description="Try adjusting your search or filter criteria"
-        />
+      {/* Header actions */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {connectors.length === 0
+            ? 'No ERP systems integrated yet. Link your ERPs from the Integration Hub.'
+            : `${connectors.length} ERP${connectors.length !== 1 ? 's' : ''} integrated`}
+        </p>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchConnectors} className="text-foreground">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+          <Button onClick={handleIntegrate} className="text-white" style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}>
+            <Plus className="h-4 w-4 mr-2" />
+            Integrate ERP
+          </Button>
+        </div>
+      </div>
+
+      {/* Connectors grid */}
+      {connectors.length === 0 ? (
+        <Card style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Plug className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground text-lg font-medium">No ERPs integrated yet</p>
+            <p className="text-gray-500 text-sm mt-1 text-center max-w-md">
+              Go to the <strong>Integration Hub</strong> to link your first ERP. Paste its connection URL, test it, auto-discover the client table, and map fields — no code needed.
+            </p>
+            <Button onClick={handleIntegrate} className="mt-4 text-white" style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}>
+              <Plus className="h-4 w-4 mr-2" />
+              Go to Integration Hub
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
-        <AnimatePresence mode="popLayout">
-          {view === 'grid' ? (
-            <motion.div
-              key="grid"
-              className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"
-              initial="hidden"
-              animate="visible"
-              exit="exit"
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {connectors.map((c) => (
+            <Card
+              key={c.id}
+              className="cursor-pointer hover:border-[var(--gg-vermillion)]/40 transition-colors"
+              style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+              onClick={() => router.push('/admin/integrations')}
             >
-              {filtered.map((erp, i) => (
-                <motion.div key={erp.slug} variants={cardVariants} layout>
-                  <ErpGridCard erp={erp} index={i} onSelect={() => onSelectErp(erp.slug)} />
-                </motion.div>
-              ))}
-            </motion.div>
-          ) : (
-            <motion.div
-              key="list"
-              className="flex flex-col gap-3"
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
-              {filtered.map((erp, i) => (
-                <motion.div key={erp.slug} variants={cardVariants} layout>
-                  <ErpListCard erp={erp} index={i} onSelect={() => onSelectErp(erp.slug)} />
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="h-10 w-10 rounded-xl flex items-center justify-center"
+                      style={{ background: `color-mix(in srgb, ${c.erpSystem?.color || 'var(--gg-vermillion)'} 12%, transparent)` }}
+                    >
+                      {c.type === 'api' ? <Zap className="h-5 w-5" style={{ color: c.erpSystem?.color || 'var(--gg-vermillion)' }} /> : <Database className="h-5 w-5" style={{ color: c.erpSystem?.color || 'var(--gg-vermillion)' }} />}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground">{c.erpName}</p>
+                      <p className="text-xs text-muted-foreground">{c.erpSlug} · {c.erpSystem?.industry || '—'}</p>
+                    </div>
+                  </div>
+                  <StatusBadge status={c.status} />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                  <div className="p-2 rounded-lg" style={{ background: 'var(--secondary)' }}>
+                    <p className="text-lg font-bold text-foreground">{c.clientCount}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase">Clients</p>
+                  </div>
+                  <div className="p-2 rounded-lg" style={{ background: 'var(--secondary)' }}>
+                    <p className="text-sm font-semibold text-foreground">{c.latencyMs ?? '—'}{c.latencyMs ? 'ms' : ''}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase">Latency</p>
+                  </div>
+                  <div className="p-2 rounded-lg" style={{ background: 'var(--secondary)' }}>
+                    <p className="text-xs font-semibold text-foreground">{c.autoSync ? 'Auto' : 'Manual'}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase">Sync</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Last sync: {formatDate(c.lastSyncAt)}</span>
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-[10px] border-[var(--gg-separator)] text-muted-foreground">
+                      {c.type === 'api' ? 'REST API' : 'Database'}
+                    </Badge>
+                  </div>
+                </div>
+
+                {c.lastError && (
+                  <p className="text-xs text-red-400 mt-2 truncate" title={c.lastError}>⚠ {c.lastError}</p>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
-  )
-}
-
-/* ─── Grid Card ──────────────────────────────────────────── */
-function ErpGridCard({
-  erp,
-  index,
-  onSelect,
-}: {
-  erp: typeof FALLBACK_ERP_DATA[number]
-  index: number
-  onSelect: () => void
-}) {
-  const IconComp = getErpIcon(erp.icon)
-  const color = getErpColor(erp.color)
-  const moduleCount = erp.moduleCount || erp.modules?.length || 0
-
-  return (
-    <motion.div
-      variants={fadeUp}
-      custom={index}
-      initial="hidden"
-      animate="visible"
-    >
-      <Card
-        className="border-border/60 hover:shadow-lg transition-all duration-300 cursor-pointer group h-full overflow-hidden"
-        style={{ borderColor: 'var(--gg-separator)' }}
-        onClick={onSelect}
-      >
-        {/* Color accent bar at top */}
-        <div
-          className="h-1 w-full"
-          style={{ background: `linear-gradient(90deg, ${color.hex}, transparent)` }}
-        />
-
-        <CardContent className="p-5 flex flex-col gap-3">
-          <div className="flex items-start justify-between">
-            <div
-              className={`flex items-center justify-center w-11 h-11 rounded-xl ${color.bg} transition-transform duration-300 group-hover:scale-110`}
-            >
-              {createElement(IconComp, { className: `w-5 h-5 ${color.text}` })}
-            </div>
-            <StatusBadge variant="success" size="sm">LIVE</StatusBadge>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-foreground text-base">{erp.name}</h3>
-            <Badge variant="outline" className="mt-1.5 text-[10px]">{erp.industry}</Badge>
-          </div>
-
-          <p className="text-xs text-muted-foreground line-clamp-2 min-h-[2rem]">
-            {erp.description}
-          </p>
-
-          <div className="grid grid-cols-2 gap-2 text-center pt-2 border-t" style={{ borderColor: 'var(--gg-separator)' }}>
-            <div>
-              <p className="text-sm font-bold text-foreground">{moduleCount}</p>
-              <p className="text-[10px] text-muted-foreground">Modules</p>
-            </div>
-            <div>
-              <p className="text-sm font-bold text-foreground">v{erp.version || '1.0'}</p>
-              <p className="text-[10px] text-muted-foreground">Version</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 pt-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs gap-1 flex-1"
-              onClick={(e) => { e.stopPropagation(); onSelect() }}
-            >
-              <Eye className="w-3 h-3" />Details
-            </Button>
-            {erp.website && (
-              <a
-                href={erp.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                  <ExternalLink className="w-3 h-3" />Demo
-                </Button>
-              </a>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  )
-}
-
-/* ─── List Card ──────────────────────────────────────────── */
-function ErpListCard({
-  erp,
-  index,
-  onSelect,
-}: {
-  erp: typeof FALLBACK_ERP_DATA[number]
-  index: number
-  onSelect: () => void
-}) {
-  const IconComp = getErpIcon(erp.icon)
-  const color = getErpColor(erp.color)
-  const moduleCount = erp.moduleCount || erp.modules?.length || 0
-
-  return (
-    <motion.div
-      variants={fadeUp}
-      custom={index}
-      initial="hidden"
-      animate="visible"
-    >
-      <Card
-        className="border-border/60 hover:shadow-sm transition-all duration-200 cursor-pointer group"
-        style={{ borderColor: 'var(--gg-separator)' }}
-        onClick={onSelect}
-      >
-        <CardContent className="p-4 flex items-center gap-4">
-          <div
-            className={`flex items-center justify-center w-10 h-10 rounded-xl ${color.bg} shrink-0 transition-transform duration-200 group-hover:scale-110`}
-          >
-            {createElement(IconComp, { className: `w-5 h-5 ${color.text}` })}
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground truncate">{erp.name}</span>
-              <span className="w-2 h-2 rounded-full shrink-0 bg-emerald-500" />
-              <StatusBadge variant="success" size="sm">LIVE</StatusBadge>
-            </div>
-            <p className="text-xs text-muted-foreground truncate mt-0.5">{erp.industry} &middot; {erp.description}</p>
-          </div>
-
-          <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
-            <div className="text-center hidden sm:block">
-              <p className="font-bold text-foreground">{moduleCount}</p>
-              <p>Modules</p>
-            </div>
-            <div className="text-center hidden sm:block">
-              <p className="font-bold text-foreground">v{erp.version || '1.0'}</p>
-              <p>Version</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
   )
 }
