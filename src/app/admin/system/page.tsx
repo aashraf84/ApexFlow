@@ -62,6 +62,16 @@ import {
   CreditCard,
   Palette,
   AlertCircle,
+  BarChart3,
+  Globe,
+  Cog,
+  Bell,
+  Share2,
+  Lock,
+  Code,
+  Server,
+  Zap,
+  Image as ImageIcon,
 } from 'lucide-react'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -95,9 +105,20 @@ interface SessionUser {
 const SETTING_GROUPS = [
   { value: 'general', label: 'General', icon: Settings, color: { style: { color: 'var(--gg-vermillion)' } as React.CSSProperties } },
   { value: 'security', label: 'Security', icon: Shield, color: { className: 'text-red-400' } },
-  { value: 'email', label: 'Email', icon: Mail, color: { className: 'text-blue-400' } },
-  { value: 'payment', label: 'Payment', icon: CreditCard, color: { className: 'text-amber-400' } },
-  { value: 'appearance', label: 'Appearance', icon: Palette, color: { className: 'text-violet-400' } },
+  { value: 'auth', label: 'Authentication', icon: Lock, color: { className: 'text-amber-400' } },
+  { value: 'email', label: 'Email / SMTP', icon: Mail, color: { className: 'text-blue-400' } },
+  { value: 'payment', label: 'Payment / Billing', icon: CreditCard, color: { className: 'text-amber-400' } },
+  { value: 'appearance', label: 'Appearance / Theme', icon: Palette, color: { className: 'text-violet-400' } },
+  { value: 'branding', label: 'Branding / Logo', icon: ImageIcon, color: { className: 'text-pink-400' } },
+  { value: 'contact', label: 'Contact Info', icon: Globe, color: { className: 'text-teal-400' } },
+  { value: 'analytics', label: 'Analytics / Tracking', icon: BarChart3, color: { className: 'text-cyan-400' } },
+  { value: 'seo', label: 'SEO / Meta', icon: Search, color: { className: 'text-green-400' } },
+  { value: 'social', label: 'Social Media', icon: Share2, color: { className: 'text-rose-400' } },
+  { value: 'notifications', label: 'Notifications', icon: Bell, color: { className: 'text-yellow-400' } },
+  { value: 'api', label: 'API / Webhooks', icon: Code, color: { className: 'text-blue-400' } },
+  { value: 'integration', label: 'Integrations', icon: Zap, color: { className: 'text-emerald-400' } },
+  { value: 'advanced', label: 'Advanced / System', icon: Cog, color: { className: 'text-gray-400' } },
+  { value: 'legal', label: 'Legal / Compliance', icon: FileText, color: { className: 'text-zinc-400' } },
 ]
 
 const MODULE_OPTIONS = [
@@ -112,19 +133,22 @@ const MODULE_OPTIONS = [
 ]
 
 const GROUP_ICONS: Record<string, React.ElementType> = {
-  general: Settings,
-  security: Shield,
-  email: Mail,
-  payment: CreditCard,
-  appearance: Palette,
+  general: Settings, security: Shield, auth: Lock, email: Mail, payment: CreditCard,
+  appearance: Palette, branding: ImageIcon, contact: Globe, analytics: BarChart3,
+  seo: Search, social: Share2, notifications: Bell, api: Code, integration: Zap,
+  advanced: Cog, legal: FileText,
 }
 
 const GROUP_COLORS: Record<string, { className?: string; style?: React.CSSProperties }> = {
   general: { style: { color: 'var(--gg-vermillion)' } },
-  security: { className: 'text-red-400' },
-  email: { className: 'text-blue-400' },
-  payment: { className: 'text-amber-400' },
-  appearance: { className: 'text-violet-400' },
+  security: { className: 'text-red-400' }, auth: { className: 'text-amber-400' },
+  email: { className: 'text-blue-400' }, payment: { className: 'text-amber-400' },
+  appearance: { className: 'text-violet-400' }, branding: { className: 'text-pink-400' },
+  contact: { className: 'text-teal-400' }, analytics: { className: 'text-cyan-400' },
+  seo: { className: 'text-green-400' }, social: { className: 'text-rose-400' },
+  notifications: { className: 'text-yellow-400' }, api: { className: 'text-blue-400' },
+  integration: { className: 'text-emerald-400' }, advanced: { className: 'text-gray-400' },
+  legal: { className: 'text-zinc-400' },
 }
 
 // ─── Main Page ─────────────────────────────────────────────────────────────
@@ -314,6 +338,20 @@ function SettingsTab() {
     grouped[s.group].push(s)
   }
 
+  // Dynamic group options: merge predefined SETTING_GROUPS with any DB groups not in the list
+  const dbGroupValues = Object.keys(grouped)
+  const knownGroupValues = SETTING_GROUPS.map((g) => g.value)
+  const unknownGroups = dbGroupValues.filter((g) => !knownGroupValues.includes(g))
+  const allGroupOptions = [
+    ...SETTING_GROUPS,
+    ...unknownGroups.map((g) => ({
+      value: g,
+      label: formatLabel(g),
+      icon: Settings,
+      color: { className: 'text-muted-foreground' } as { className?: string; style?: React.CSSProperties },
+    })),
+  ]
+
   // Filter
   const filteredGroups = filterGroup === 'all'
     ? Object.keys(grouped).sort()
@@ -358,7 +396,7 @@ function SettingsTab() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Groups</SelectItem>
-            {SETTING_GROUPS.map((g) => (
+            {allGroupOptions.map((g) => (
               <SelectItem key={g.value} value={g.value}>
                 {g.label}
               </SelectItem>
@@ -503,7 +541,7 @@ function SettingsTab() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SETTING_GROUPS.map((g) => (
+                  {allGroupOptions.map((g) => (
                     <SelectItem key={g.value} value={g.value}>
                       {g.label}
                     </SelectItem>
