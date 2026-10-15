@@ -38,11 +38,11 @@ export async function GET() {
 }
 
 // PATCH /api/admin/payment-settings
-export async function PATCH(req: NextRequest) {
+export async function PATCH(request: NextRequest) {
   try {
     const auth = await requirePermission(request, 'finance')
     if (!auth.ok) return auth.response
-    const body = await req.json()
+    const body = await request.json()
     const updated: string[] = []
 
     for (const [key, value] of Object.entries(body)) {
@@ -72,7 +72,7 @@ export async function PATCH(req: NextRequest) {
             entity: 'payment_settings',
             changes: JSON.stringify(updated),
             performedBy: 'admin',
-            ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
+            ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
           },
         })
       } catch { /* non-critical */ }

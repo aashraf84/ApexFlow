@@ -3,10 +3,10 @@ import { db } from '@/lib/db'
 import { requirePermission } from '@/lib/api-helpers'
 
 // GET /api/admin/payment-accounts?type=bank_account
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   console.log('[PaymentAccounts] GET request received')
   try {
-    const { searchParams } = new URL(req.url)
+    const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
     console.log('[PaymentAccounts] Type filter:', type)
 
@@ -24,11 +24,11 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/admin/payment-accounts
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const auth = await requirePermission(request, 'finance')
     if (!auth.ok) return auth.response
-    const body = await req.json()
+    const body = await request.json()
 
     if (!body.label?.trim()) {
       return NextResponse.json({ error: 'Label is required' }, { status: 400 })
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
           entityId: account.id,
           changes: JSON.stringify({ label: body.label, type, gateway }),
           performedBy: 'admin',
-          ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
+          ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
         },
       })
     } catch { /* non-critical */ }
@@ -123,11 +123,11 @@ export async function POST(req: NextRequest) {
 }
 
 // PATCH /api/admin/payment-accounts?id=xxx
-export async function PATCH(req: NextRequest) {
+export async function PATCH(request: NextRequest) {
   try {
     const auth = await requirePermission(request, 'finance')
     if (!auth.ok) return auth.response
-    const { searchParams } = new URL(req.url)
+    const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
     if (!id) {
@@ -139,7 +139,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
-    const body = await req.json()
+    const body = await request.json()
 
     // If setting as default, unset other defaults of same type
     if (body.isDefault) {
@@ -220,7 +220,7 @@ export async function PATCH(req: NextRequest) {
           entityId: existing.id,
           changes: JSON.stringify(Object.keys(data)),
           performedBy: 'admin',
-          ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
+          ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
         },
       })
     } catch { /* non-critical */ }
@@ -234,11 +234,11 @@ export async function PATCH(req: NextRequest) {
 }
 
 // DELETE /api/admin/payment-accounts?id=xxx
-export async function DELETE(req: NextRequest) {
+export async function DELETE(request: NextRequest) {
   try {
     const auth = await requirePermission(request, 'finance')
     if (!auth.ok) return auth.response
-    const { searchParams } = new URL(req.url)
+    const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
     if (!id) {
@@ -261,7 +261,7 @@ export async function DELETE(req: NextRequest) {
           entityId: existing.id,
           changes: JSON.stringify({ label: existing.label }),
           performedBy: 'admin',
-          ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
+          ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
         },
       })
     } catch { /* non-critical */ }

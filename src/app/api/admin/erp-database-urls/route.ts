@@ -26,11 +26,11 @@ export async function GET() {
 }
 
 // PATCH /api/admin/erp-database-urls — update database URL for an ERP
-export async function PATCH(req: NextRequest) {
+export async function PATCH(request: NextRequest) {
   try {
     const auth = await requirePermission(request, 'integrations')
     if (!auth.ok) return auth.response
-    const body = await req.json()
+    const body = await request.json()
     const { slug, databaseUrl } = body
 
     if (!slug) {
