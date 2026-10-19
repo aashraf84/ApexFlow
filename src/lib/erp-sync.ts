@@ -359,14 +359,17 @@ export async function autoDetectSchema(connectionUrl: string): Promise<AutoDetec
     const serialTable = findBest(SERIAL_NAME_PATTERNS)
     const deviceTable = findBest(DEVICE_NAME_PATTERNS)
 
+    const clientMapping = clientTable ? autoMapColumns(clientTable.name, clientTable.columns) : undefined
+    const serialMapping = serialTable ? autoMapSerial(serialTable.name, serialTable.columns) : undefined
+    const deviceMapping = deviceTable ? autoMapDevice(deviceTable.name, deviceTable.columns) : undefined
     return {
       tables: allTables,
       clientTable: clientTable || undefined,
-      serialTable: serialTable || undefined,
-      deviceTable: deviceTable || undefined,
-      clientMapping: clientTable ? autoMapColumns(clientTable.name, clientTable.columns) : undefined,
-      serialMapping: serialTable ? autoMapSerial(serialTable.name, serialTable.columns) : undefined,
-      deviceMapping: deviceTable ? autoMapDevice(deviceTable.name, deviceTable.columns) : undefined,
+      serialTable: (serialMapping && serialMapping.serialKey) ? serialTable || undefined : undefined,
+      deviceTable: (deviceMapping && deviceMapping.deviceSerial) ? deviceTable || undefined : undefined,
+      clientMapping,
+      serialMapping: (serialMapping && serialMapping.serialKey) ? serialMapping : undefined,
+      deviceMapping: (deviceMapping && deviceMapping.deviceSerial) ? deviceMapping : undefined,
     }
   } catch (e) {
     return { tables: [], error: e instanceof Error ? e.message : String(e) }
