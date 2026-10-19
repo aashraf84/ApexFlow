@@ -488,10 +488,11 @@ export async function syncClientsFromErp(
     const table = quoteIdent(mapping.clientTable)
 
     // neon() tagged templates only parameterize values; for dynamic identifiers
-    // we use the unsafe() escape hatch with our quoted names.
+    // (quoted table/column names) we use sql.query() with an empty params array.
     const rows = (await withTimeout(
-      sql.unsafe(
-        `SELECT ${colId} AS id, ${colName} AS name, ${colEmail} AS email, ${colPhone} AS phone, ${colCompany} AS company, ${colStatus} AS status FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`
+      sql.query(
+        `SELECT ${colId} AS id, ${colName} AS name, ${colEmail} AS email, ${colPhone} AS phone, ${colCompany} AS company, ${colStatus} AS status FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`,
+        []
       ),
       SYNC_TIMEOUT_MS
     )) as Array<{
@@ -695,7 +696,7 @@ export async function registerClientInErp(
 
     const insertSql = `INSERT INTO ${table} (${colList}) VALUES (${placeholders}) RETURNING ${quoteIdent(mapping.id)} AS id`
     const result = (await withTimeout(
-      sql.unsafe(insertSql, vals as string[]),
+      sql.query(insertSql, vals as string[]),
       SYNC_TIMEOUT_MS
     )) as Array<{ id: string | number }>
     const externalId = result[0]?.id ? String(result[0].id) : undefined
@@ -775,8 +776,9 @@ export async function syncSerialsFromErp(connectorId: string): Promise<SyncResul
     const table = quoteIdent(mapping.serialTable)
 
     const rows = (await withTimeout(
-      sql.unsafe(
-        `SELECT ${colId} AS id, ${colKey} AS serialKey, ${colLic} AS licenseKey, ${colClientRef} AS clientRef, ${colProduct} AS product, ${colStatus} AS status FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`
+      sql.query(
+        `SELECT ${colId} AS id, ${colKey} AS serialKey, ${colLic} AS licenseKey, ${colClientRef} AS clientRef, ${colProduct} AS product, ${colStatus} AS status FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`,
+        []
       ),
       SYNC_TIMEOUT_MS
     )) as Array<{
@@ -919,8 +921,9 @@ export async function syncDevicesFromErp(connectorId: string): Promise<SyncResul
     const table = quoteIdent(mapping.deviceTable)
 
     const rows = (await withTimeout(
-      sql.unsafe(
-        `SELECT ${colId} AS id, ${colSerial} AS serial, ${colName} AS name, ${colType} AS type, ${colStatus} AS status, ${colClientRef} AS clientRef FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`
+      sql.query(
+        `SELECT ${colId} AS id, ${colSerial} AS serial, ${colName} AS name, ${colType} AS type, ${colStatus} AS status, ${colClientRef} AS clientRef FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`,
+        []
       ),
       SYNC_TIMEOUT_MS
     )) as Array<{
