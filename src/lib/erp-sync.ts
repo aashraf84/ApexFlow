@@ -522,8 +522,10 @@ export async function syncClientsFromErp(
         if (existingTenant?.client) {
           client = existingTenant.client
         } else if (email) {
+          // email is not @unique on the Client model, so use findFirst
+          // (findUnique would throw "needs at least one of id arguments")
           client = await withRetry((tx) =>
-            tx.client.findUnique({ where: { email } })
+            tx.client.findFirst({ where: { email } })
           )
         }
         if (client) {
@@ -1113,7 +1115,8 @@ async function syncClientsFromErpApi(connectorId: string): Promise<SyncResult> {
         let client = null
         const existingTenant = await withRetry((tx) => tx.syncTenant.findFirst({ where: { connectorId, externalId }, include: { client: true } }))
         if (existingTenant?.client) client = existingTenant.client
-        else if (email) client = await withRetry((tx) => tx.client.findUnique({ where: { email } }))
+        // email is not @unique on Client → use findFirst (findUnique would throw)
+        else if (email) client = await withRetry((tx) => tx.client.findFirst({ where: { email } }))
         if (client) {
           client = await withRetry((tx) => tx.client.update({ where: { id: client!.id }, data: { contactPerson: name, name, company: company || client.company, companyName: company || client.companyName, phone: phone || client.phone, status, erpSlug: connector.erpSlug, erpSystemId: connector.erpSystemId || undefined } }))
         } else {

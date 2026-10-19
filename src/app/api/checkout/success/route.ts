@@ -137,8 +137,9 @@ export async function GET(request: NextRequest) {
 
     try {
       // 1. Create or update Client record
+      // email is not @unique on Client → use findFirst (findUnique would throw)
       let client = await dbModule.withRetry((tx: any) =>
-        tx.client.findUnique({ where: { email: order.customerEmail } }),
+        tx.client.findFirst({ where: { email: order.customerEmail } }),
       )
 
       if (!client) {
