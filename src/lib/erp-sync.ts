@@ -70,7 +70,7 @@ export interface ClientSchemaMapping {
   registerClientEndpoint?: string
 }
 
-function parseMapping(mappingJson: string | null | undefined): ClientSchemaMapping | null {
+export function parseMapping(mappingJson: string | null | undefined): ClientSchemaMapping | null {
   if (!mappingJson) return null
   try {
     const m = JSON.parse(mappingJson)
