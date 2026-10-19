@@ -344,7 +344,7 @@ export function IntegrationManager() {
       const res = await fetch('/api/admin/integrations/discover-schema', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectionUrl }),
+        body: JSON.stringify({ connectionUrl, autoDetect: true }),
       })
       const json = await res.json()
       setTables(json.tables || [])
