@@ -235,6 +235,145 @@ export async function testApiConnection(
 }
 
 // ============================================
+// Auto-detection: introspect ALL tables + columns in one query, score
+// them for client/serial/device match, return the best picks + field mappings
+// ============================================
+
+export interface AutoDetectResult {
+  tables: Array<{ name: string; columns: Array<{ name: string; dataType: string }> }>
+  clientTable?: { name: string; columns: Array<{ name: string; dataType: string }> }
+  serialTable?: { name: string; columns: Array<{ name: string; dataType: string }> }
+  deviceTable?: { name: string; columns: Array<{ name: string; dataType: string }> }
+  clientMapping?: ClientSchemaMapping
+  serialMapping?: Partial<ClientSchemaMapping>
+  deviceMapping?: Partial<ClientSchemaMapping>
+  error?: string
+}
+
+const CLIENT_NAME_PATTERNS = ['client', 'customer', 'owner', 'tenant', 'company', 'account', 'contact', 'erp_client', 'owner_client']
+const SERIAL_NAME_PATTERNS = ['serial', 'license', 'activation', 'key']
+const DEVICE_NAME_PATTERNS = ['device', 'imei', 'hardware', 'equipment', 'asset']
+
+function scoreTable(tableName: string, columns: Array<{ name: string; dataType: string }>, patterns: string[]): number {
+  const nameLower = tableName.toLowerCase()
+  let score = 0
+  for (const p of patterns) { if (nameLower.includes(p)) score += 10 }
+  const colNames = columns.map((c) => c.name.toLowerCase())
+  // Bonus for having id-like, name-like, email-like columns (client tables)
+  if (patterns === CLIENT_NAME_PATTERNS) {
+    if (colNames.some((c) => c === 'id' || c.endsWith('id') || c === 'uuid' || c === 'cuid')) score += 3
+    if (colNames.some((c) => c.includes('name') || c.includes('company') || c.includes('contact') || c.includes('owner'))) score += 3
+    if (colNames.some((c) => c.includes('email'))) score += 5
+    if (colNames.some((c) => c.includes('phone') || c.includes('mobile'))) score += 2
+  }
+  if (patterns === SERIAL_NAME_PATTERNS) {
+    if (colNames.some((c) => c.includes('serial') || c.includes('key') || c.includes('imei'))) score += 5
+    if (colNames.some((c) => c.includes('client') || c.includes('customer') || c.includes('owner'))) score += 3
+  }
+  if (patterns === DEVICE_NAME_PATTERNS) {
+    if (colNames.some((c) => c.includes('serial') || c.includes('imei') || c.includes('mac'))) score += 5
+    if (colNames.some((c) => c.includes('client') || c.includes('customer') || c.includes('owner'))) score += 3
+  }
+  return score
+}
+
+function autoMapColumns(tableName: string, columns: Array<{ name: string; dataType: string }>): ClientSchemaMapping {
+  const cols = columns.map((c) => c.name)
+  const find = (candidates: string[]) => cols.find((c) => candidates.some((can) => c.toLowerCase() === can || c.toLowerCase().includes(can))) || ''
+  return {
+    clientTable: tableName,
+    id: find(['id', 'uuid', 'cuid', 'objectid']),
+    name: find(['contactperson', 'name', 'clientname', 'companyname', 'ownername', 'fullname', 'title']),
+    email: find(['email', 'emailaddress']),
+    phone: find(['phone', 'mobile', 'phonenumber', 'contactnumber', 'cell']),
+    company: find(['company', 'companyname', 'organization', 'businessname', 'firm']),
+    status: find(['status', 'isactive', 'state', 'active']),
+  }
+}
+
+function autoMapSerial(tableName: string, columns: Array<{ name: string; dataType: string }>): Partial<ClientSchemaMapping> {
+  const cols = columns.map((c) => c.name)
+  const find = (candidates: string[]) => cols.find((c) => candidates.some((can) => c.toLowerCase() === can || c.toLowerCase().includes(can))) || ''
+  return {
+    serialTable: tableName,
+    serialId: find(['id', 'uuid', 'cuid']),
+    serialKey: find(['serial', 'serialkey', 'serialnumber', 'imei', 'licensekey', 'key', 'activationkey']),
+    licenseKey: find(['license', 'licensekey', 'activationkey', 'license_code']),
+    serialClientRef: find(['clientid', 'customerid', 'ownerid', 'tenantid', 'userid', 'client_id', 'customer_id']),
+    serialProduct: find(['product', 'productname', 'sku', 'item', 'plan']),
+    serialStatus: find(['status', 'isactive', 'activated', 'state']),
+  }
+}
+
+function autoMapDevice(tableName: string, columns: Array<{ name: string; dataType: string }>): Partial<ClientSchemaMapping> {
+  const cols = columns.map((c) => c.name)
+  const find = (candidates: string[]) => cols.find((c) => candidates.some((can) => c.toLowerCase() === can || c.toLowerCase().includes(can))) || ''
+  return {
+    deviceTable: tableName,
+    deviceId: find(['id', 'uuid', 'cuid']),
+    deviceSerial: find(['serial', 'serialnumber', 'imei', 'deviceid', 'mac', 'device_serial']),
+    deviceName: find(['name', 'devicename', 'model', 'product', 'label']),
+    deviceType: find(['type', 'devicetype', 'category', 'model']),
+    deviceStatus: find(['status', 'isactive', 'state']),
+    deviceClientRef: find(['clientid', 'customerid', 'ownerid', 'tenantid', 'userid', 'client_id']),
+  }
+}
+
+export async function autoDetectSchema(connectionUrl: string): Promise<AutoDetectResult> {
+  if (!connectionUrl) return { tables: [], error: 'No connection URL' }
+  try {
+    const sql = neon(connectionUrl)
+    // ONE query: all tables + all columns
+    const rows = (await withTimeout(
+      sql`
+        SELECT table_name, column_name, data_type
+        FROM information_schema.columns
+        WHERE table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+        ORDER BY table_name, ordinal_position
+      `,
+      SYNC_TIMEOUT_MS
+    )) as Array<{ table_name: string; column_name: string; data_type: string }>
+
+    // Group by table
+    const tableMap: Record<string, Array<{ name: string; dataType: string }>> = {}
+    for (const row of rows) {
+      if (!tableMap[row.table_name]) tableMap[row.table_name] = []
+      tableMap[row.table_name].push({ name: row.column_name, dataType: row.data_type })
+    }
+
+    const allTables = Object.entries(tableMap).map(([name, columns]) => ({ name, columns }))
+
+    // Score + pick the best client/serial/device tables
+    const findBest = (patterns: string[]): { name: string; columns: Array<{ name: string; dataType: string }> } | null => {
+      let best: { name: string; columns: Array<{ name: string; dataType: string }>; score: number } | null = null
+      for (const [name, columns] of Object.entries(tableMap)) {
+        const score = scoreTable(name, columns, patterns)
+        if (score > 0 && (!best || score > best.score)) {
+          best = { name, columns, score }
+        }
+      }
+      return best
+    }
+
+    const clientTable = findBest(CLIENT_NAME_PATTERNS)
+    const serialTable = findBest(SERIAL_NAME_PATTERNS)
+    const deviceTable = findBest(DEVICE_NAME_PATTERNS)
+
+    return {
+      tables: allTables,
+      clientTable: clientTable || undefined,
+      serialTable: serialTable || undefined,
+      deviceTable: deviceTable || undefined,
+      clientMapping: clientTable ? autoMapColumns(clientTable.name, clientTable.columns) : undefined,
+      serialMapping: serialTable ? autoMapSerial(serialTable.name, serialTable.columns) : undefined,
+      deviceMapping: deviceTable ? autoMapDevice(deviceTable.name, deviceTable.columns) : undefined,
+    }
+  } catch (e) {
+    return { tables: [], error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+// ============================================
 // Inbound sync: ERP → ApexFlow (clients)
 // ============================================
 

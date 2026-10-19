@@ -257,15 +257,79 @@ export function IntegrationManager() {
     if (!connectionUrl) { toast.error('Enter a connection URL first'); return }
     setTesting(true); setTestResult(null)
     try {
+      // DB mode: test + auto-detect in ONE call
       const res = await fetch('/api/admin/integrations/test-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectionUrl }),
+        body: JSON.stringify({ connectionUrl, autoDetect: true }),
       })
       const json = await res.json()
-      setTestResult(json)
-      if (json.connected) toast.success(`Connected (${json.latency}ms)`)
-      else toast.error(json.error || 'Connection failed')
+      setTestResult({ connected: json.connected, latency: json.latency, error: json.error })
+      if (json.connected) {
+        toast.success(`Connected (${json.latency}ms)`)
+        // Auto-fill tables + mappings from the autoDetect result
+        if (json.autoDetect) {
+          const ad = json.autoDetect
+          // Tables list
+          if (ad.tables) {
+            setTables(ad.tables.map((t: any) => t.name))
+          }
+          // Client table + columns + field mapping
+          if (ad.clientTable) {
+            setSelectedTable(ad.clientTable.name)
+            setColumns(ad.clientTable.columns)
+            if (ad.clientMapping) {
+              const cm = ad.clientMapping
+              setMapping({
+                id: cm.id || '',
+                name: cm.name || '',
+                email: cm.email || '',
+                phone: cm.phone || '',
+                company: cm.company || '',
+                status: cm.status || '',
+              })
+              toast.success(`Auto-detected client table: "${ad.clientTable.name}"`)
+            }
+          }
+          // Serial table + mapping (auto-enable if found)
+          if (ad.serialTable && ad.serialMapping) {
+            const sm = ad.serialMapping as any
+            setSyncSerials(true)
+            setSerialTable(ad.serialTable.name)
+            setSerialColumns(ad.serialTable.columns)
+            setSerialMapping({
+              serialId: sm.serialId || '',
+              serialKey: sm.serialKey || '',
+              licenseKey: sm.licenseKey || '',
+              serialClientRef: sm.serialClientRef || '',
+              serialProduct: sm.serialProduct || '',
+              serialStatus: sm.serialStatus || '',
+            })
+            toast.info(`Auto-detected serial table: "${ad.serialTable.name}"`)
+          }
+          // Device table + mapping (auto-enable if found)
+          if (ad.deviceTable && ad.deviceMapping) {
+            const dm = ad.deviceMapping as any
+            setSyncDevices(true)
+            setDeviceTable(ad.deviceTable.name)
+            setDeviceColumns(ad.deviceTable.columns)
+            setDeviceMapping({
+              deviceId: dm.deviceId || '',
+              deviceSerial: dm.deviceSerial || '',
+              deviceName: dm.deviceName || '',
+              deviceType: dm.deviceType || '',
+              deviceStatus: dm.deviceStatus || '',
+              deviceClientRef: dm.deviceClientRef || '',
+            })
+            toast.info(`Auto-detected device table: "${ad.deviceTable.name}"`)
+          }
+          if (!ad.clientTable) {
+            toast.warning('No client table auto-detected — select one manually')
+          }
+        }
+      } else {
+        toast.error(json.error || 'Connection failed')
+      }
     } catch (e) {
       setTestResult({ connected: false, error: String(e) })
       toast.error('Connection test failed')
@@ -728,7 +792,7 @@ export function IntegrationManager() {
                     </Button>
                   )}
                   <Button
-                    onClick={() => { if (connectionMode === 'database') { handleDiscoverTables() }; setStep(2) }}
+                    onClick={() => setStep(2)}
                     disabled={!testResult?.connected}
                     className="text-white"
                     style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
