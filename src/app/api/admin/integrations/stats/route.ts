@@ -1,13 +1,13 @@
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-helpers'
 import { db, withRetry } from '@/lib/db'
 
 // GET /api/admin/integrations/stats
 // Returns aggregate metrics for the Integration Hub Overview dashboard.
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const auth = await requirePermission(request, 'integrations')
   if (!auth.ok) return auth.response
 
