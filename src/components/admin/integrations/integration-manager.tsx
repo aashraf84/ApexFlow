@@ -498,7 +498,7 @@ export function IntegrationManager() {
   const handleTestConnector = async (id: string) => {
     setTestingId(id)
     try {
-      const res = await fetch(`/api/admin/integrations/${id}/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const res = await fetch(`/api/admin/integrations/${id}/test-connection`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       const json = await res.json()
       if (json.connected) toast.success(`Connected (${json.latency}ms)`)
       else toast.error(json.error || 'Connection failed')
