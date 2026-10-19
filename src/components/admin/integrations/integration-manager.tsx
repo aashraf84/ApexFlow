@@ -520,15 +520,21 @@ export function IntegrationManager() {
       const serials = json.serials || {}
       const devices = json.devices || {}
       const totalSynced = (clients.synced || 0) + (serials.synced || 0) + (devices.synced || 0)
+      const totalFailed = (clients.failed || 0) + (serials.failed || 0) + (devices.failed || 0)
+      // Collect the first non-empty error message across entities
+      const firstError = clients.error || serials.error || devices.error || ''
       if (totalSynced > 0) {
         const parts = []
         if (clients.synced) parts.push(`${clients.synced} clients`)
         if (serials.synced) parts.push(`${serials.synced} serials`)
         if (devices.synced) parts.push(`${devices.synced} devices`)
-        const failed = (clients.failed || 0) + (serials.failed || 0) + (devices.failed || 0)
-        toast.success(`${name}: synced ${parts.join(' + ')}${failed ? ` (${failed} failed)` : ''}`)
+        toast.success(`${name}: synced ${parts.join(' + ')}${totalFailed ? ` (${totalFailed} failed)` : ''}`)
+        // If some failed, also surface the reason as a warning
+        if (totalFailed > 0 && firstError) {
+          toast.warning(`${name}: ${firstError}`, { duration: 8000 })
+        }
       } else {
-        toast.error(`${name}: ${(clients.error || serials.error || devices.error || 'no records synced')}`)
+        toast.error(`${name}: ${(firstError || 'no records synced')}`)
       }
       fetchConnectors()
     } catch {

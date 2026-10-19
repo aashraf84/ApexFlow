@@ -800,10 +800,16 @@ export async function syncSerialsFromErp(connectorId: string): Promise<SyncResul
     )
     const refToClient = new Map(tenants.filter((t) => t.clientId && t.externalId).map((t) => [String(t.externalId), t.clientId!]))
 
+    let emptyKeyCount = 0
     for (const row of rows) {
       try {
         const serialKey = row.serialKey?.trim()
-        if (!serialKey) { failed++; continue }
+        if (!serialKey) {
+          failed++
+          emptyKeyCount++
+          if (!errMsg) errMsg = `Serial sync: ${emptyKeyCount} row(s) have an empty serialKey column (mapped column "${mapping.serialKey}" returned null/empty). Re-map the serialKey field to the correct column in the ERP's ${mapping.serialTable} table.`
+          continue
+        }
         // Resolve the ApexFlow clientId from the ERP clientRef via SyncTenant
         let clientId: string | null = null
         if (row.clientRef != null) {
@@ -945,10 +951,16 @@ export async function syncDevicesFromErp(connectorId: string): Promise<SyncResul
     )
     const refToClient = new Map(tenants.filter((t) => t.clientId && t.externalId).map((t) => [String(t.externalId), t.clientId!]))
 
+    let emptySerialCount = 0
     for (const row of rows) {
       try {
         const serial = row.serial?.trim()
-        if (!serial) { failed++; continue }
+        if (!serial) {
+          failed++
+          emptySerialCount++
+          if (!errMsg) errMsg = `Device sync: ${emptySerialCount} row(s) have an empty device-serial column (mapped column "${mapping.deviceSerial}" returned null/empty). Re-map the deviceSerial field to the correct column in the ERP's ${mapping.deviceTable} table.`
+          continue
+        }
         let clientId: string | null = null
         if (row.clientRef != null) {
           clientId = refToClient.get(String(row.clientRef)) || null
