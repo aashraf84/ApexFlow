@@ -4,24 +4,27 @@ import { motion } from 'framer-motion'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/admin/shared/page-header'
 import { IntegrationManager } from './integration-manager'
-import { IntegrationOverview } from './integration-overview'
+import { IntegrationStatsDashboard } from './integration-stats-dashboard'
 import { SyncScheduler } from './sync-scheduler'
 import { WebhookManager } from './webhook-manager'
 import { SyncHistoryViewer } from './sync-history-viewer'
+import { ActivityFeed } from '../activity/activity-feed'
 import {
   LayoutDashboard,
   Clock,
   Webhook,
   History,
   Plug,
+  Activity,
 } from 'lucide-react'
 
 const TABS = [
+  { value: 'overview', label: 'Overview', icon: LayoutDashboard },
   { value: 'integrations', label: 'Integrations', icon: Plug },
-  { value: 'overview', label: 'Legacy', icon: LayoutDashboard },
   { value: 'scheduler', label: 'Sync Scheduler', icon: Clock },
   { value: 'webhooks', label: 'Webhooks', icon: Webhook },
   { value: 'history', label: 'Sync History', icon: History },
+  { value: 'activity', label: 'Activity', icon: Activity },
 ] as const
 
 const fadeUp = {
@@ -29,7 +32,7 @@ const fadeUp = {
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.04, duration: 0.35, ease: [0.21, 0.47, 0.32, 0.98] },
+    transition: { delay: i * 0.04, duration: 0.35, ease: [0.21, 0.47, 0.32, 0.98] as const },
   }),
 }
 
@@ -49,8 +52,8 @@ export function IntegrationHubPage() {
       </motion.div>
 
       <motion.div variants={fadeUp} custom={1}>
-        <Tabs defaultValue="integrations" className="space-y-4">
-          <TabsList className="w-full sm:w-auto">
+        <Tabs defaultValue="overview" className="space-y-4">
+          <TabsList className="w-full sm:w-auto overflow-x-auto">
             {TABS.map((tab) => {
               const Icon = tab.icon
               return (
@@ -63,12 +66,12 @@ export function IntegrationHubPage() {
             })}
           </TabsList>
 
-          <TabsContent value="integrations" className="mt-4">
-            <IntegrationManager />
+          <TabsContent value="overview" className="mt-4">
+            <IntegrationStatsDashboard />
           </TabsContent>
 
-          <TabsContent value="overview" className="mt-4">
-            <IntegrationOverview />
+          <TabsContent value="integrations" className="mt-4">
+            <IntegrationManager />
           </TabsContent>
 
           <TabsContent value="scheduler" className="mt-4">
@@ -81,6 +84,10 @@ export function IntegrationHubPage() {
 
           <TabsContent value="history" className="mt-4">
             <SyncHistoryViewer />
+          </TabsContent>
+
+          <TabsContent value="activity" className="mt-4">
+            <ActivityFeed />
           </TabsContent>
         </Tabs>
       </motion.div>

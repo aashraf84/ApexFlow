@@ -1,7 +1,7 @@
 'use client'
 
-import { UsersPage } from '@/components/admin/system/users/users-page'
+import { UsersRolesManager } from '@/components/admin/system/users-roles-manager'
 
-export default function UsersRoutePage() {
-  return <UsersPage />
+export default function SystemUsersPage() {
+  return <UsersRolesManager />
 }
