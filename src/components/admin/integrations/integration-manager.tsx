@@ -98,6 +98,15 @@ export function IntegrationManager() {
   const [apiKey, setApiKey] = useState('')
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ connected: boolean; latency?: number; error?: string } | null>(null)
+  const [autoDetectSummary, setAutoDetectSummary] = useState<{
+    totalTables?: number
+    clientTable?: { name: string; score?: number; columns?: Array<{ name: string; dataType: string }> }
+    serialTable?: { name: string; score?: number }
+    deviceTable?: { name: string; score?: number }
+    clientMapping?: { id?: string; name?: string; email?: string; phone?: string; company?: string; status?: string }
+    serialMapping?: { serialKey?: string; serialId?: string; serialClientRef?: string }
+    deviceMapping?: { deviceSerial?: string; deviceId?: string; deviceClientRef?: string }
+  } | null>(null)
   const [discovering, setDiscovering] = useState(false)
   const [tables, setTables] = useState<string[]>([])
   const [selectedTable, setSelectedTable] = useState('')
@@ -159,7 +168,8 @@ export function IntegrationManager() {
   // ---------- Wizard handlers ----------
   const resetWizard = () => {
     setStep(1); setSelectedErpId(''); setConnectionUrl(''); setApiKey('')
-    setTestResult(null); setTables([]); setSelectedTable(''); setColumns([])
+    setTestResult(null); setAutoDetectSummary(null)
+    setTables([]); setSelectedTable(''); setColumns([])
     setMapping({ id: '', name: '', email: '', phone: '', company: '', status: '' })
     setSyncSerials(false); setSerialTable(''); setSerialColumns([])
     setSerialMapping({ serialId: '', serialKey: '', licenseKey: '', serialClientRef: '', serialProduct: '', serialStatus: '' })
@@ -255,7 +265,7 @@ export function IntegrationManager() {
 
   const handleTest = async () => {
     if (!connectionUrl) { toast.error('Enter a connection URL first'); return }
-    setTesting(true); setTestResult(null)
+    setTesting(true); setTestResult(null); setAutoDetectSummary(null)
     try {
       // DB mode: test + auto-detect in ONE call
       const res = await fetch('/api/admin/integrations/test-connection', {
@@ -270,6 +280,16 @@ export function IntegrationManager() {
         // Auto-fill tables + mappings from the autoDetect result
         if (json.autoDetect) {
           const ad = json.autoDetect
+          // Persist the summary for the visible summary card
+          setAutoDetectSummary({
+            totalTables: ad.totalTables,
+            clientTable: ad.clientTable ? { name: ad.clientTable.name, score: ad.clientScore, columns: ad.clientTable.columns } : undefined,
+            serialTable: ad.serialTable ? { name: ad.serialTable.name, score: ad.serialScore } : undefined,
+            deviceTable: ad.deviceTable ? { name: ad.deviceTable.name, score: ad.deviceScore } : undefined,
+            clientMapping: ad.clientMapping,
+            serialMapping: ad.serialMapping,
+            deviceMapping: ad.deviceMapping,
+          })
           // Tables list
           if (ad.tables) {
             setTables(ad.tables.map((t: any) => t.name))
@@ -810,6 +830,79 @@ export function IntegrationManager() {
                 </div>
               )}
 
+              {/* Auto-Detect Summary — visible proof that the wizard introspected the schema */}
+              {connectionMode === 'database' && autoDetectSummary && (
+                <div className="p-3 rounded-lg border" style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    <p className="text-sm font-semibold text-foreground">Auto-Detect Complete</p>
+                    <Badge variant="outline" className="ml-auto text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                      {autoDetectSummary.totalTables ?? 0} tables scanned
+                    </Badge>
+                    <Button size="sm" variant="outline" onClick={handleTest} disabled={testing} className="h-7 text-[10px] text-foreground px-2">
+                      {testing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                      Re-scan
+                    </Button>
+                  </div>
+
+                  {/* Client table */}
+                  {autoDetectSummary.clientTable ? (
+                    <div className="space-y-1 mb-2">
+                      <p className="text-xs text-muted-foreground">
+                        Client table: <span className="font-mono text-foreground font-semibold">{autoDetectSummary.clientTable.name}</span>
+                        {autoDetectSummary.clientTable.score ? <span className="text-muted-foreground"> (score {autoDetectSummary.clientTable.score})</span> : null}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {autoDetectSummary.clientMapping?.id && (
+                          <Badge variant="outline" className="text-[10px] bg-background">id → {autoDetectSummary.clientMapping.id}</Badge>
+                        )}
+                        {autoDetectSummary.clientMapping?.name && (
+                          <Badge variant="outline" className="text-[10px] bg-background">name → {autoDetectSummary.clientMapping.name}</Badge>
+                        )}
+                        {autoDetectSummary.clientMapping?.email && (
+                          <Badge variant="outline" className="text-[10px] bg-background">email → {autoDetectSummary.clientMapping.email}</Badge>
+                        )}
+                        {autoDetectSummary.clientMapping?.phone && (
+                          <Badge variant="outline" className="text-[10px] bg-background">phone → {autoDetectSummary.clientMapping.phone}</Badge>
+                        )}
+                        {autoDetectSummary.clientMapping?.company && (
+                          <Badge variant="outline" className="text-[10px] bg-background">company → {autoDetectSummary.clientMapping.company}</Badge>
+                        )}
+                        {autoDetectSummary.clientMapping?.status && (
+                          <Badge variant="outline" className="text-[10px] bg-background">status → {autoDetectSummary.clientMapping.status}</Badge>
+                        )}
+                      </div>
+                      {(!autoDetectSummary.clientMapping?.id || !autoDetectSummary.clientMapping?.name) && (
+                        <p className="text-[10px] text-amber-400 mt-1">Some required fields (id/name) were not auto-mapped — pick them below.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-400 mb-2">No client table auto-detected. Pick one from the list below.</p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {autoDetectSummary.serialTable && (
+                      <div className="p-2 rounded border" style={{ borderColor: 'var(--gg-separator)' }}>
+                        <p className="text-[10px] text-muted-foreground uppercase">Serial table</p>
+                        <p className="text-xs font-mono text-foreground">{autoDetectSummary.serialTable.name}</p>
+                        {autoDetectSummary.serialMapping?.serialKey && (
+                          <p className="text-[10px] text-muted-foreground">key → {autoDetectSummary.serialMapping.serialKey}</p>
+                        )}
+                      </div>
+                    )}
+                    {autoDetectSummary.deviceTable && (
+                      <div className="p-2 rounded border" style={{ borderColor: 'var(--gg-separator)' }}>
+                        <p className="text-[10px] text-muted-foreground uppercase">Device table</p>
+                        <p className="text-xs font-mono text-foreground">{autoDetectSummary.deviceTable.name}</p>
+                        {autoDetectSummary.deviceMapping?.deviceSerial && (
+                          <p className="text-[10px] text-muted-foreground">serial → {autoDetectSummary.deviceMapping.deviceSerial}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {connectionMode === 'api' ? (
                 <div className="space-y-3">
                   <div className="p-3 rounded-lg" style={{ background: 'var(--secondary)' }}>
@@ -906,7 +999,7 @@ export function IntegrationManager() {
                       </Select>
                     </div>
                   ))}
-                  <p className="text-xs text-muted-foreground">id, name, and email are required. The others are optional.</p>
+                  <p className="text-xs text-muted-foreground">id and name are required. email, phone, company, status are optional (the sync handles missing fields automatically).</p>
                 </div>
               )}
 
@@ -1028,7 +1121,7 @@ export function IntegrationManager() {
                 <Button variant="outline" onClick={() => setStep(1)} className="text-muted-foreground">Back</Button>
                 <Button
                   onClick={handleSave}
-                  disabled={saving || !selectedTable || !mapping.id || !mapping.name || !mapping.email || (syncSerials && (!serialTable || !serialMapping.serialKey)) || (syncDevices && (!deviceTable || !deviceMapping.deviceSerial))}
+                  disabled={saving || !selectedTable || !mapping.id || !mapping.name || (syncSerials && (!serialTable || !serialMapping.serialKey)) || (syncDevices && (!deviceTable || !deviceMapping.deviceSerial))}
                   className="text-white"
                   style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
                 >

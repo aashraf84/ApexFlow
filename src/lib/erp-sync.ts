@@ -74,7 +74,9 @@ function parseMapping(mappingJson: string | null | undefined): ClientSchemaMappi
   if (!mappingJson) return null
   try {
     const m = JSON.parse(mappingJson)
-    if (!m || typeof m.clientTable !== 'string' || !m.id || !m.name || !m.email) {
+    // Only clientTable, id, and name are required. Email/phone/company/status are optional
+    // (not all ERP client tables store email — the sync generates a placeholder when missing).
+    if (!m || typeof m.clientTable !== 'string' || !m.id || !m.name) {
       return null
     }
     return m as ClientSchemaMapping
@@ -247,12 +249,27 @@ export interface AutoDetectResult {
   clientMapping?: ClientSchemaMapping
   serialMapping?: Partial<ClientSchemaMapping>
   deviceMapping?: Partial<ClientSchemaMapping>
+  clientScore?: number
+  serialScore?: number
+  deviceScore?: number
+  totalTables?: number
   error?: string
 }
 
-const CLIENT_NAME_PATTERNS = ['client', 'customer', 'owner', 'tenant', 'company', 'account', 'contact', 'erp_client', 'owner_client']
-const SERIAL_NAME_PATTERNS = ['serial', 'license', 'activation', 'key']
-const DEVICE_NAME_PATTERNS = ['device', 'imei', 'hardware', 'equipment', 'asset']
+const CLIENT_NAME_PATTERNS = [
+  'client', 'customer', 'owner', 'tenant', 'company', 'account', 'contact',
+  'user', 'users', 'people', 'person', 'profile', 'profiles', 'member',
+  'subscriber', 'subscription', 'lead', 'prospect', 'account', 'erp_client',
+  'owner_client', 'business', 'party',
+]
+const SERIAL_NAME_PATTERNS = [
+  'serial', 'license', 'activation', 'key', 'subscription', 'product_key',
+  'entitlement', 'subscription_key', 'activation_key', 'license_key',
+]
+const DEVICE_NAME_PATTERNS = [
+  'device', 'imei', 'hardware', 'equipment', 'asset', 'terminal', 'pos',
+  'register', 'station', 'unit', 'gadget', 'machine', 'appliance',
+]
 
 function scoreTable(tableName: string, columns: Array<{ name: string; dataType: string }>, patterns: string[]): number {
   const nameLower = tableName.toLowerCase()
@@ -280,14 +297,32 @@ function scoreTable(tableName: string, columns: Array<{ name: string; dataType: 
 function autoMapColumns(tableName: string, columns: Array<{ name: string; dataType: string }>): ClientSchemaMapping {
   const cols = columns.map((c) => c.name)
   const find = (candidates: string[]) => cols.find((c) => candidates.some((can) => c.toLowerCase() === can || c.toLowerCase().includes(can))) || ''
+  // Fallback: any column ending in '_id' or named 'id'/'uuid' (common PK naming)
+  const findId = () => {
+    const direct = find(['id', 'uuid', 'cuid', 'objectid', 'guid', 'pk', 'row_id'])
+    if (direct) return direct
+    return cols.find((c) => c.toLowerCase() === 'id' || c.toLowerCase().endsWith('_id') || c.toLowerCase().endsWith('id')) || ''
+  }
+  // Fallback for name: any column containing 'name'/'title'/'label' or a varchar text column
+  const findName = () => {
+    const direct = find(['contactperson', 'name', 'clientname', 'companyname', 'ownername', 'fullname', 'title', 'display_name', 'first_name', 'username', 'login', 'person', 'user'])
+    if (direct) return direct
+    return cols.find((c) => c.toLowerCase().includes('name') || c.toLowerCase().includes('title') || c.toLowerCase().includes('label')) || ''
+  }
+  // Fallback for email: any column containing 'mail'
+  const findEmail = () => {
+    const direct = find(['email', 'emailaddress', 'email_address', 'e_mail', 'mail', 'user_email', 'contact_email', 'email_id', 'mail_address'])
+    if (direct) return direct
+    return cols.find((c) => c.toLowerCase().includes('mail')) || ''
+  }
   return {
     clientTable: tableName,
-    id: find(['id', 'uuid', 'cuid', 'objectid']),
-    name: find(['contactperson', 'name', 'clientname', 'companyname', 'ownername', 'fullname', 'title']),
-    email: find(['email', 'emailaddress']),
-    phone: find(['phone', 'mobile', 'phonenumber', 'contactnumber', 'cell']),
-    company: find(['company', 'companyname', 'organization', 'businessname', 'firm']),
-    status: find(['status', 'isactive', 'state', 'active']),
+    id: findId(),
+    name: findName(),
+    email: findEmail(),
+    phone: find(['phone', 'mobile', 'phonenumber', 'contactnumber', 'cell', 'tel', 'telephone', 'phone_number', 'mobile_number']),
+    company: find(['company', 'companyname', 'organization', 'businessname', 'firm', 'company_name', 'org', 'business']),
+    status: find(['status', 'isactive', 'state', 'active', 'is_active', 'enabled', 'verified', 'state_id']),
   }
 }
 
@@ -344,7 +379,7 @@ export async function autoDetectSchema(connectionUrl: string): Promise<AutoDetec
     const allTables = Object.entries(tableMap).map(([name, columns]) => ({ name, columns }))
 
     // Score + pick the best client/serial/device tables
-    const findBest = (patterns: string[]): { name: string; columns: Array<{ name: string; dataType: string }> } | null => {
+    const findBest = (patterns: string[], kind: 'client' | 'serial' | 'device'): { name: string; columns: Array<{ name: string; dataType: string }>; score: number } | null => {
       let best: { name: string; columns: Array<{ name: string; dataType: string }>; score: number } | null = null
       for (const [name, columns] of Object.entries(tableMap)) {
         const score = scoreTable(name, columns, patterns)
@@ -352,24 +387,55 @@ export async function autoDetectSchema(connectionUrl: string): Promise<AutoDetec
           best = { name, columns, score }
         }
       }
+      // Fallback heuristic: if no table matched by name pattern, pick the table
+      // that has the strongest "looks like a client/serial/device table" column signature.
+      if (!best) {
+        let fallback: { name: string; columns: Array<{ name: string; dataType: string }>; score: number } | null = null
+        for (const [name, columns] of Object.entries(tableMap)) {
+          const colNames = columns.map((c) => c.name.toLowerCase())
+          let fscore = 0
+          if (kind === 'client') {
+            if (colNames.some((c) => c.includes('mail'))) fscore += 6
+            if (colNames.some((c) => c.includes('name') || c.includes('company') || c.includes('contact'))) fscore += 4
+            if (colNames.some((c) => c.includes('phone') || c.includes('mobile'))) fscore += 3
+            if (colNames.some((c) => c === 'id' || c.endsWith('_id') || c === 'uuid')) fscore += 2
+            // Skip obvious system/migration tables
+            if (/(migration|schema|_prisma|relation|column|table)/i.test(name)) fscore = 0
+          } else if (kind === 'serial') {
+            if (colNames.some((c) => c.includes('serial') || c.includes('imei') || c.includes('key'))) fscore += 6
+            if (colNames.some((c) => c.includes('client') || c.includes('customer') || c.includes('owner'))) fscore += 3
+          } else if (kind === 'device') {
+            if (colNames.some((c) => c.includes('serial') || c.includes('imei') || c.includes('mac'))) fscore += 6
+            if (colNames.some((c) => c.includes('client') || c.includes('customer') || c.includes('owner'))) fscore += 3
+          }
+          if (fscore >= 6 && (!fallback || fscore > fallback.score)) {
+            fallback = { name, columns, score: fscore }
+          }
+        }
+        if (fallback) best = fallback
+      }
       return best
     }
 
-    const clientTable = findBest(CLIENT_NAME_PATTERNS)
-    const serialTable = findBest(SERIAL_NAME_PATTERNS)
-    const deviceTable = findBest(DEVICE_NAME_PATTERNS)
+    const clientTable = findBest(CLIENT_NAME_PATTERNS, 'client')
+    const serialTable = findBest(SERIAL_NAME_PATTERNS, 'serial')
+    const deviceTable = findBest(DEVICE_NAME_PATTERNS, 'device')
 
     const clientMapping = clientTable ? autoMapColumns(clientTable.name, clientTable.columns) : undefined
     const serialMapping = serialTable ? autoMapSerial(serialTable.name, serialTable.columns) : undefined
     const deviceMapping = deviceTable ? autoMapDevice(deviceTable.name, deviceTable.columns) : undefined
     return {
       tables: allTables,
+      totalTables: allTables.length,
       clientTable: clientTable || undefined,
       serialTable: (serialMapping && serialMapping.serialKey) ? serialTable || undefined : undefined,
       deviceTable: (deviceMapping && deviceMapping.deviceSerial) ? deviceTable || undefined : undefined,
       clientMapping,
       serialMapping: (serialMapping && serialMapping.serialKey) ? serialMapping : undefined,
       deviceMapping: (deviceMapping && deviceMapping.deviceSerial) ? deviceMapping : undefined,
+      clientScore: clientTable?.score,
+      serialScore: serialTable?.score,
+      deviceScore: deviceTable?.score,
     }
   } catch (e) {
     return { tables: [], error: e instanceof Error ? e.message : String(e) }
@@ -410,10 +476,12 @@ export async function syncClientsFromErp(
 
   try {
     const sql = neon(connector.connectionUrl)
-    // Build the SELECT with mapped columns (identifiers quoted, not parameterized)
+    // Build the SELECT with mapped columns (identifiers quoted, not parameterized).
+    // Optional fields (email/phone/company/status) fall back to NULL AS <field> when
+    // unmapped so the SELECT is still valid SQL even if the ERP has no email column.
     const colId = quoteIdent(mapping.id)
     const colName = quoteIdent(mapping.name)
-    const colEmail = quoteIdent(mapping.email)
+    const colEmail = mapping.email ? quoteIdent(mapping.email) : 'NULL'
     const colPhone = mapping.phone ? quoteIdent(mapping.phone) : 'NULL'
     const colCompany = mapping.company ? quoteIdent(mapping.company) : 'NULL'
     const colStatus = mapping.status ? quoteIdent(mapping.status) : "'active'"
