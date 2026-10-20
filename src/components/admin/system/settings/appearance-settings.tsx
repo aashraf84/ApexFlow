@@ -1,22 +1,85 @@
 'use client'
 
-import { useState } from 'react'
-import { Save, Upload, Monitor, Moon, Sun } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { toast } from 'sonner'
+import { Save, Upload, Monitor, Moon, Sun, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
+/**
+ * AppearanceSettings — appearance/branding sub-tab under System Settings.
+ *
+ * Previously the "Save Appearance" button had NO `onClick` handler so no form
+ * state was ever persisted (Bug #1). Now the button PATCHes
+ * /api/admin/site-settings with `{ updates: [{ key, value }] }`. Values are
+ * hydrated from the same GET on mount.
+ */
 export function AppearanceSettings() {
   const [theme, setTheme] = useState('system')
   const [primaryColor, setPrimaryColor] = useState('#10b981')
   const [sidebarStyle, setSidebarStyle] = useState('expanded')
+  const [saving, setSaving] = useState(false)
+  const fetched = useRef(false)
 
   const colorOptions = [
     { label: 'Emerald', value: '#10b981' }, { label: 'Teal', value: '#14b8a6' },
     { label: 'Rose', value: '#f43f5e' }, { label: 'Amber', value: '#f59e0b' },
     { label: 'Violet', value: '#8b5cf6' },
   ]
+
+  // Hydrate from /api/admin/site-settings (grouped). Flatten into key→value.
+  useEffect(() => {
+    if (fetched.current) return
+    fetched.current = true
+    fetch('/api/admin/site-settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (!json?.settings) return
+        const flat: Record<string, string> = {}
+        for (const groupKey of Object.keys(json.settings)) {
+          const bucket = json.settings[groupKey] || {}
+          for (const k of Object.keys(bucket)) {
+            const entry = bucket[k]
+            if (entry && typeof entry === 'object' && 'value' in entry) {
+              flat[k] = String(entry.value)
+            } else if (typeof entry === 'string') {
+              flat[k] = entry
+            }
+          }
+        }
+        if (flat.appearance_theme !== undefined) setTheme(flat.appearance_theme)
+        if (flat.site_primary_color !== undefined) setPrimaryColor(flat.site_primary_color)
+        if (flat.appearance_sidebar_style !== undefined) setSidebarStyle(flat.appearance_sidebar_style)
+      })
+      .catch(() => { /* use defaults */ })
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const updates = [
+        { key: 'appearance_theme', value: theme },
+        { key: 'site_primary_color', value: primaryColor },
+        { key: 'appearance_sidebar_style', value: sidebarStyle },
+      ]
+      const res = await fetch('/api/admin/site-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+      })
+      const json = await res.json()
+      if (res.ok && (json.updated !== undefined || json.success)) {
+        toast.success('Appearance settings saved')
+      } else {
+        toast.error(json.error || 'Failed to save appearance settings')
+      }
+    } catch {
+      toast.error('Network error')
+    }
+    setSaving(false)
+  }
 
   return (
     <Card className="border-border/60">
@@ -67,7 +130,10 @@ export function AppearanceSettings() {
           </RadioGroup>
         </div>
 
-        <Button className="gap-1.5"><Save className="w-4 h-4" /> Save Appearance</Button>
+        <Button className="gap-1.5" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {saving ? 'Saving...' : 'Save Appearance'}
+        </Button>
       </CardContent>
     </Card>
   )

@@ -1,10 +1,15 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requirePermission(req, 'deals')
+  if (!auth.ok) return auth.response
   try {
     const { id } = await params
 
@@ -22,7 +27,7 @@ export async function GET(
       return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
     }
 
-    return NextResponse.json(deal)
+    return NextResponse.json({ data: deal })
   } catch (error) {
     console.error('[Deal] GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch deal' }, { status: 500 })
@@ -33,6 +38,8 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requirePermission(req, 'deals')
+  if (!auth.ok) return auth.response
   try {
     const { id } = await params
     const body = await req.json()
@@ -61,9 +68,9 @@ export async function PUT(
         data: {
           title: body.title,
           clientId: body.clientId ?? undefined,
-          value: body.value ?? undefined,
+          value: body.value != null ? (parseFloat(body.value) || 0) : undefined,
           stage: body.stage,
-          probability: body.probability ?? undefined,
+          probability: body.probability != null ? (parseFloat(body.probability) || 0) : undefined,
           source: body.source ?? undefined,
           expectedCloseDate: body.expectedCloseDate ? new Date(body.expectedCloseDate) : undefined,
           notes: body.notes ?? undefined,
@@ -72,7 +79,7 @@ export async function PUT(
       })
     )
 
-    return NextResponse.json(deal)
+    return NextResponse.json({ data: deal })
   } catch (error) {
     console.error('[Deal] PUT error:', error)
     return NextResponse.json({ error: 'Failed to update deal' }, { status: 500 })
@@ -83,6 +90,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requirePermission(req, 'deals')
+  if (!auth.ok) return auth.response
   try {
     const { id } = await params
 

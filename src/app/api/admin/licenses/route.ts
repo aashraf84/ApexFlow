@@ -30,6 +30,20 @@ function generateLicenseKey(): string {
   return generateKey('AF', 5, 5)
 }
 
+// normalizeStatus — ERP sync writes String(isActive) ("true"/"false") into the
+// License.status column. Coerce those back into canonical status tokens so the
+// UI badge and stats card read them correctly.
+//   "true"  / "1"  → "active"
+//   "false" / "0"  → "revoked"
+//   anything else → passed through untouched (active/expired/suspended/...).
+function normalizeStatus(s: string | null | undefined): string {
+  if (s == null) return 'active'
+  const lower = String(s).toLowerCase()
+  if (lower === 'true' || lower === '1') return 'active'
+  if (lower === 'false' || lower === '0') return 'revoked'
+  return String(s)
+}
+
 // GET /api/admin/licenses — list licenses with filters (search, status, erpId)
 export async function GET(request: NextRequest) {
   try {
@@ -79,6 +93,13 @@ export async function GET(request: NextRequest) {
       })
     )
 
+    // Normalize stringified booleans ("true"/"false") that the ERP sync
+    // writes into License.status → canonical "active"/"revoked" tokens.
+    const normalizedLicenses = licenses.map((l) => ({
+      ...l,
+      status: normalizeStatus(l.status),
+    }))
+
     // Stats from ALL licenses
     const allLicenses = await withRetry((d) =>
       d.license.findMany({
@@ -100,14 +121,15 @@ export async function GET(request: NextRequest) {
     }
 
     for (const l of allLicenses) {
-      counts[l.status] = (counts[l.status] || 0) + 1
+      const status = normalizeStatus(l.status)
+      counts[status] = (counts[status] || 0) + 1
       const erpName = l.erpSystem?.name || 'Unassigned'
       if (!byErp[erpName]) byErp[erpName] = { name: erpName, count: 0 }
       byErp[erpName].count++
     }
 
     return NextResponse.json({
-      licenses,
+      licenses: normalizedLicenses,
       stats: {
         total: allLicenses.length,
         active: counts.active || 0,

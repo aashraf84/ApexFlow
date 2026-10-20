@@ -240,6 +240,11 @@ export function SubscriptionManager() {
     endDate: '',
   })
 
+  // Change Plan dialog state
+  const [planDialogOpen, setPlanDialogOpen] = useState(false)
+  const [newPackageId, setNewPackageId] = useState('')
+  const [planLoading, setPlanLoading] = useState(false)
+
   const fetchSubscriptions = useCallback(async () => {
     setLoading(true)
     try {
@@ -308,6 +313,13 @@ export function SubscriptionManager() {
     if (createOpen) fetchOptions()
   }, [createOpen, fetchOptions])
 
+  // Also load packages when the Change Plan dialog opens so the picker is
+  // populated even on a fresh page load where the user never opened the
+  // New Subscription dialog.
+  useEffect(() => {
+    if (planDialogOpen) fetchOptions()
+  }, [planDialogOpen, fetchOptions])
+
   // When package is selected, auto-fill plan + billing cycle + currency + monthlyFee
   useEffect(() => {
     if (!form.packageId) return
@@ -362,7 +374,36 @@ export function SubscriptionManager() {
 
   const handleChangePlan = async () => {
     if (!selected) return
-    toast.info('Change plan dialog — stub action. Wire up to a package picker to enable live plan changes.')
+    if (!newPackageId) {
+      toast.error('Please select a new package')
+      return
+    }
+    setPlanLoading(true)
+    try {
+      const res = await fetch('/api/admin/subscriptions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selected.id,
+          action: 'change_plan',
+          packageId: newPackageId,
+        }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null)
+        throw new Error(j?.error || 'Failed')
+      }
+      toast.success(`Plan changed for ${clientDisplay(selected.client)}`)
+      setPlanDialogOpen(false)
+      setNewPackageId('')
+      setSelectedId(null)
+      fetchSubscriptions()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to change plan'
+      toast.error(msg)
+    } finally {
+      setPlanLoading(false)
+    }
   }
 
   const handleReactivate = async () => {
@@ -887,7 +928,10 @@ export function SubscriptionManager() {
               )}
               <Button
                 variant="outline"
-                onClick={handleChangePlan}
+                onClick={() => {
+                  setNewPackageId(selected.package?.id || '')
+                  setPlanDialogOpen(true)
+                }}
                 className="text-white hover:bg-white/5"
                 style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
               >
@@ -1137,6 +1181,113 @@ export function SubscriptionManager() {
                 <Plus className="h-4 w-4" />
               )}
               Create Subscription
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Plan Dialog — picks a new Package and PATCHes the
+          subscription with action: 'change_plan'. The server copies the
+          package's plan/monthlyFee/billingCycle/currency onto the sub. */}
+      <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
+        <DialogContent
+          className="bg-gray-950 text-white sm:max-w-md"
+          style={{ borderColor: 'var(--gg-separator)' }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCcw className="h-5 w-5" style={{ color: 'var(--gg-vermillion)' }} />
+              Change Plan
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Move this subscription to a different package. The new package&apos;s
+              plan, billing cycle, currency, and monthly fee will replace the
+              current values on the subscription.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label className="text-gray-300 text-xs flex items-center gap-1.5">
+                <PackageIcon className="h-3 w-3" /> New Package
+              </Label>
+              <Select
+                value={newPackageId}
+                onValueChange={setNewPackageId}
+              >
+                <SelectTrigger
+                  className="text-white"
+                  style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                >
+                  <SelectValue placeholder="Select new package" />
+                </SelectTrigger>
+                <SelectContent>
+                  {packages.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} — {PLAN_LABELS[p.plan] || p.plan} ({p.billingCycle}, {p.currency} {p.price})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {packages.length === 0 && (
+                <p className="text-xs text-gray-500">Loading packages...</p>
+              )}
+            </div>
+            {selected && (
+              <div
+                className="rounded-lg p-3 space-y-1.5 text-sm"
+                style={{ background: 'var(--secondary)', border: '1px solid var(--gg-separator)' }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-muted-foreground">Current Plan</span>
+                  <span className="text-white truncate text-right">
+                    {selected.package?.name || '—'} ({PLAN_LABELS[selected.plan] || selected.plan})
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-muted-foreground">Current Fee</span>
+                  <span className="text-white text-right">
+                    {formatCurrency(selected.monthlyFee, selected.currency)} / {selected.billingCycle}
+                  </span>
+                </div>
+                {(() => {
+                  const next = packages.find((p) => p.id === newPackageId)
+                  if (!next) return null
+                  return (
+                    <div className="flex items-center justify-between gap-3 pt-2 border-t" style={{ borderColor: 'var(--gg-separator)' }}>
+                      <span className="text-xs text-muted-foreground">New Fee</span>
+                      <span className="text-right" style={{ color: 'var(--gg-vermillion)' }}>
+                        {formatCurrency(next.price, next.currency)} / {next.billingCycle}
+                      </span>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+          </div>
+          <Separator style={{ background: 'var(--gg-separator)' }} />
+          <DialogFooter className="mt-2">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setPlanDialogOpen(false)
+                setNewPackageId('')
+              }}
+              className="text-muted-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleChangePlan}
+              disabled={planLoading || !newPackageId || !selected}
+              className="hover:opacity-90 text-white gap-1.5"
+              style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+            >
+              {planLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCcw className="h-4 w-4" />
+              )}
+              Apply New Plan
             </Button>
           </DialogFooter>
         </DialogContent>

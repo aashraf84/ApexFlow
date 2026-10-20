@@ -1,7 +1,12 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requirePermission(req, 'communications')
+  if (!auth.ok) return auth.response
   try {
     const templates = await withRetry((tx) =>
       tx.emailTemplate.findMany({
@@ -17,6 +22,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requirePermission(req, 'communications')
+  if (!auth.ok) return auth.response
   try {
     const body = await req.json()
     const { name, subject, body: templateBody, category } = body

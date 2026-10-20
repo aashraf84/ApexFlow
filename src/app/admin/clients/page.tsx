@@ -264,6 +264,7 @@ function StatusBadge({ status }: { status: string }) {
     },
     prospect: { label: 'Prospect', cls: 'bg-amber-500/15 text-amber-400 border-amber-500/20' },
     inactive: { label: 'Inactive', cls: 'bg-red-500/15 text-red-400 border-red-500/20' },
+    suspended: { label: 'Suspended', cls: 'bg-orange-500/15 text-orange-400 border-orange-500/20' },
     churned: { label: 'Churned', cls: 'bg-gray-500/15 text-gray-400 border-gray-500/20' },
   }
   const c = map[status] || { label: status, cls: 'bg-gray-500/15 text-gray-400 border-gray-500/20' }

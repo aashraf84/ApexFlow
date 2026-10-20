@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { requirePermission } from '@/lib/api-helpers'
@@ -8,7 +10,9 @@ import { requirePermission } from '@/lib/api-helpers'
  * Returns all IntegrationConnectors with enriched data including
  * recent sync logs and associated webhook counts.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requirePermission(request, 'integrations')
+  if (!auth.ok) return auth.response
   try {
     const connectors = await withRetry((d) =>
       d.integrationConnector.findMany({

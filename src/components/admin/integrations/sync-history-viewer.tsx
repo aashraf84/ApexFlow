@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { Fragment, useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
@@ -450,9 +450,8 @@ export function SyncHistoryViewer() {
                     const sv = statusBadgeVariant(log.status)
 
                     return (
-                      <>
+                      <Fragment key={log.id}>
                         <motion.tr
-                          key={log.id}
                           variants={rowVariant}
                           initial="hidden"
                           animate="visible"
@@ -566,7 +565,7 @@ export function SyncHistoryViewer() {
                             </motion.tr>
                           )}
                         </AnimatePresence>
-                      </>
+                      </Fragment>
                     )
                   })}
                 </TableBody>

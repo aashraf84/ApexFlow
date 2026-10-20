@@ -17,8 +17,13 @@ export async function GET(request: NextRequest) {
     const pageSize = parseInt(searchParams.get('pageSize') || '50')
 
     const where: any = {}
-    if (action && action !== 'all') where.action = action
-    if (entity && entity !== 'all') where.entity = entity
+    // Use substring match for action/entity so the AuditFilters dropdown
+    // (which exposes bare verbs like 'create'/'update'/'delete'/'login'/'export')
+    // actually matches namespaced stored actions like 'user.create' /
+    // 'client.update' / 'support.ticket.delete'. Previously this was an exact
+    // match → the filter never returned any rows (Bug #5).
+    if (action && action !== 'all') where.action = { contains: action, mode: 'insensitive' }
+    if (entity && entity !== 'all') where.entity = { contains: entity, mode: 'insensitive' }
     if (userId && userId !== 'all') where.userId = userId
     if (from || to) {
       where.createdAt = {}
@@ -30,6 +35,11 @@ export async function GET(request: NextRequest) {
       withRetry((d) =>
         d.adminAuditLog.findMany({
           where,
+          // Include the acting user so the audit-table renders the real
+          // admin name instead of "System" for every row (Bug #4).
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+          },
           orderBy: { createdAt: 'desc' },
           skip: (page - 1) * pageSize,
           take: pageSize,

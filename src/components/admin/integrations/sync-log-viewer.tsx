@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { Fragment, useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -734,9 +734,8 @@ export function SyncLogViewer() {
                     const isExpanded = expandedId === log.id
                     const hasError = !!log.errorMessage || !!log.metadata
                     return (
-                      <>
+                      <Fragment key={log.id}>
                         <motion.tr
-                          key={log.id}
                           variants={rowVariants}
                           initial="hidden"
                           animate="visible"
@@ -886,7 +885,7 @@ export function SyncLogViewer() {
                             </motion.tr>
                           )}
                         </AnimatePresence>
-                      </>
+                      </Fragment>
                     )
                   })}
                 </TableBody>

@@ -177,10 +177,78 @@ const FILTERS: { key: CategoryKey; label: string }[] = [
 function TimelineRow({ activity }: { activity: UnifiedActivity }) {
   const { icon: Icon, color } = categoryMeta(activity.category)
   const pill = statusPill(activity.metadata)
+  const href = activity.href
 
-  const EntityLink = activity.href ? Link : null
-  const entityHref = activity.href || '#'
-  const entityClickable = !!activity.href
+  const card = (
+    <div
+      className={`rounded-lg p-3 border transition-colors ${href ? 'hover:bg-white/[0.04] cursor-pointer' : 'hover:bg-white/[0.02]'}`}
+      style={{
+        background: 'var(--secondary)',
+        borderColor: 'var(--gg-separator)',
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm text-foreground">
+                <span className="font-semibold">{activity.actor}</span>{' '}
+                <span className="text-muted-foreground">—</span>{' '}
+                <span className="text-foreground/90">{activity.action}</span>
+              </p>
+              {activity.entity && (
+                <p className="text-xs text-gray-500 mt-0.5 truncate">
+                  on{' '}
+                  <span
+                    className={href ? 'inline-flex items-center gap-0.5 underline-offset-2 hover:underline' : undefined}
+                    style={href ? { color: 'var(--gg-teal)' } : undefined}
+                  >
+                    {activity.entity}
+                    {href && <ExternalLink className="h-3 w-3 inline" />}
+                  </span>
+                </p>
+              )}
+            </div>
+            <span
+              className="text-xs text-gray-500 whitespace-nowrap shrink-0"
+              title={fullDate(activity.createdAt)}
+            >
+              {relativeTime(activity.createdAt)}
+            </span>
+          </div>
+          {pill && (
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className="text-xs" style={pill.style}>
+                {pill.label}
+              </Badge>
+              {typeof activity.metadata?.recordsSynced === 'number' &&
+                (activity.metadata.recordsSynced as number) > 0 && (
+                  <span className="text-xs text-gray-500">
+                    {(activity.metadata.recordsSynced as number)} synced
+                    {typeof activity.metadata.recordsFailed === 'number' &&
+                    (activity.metadata.recordsFailed as number) > 0
+                      ? ` · ${(activity.metadata.recordsFailed as number)} failed`
+                      : ''}
+                  </span>
+                )}
+              {typeof activity.metadata?.durationMs === 'number' &&
+                (activity.metadata.durationMs as number) > 0 && (
+                  <span className="text-xs text-gray-500">
+                    · {(activity.metadata.durationMs as number)}ms
+                  </span>
+                )}
+              {typeof activity.metadata?.error === 'string' &&
+                activity.metadata.error && (
+                  <span className="text-xs text-red-400 truncate max-w-[200px]" title={activity.metadata.error}>
+                    · {activity.metadata.error}
+                  </span>
+                )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div className="relative pl-9 pb-4 last:pb-0">
@@ -208,79 +276,13 @@ function TimelineRow({ activity }: { activity: UnifiedActivity }) {
         <Icon className="h-3.5 w-3.5" style={{ color }} />
       </span>
 
-      <div
-        className="rounded-lg p-3 border transition-colors hover:bg-white/[0.02]"
-        style={{
-          background: 'var(--secondary)',
-          borderColor: 'var(--gg-separator)',
-        }}
-      >
-        <div className="flex items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-sm text-foreground">
-                  <span className="font-semibold">{activity.actor}</span>{' '}
-                  <span className="text-muted-foreground">—</span>{' '}
-                  <span className="text-foreground/90">{activity.action}</span>
-                </p>
-                {activity.entity && (
-                  <p className="text-xs text-gray-500 mt-0.5 truncate">
-                    on{' '}
-                    {entityClickable ? (
-                      <EntityLink
-                        href={entityHref}
-                        className="inline-flex items-center gap-0.5 underline-offset-2 hover:underline"
-                        style={{ color: 'var(--gg-teal)' }}
-                      >
-                        {activity.entity}
-                        <ExternalLink className="h-3 w-3 inline" />
-                      </EntityLink>
-                    ) : (
-                      <span>{activity.entity}</span>
-                    )}
-                  </p>
-                )}
-              </div>
-              <span
-                className="text-xs text-gray-500 whitespace-nowrap shrink-0"
-                title={fullDate(activity.createdAt)}
-              >
-                {relativeTime(activity.createdAt)}
-              </span>
-            </div>
-            {pill && (
-              <div className="mt-2 flex items-center gap-2 flex-wrap">
-                <Badge variant="outline" className="text-xs" style={pill.style}>
-                  {pill.label}
-                </Badge>
-                {typeof activity.metadata?.recordsSynced === 'number' &&
-                  (activity.metadata.recordsSynced as number) > 0 && (
-                    <span className="text-xs text-gray-500">
-                      {(activity.metadata.recordsSynced as number)} synced
-                      {typeof activity.metadata.recordsFailed === 'number' &&
-                      (activity.metadata.recordsFailed as number) > 0
-                        ? ` · ${(activity.metadata.recordsFailed as number)} failed`
-                        : ''}
-                    </span>
-                  )}
-                {typeof activity.metadata?.durationMs === 'number' &&
-                  (activity.metadata.durationMs as number) > 0 && (
-                    <span className="text-xs text-gray-500">
-                      · {(activity.metadata.durationMs as number)}ms
-                    </span>
-                  )}
-                {typeof activity.metadata?.error === 'string' &&
-                  activity.metadata.error && (
-                    <span className="text-xs text-red-400 truncate max-w-[200px]" title={activity.metadata.error}>
-                      · {activity.metadata.error}
-                    </span>
-                  )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      {href ? (
+        <Link href={href} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-[var(--gg-vermillion)] rounded-lg">
+          {card}
+        </Link>
+      ) : (
+        card
+      )}
     </div>
   )
 }

@@ -1,7 +1,12 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 export async function GET(req: NextRequest) {
+  const auth = await requirePermission(req, 'finance')
+  if (!auth.ok) return auth.response
   try {
     const status = req.nextUrl.searchParams.get('status') || ''
 
@@ -27,6 +32,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requirePermission(req, 'finance')
+  if (!auth.ok) return auth.response
   try {
     const body = await req.json()
     const { number, clientId, amount, tax, total, status, dueDate, items, notes } = body

@@ -1,10 +1,15 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requirePermission(req, 'finance')
+  if (!auth.ok) return auth.response
   try {
     const { id } = await params
 
@@ -33,6 +38,8 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requirePermission(req, 'finance')
+  if (!auth.ok) return auth.response
   try {
     const { id } = await params
     const body = await req.json()
@@ -40,6 +47,33 @@ export async function PUT(
     const existing = await withRetry((tx) => tx.invoice.findUnique({ where: { id } }))
     if (!existing) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+    }
+
+    // markAsPaid: short-circuit to flip status → 'paid' and stamp paidAt.
+    // The InvoicesTab "Mark as Paid" button sends `{ markAsPaid: true }` only,
+    // which would otherwise be a no-op because every other body field is undefined.
+    if (body.markAsPaid) {
+      // Idempotent — if already paid, just return the current invoice.
+      if (existing.status === 'paid') {
+        const paid = await withRetry((tx) =>
+          tx.invoice.findUnique({
+            where: { id },
+            include: { client: { select: { id: true, name: true, company: true } } },
+          })
+        )
+        return NextResponse.json(paid)
+      }
+      const updated = await withRetry((tx) =>
+        tx.invoice.update({
+          where: { id },
+          data: {
+            status: 'paid',
+            paidAt: new Date(),
+          },
+          include: { client: { select: { id: true, name: true, company: true } } },
+        })
+      )
+      return NextResponse.json(updated)
     }
 
     const invoice = await withRetry((tx) =>
@@ -71,6 +105,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requirePermission(req, 'finance')
+  if (!auth.ok) return auth.response
   try {
     const { id } = await params
 

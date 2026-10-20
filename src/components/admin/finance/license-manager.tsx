@@ -49,6 +49,8 @@ import {
   Smartphone,
   Users,
   Calendar,
+  Ban,
+  Power,
 } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -104,10 +106,24 @@ interface LicenseStats {
   byErp: { name: string; count: number }[]
 }
 
+// normalizeStatus — defensive UI normalization.
+// ERP sync writes String(isActive) ("true"/"false") into the License.status
+// column. The /api/admin/licenses GET route also normalizes server-side,
+// but we duplicate the rule here so any stale row (or any consumer that
+// forgets to call the API in the future) still renders correctly.
+function normalizeStatus(status: string | null | undefined): string {
+  if (!status) return 'active'
+  const lower = String(status).toLowerCase()
+  if (lower === 'true' || lower === '1') return 'active'
+  if (lower === 'false' || lower === '0') return 'revoked'
+  return status
+}
+
 // ─── Badge ───────────────────────────────────────────────────────────────────
 
 function LicenseStatusBadge({ status }: { status: string }) {
-  const config: Record<string, { color: string; style?: React.CSSProperties; icon: React.ReactNode }> = {
+  const normalized = normalizeStatus(status)
+  const config: Record<string, { color: string; style?: React.CSSProperties; icon: React.ReactNode; label: string }> = {
     active: {
       color: '',
       style: {
@@ -116,29 +132,34 @@ function LicenseStatusBadge({ status }: { status: string }) {
         borderColor: 'color-mix(in srgb, var(--gg-vermillion) 20%, transparent)',
       },
       icon: <CheckCircle className="h-3 w-3" />,
+      label: 'Active',
     },
     expired: {
       color: 'bg-gray-500/15 text-muted-foreground border-gray-500/20',
       icon: <XCircle className="h-3 w-3" />,
+      label: 'Expired',
     },
     suspended: {
       color: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
       icon: <AlertTriangle className="h-3 w-3" />,
+      label: 'Suspended',
     },
     revoked: {
       color: 'bg-red-500/15 text-red-400 border-red-500/20',
       icon: <XCircle className="h-3 w-3" />,
+      label: 'Inactive',
     },
     pending: {
       color: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
       icon: <AlertTriangle className="h-3 w-3" />,
+      label: 'Pending',
     },
   }
-  const c = config[status] || config.active
+  const c = config[normalized] || config.active
   return (
     <Badge variant="outline" className={`${c.color} gap-1`} style={c.style}>
       {c.icon}
-      <span className="capitalize">{status}</span>
+      <span>{c.label}</span>
     </Badge>
   )
 }
@@ -186,6 +207,10 @@ export function LicenseManager() {
   const [erpFilter, setErpFilter] = useState('all')
   const [createOpen, setCreateOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+
+  // Revoke/reactivate action state
+  const [revokeTarget, setRevokeTarget] = useState<LicenseRecord | null>(null)
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
 
   // Form state for "Generate License" dialog
   const [clients, setClients] = useState<ClientInfo[]>([])
@@ -279,6 +304,15 @@ export function LicenseManager() {
     if (createOpen) fetchOptions()
   }, [createOpen, fetchOptions])
 
+  // Load ERP options on mount too — the ERP filter dropdown needs the
+  // ErpSystem CUIDs to send as `?erpId=<cuid>` (the API filters by
+  // `erpSystemId`, not by name). Without this, picking an ERP in the
+  // filter would send the ERP display name as the erpId and return 0
+  // results.
+  useEffect(() => {
+    fetchOptions()
+  }, [fetchOptions])
+
   // When package selected, auto-fill maxUsers if package specifies them
   useEffect(() => {
     if (!form.packageId) return
@@ -364,6 +398,48 @@ export function LicenseManager() {
     } finally {
       setCreating(false)
     }
+  }
+
+  // PATCH /api/admin/licenses accepts { id, action: 'revoke' | 'reactivate' | 'update' }
+  // (and equivalently { id, status: 'revoked' | 'active' }). We send both
+  // `action` and `status` for defensiveness — either triggers the right branch.
+  const patchLicense = async (
+    lic: LicenseRecord,
+    action: 'revoke' | 'reactivate',
+    status: 'revoked' | 'active'
+  ) => {
+    setActionLoadingId(lic.id)
+    try {
+      const res = await fetch('/api/admin/licenses', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: lic.id, action, status }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null)
+        throw new Error(j?.error || 'Failed')
+      }
+      toast.success(
+        action === 'revoke'
+          ? `License for ${clientDisplay(lic.client)} revoked`
+          : `License for ${clientDisplay(lic.client)} reactivated`
+      )
+      fetchLicenses()
+    } catch (e: any) {
+      toast.error(e?.message || `Failed to ${action} license`)
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
+
+  const handleRevokeConfirm = async () => {
+    if (!revokeTarget) return
+    await patchLicense(revokeTarget, 'revoke', 'revoked')
+    setRevokeTarget(null)
+  }
+
+  const handleReactivate = (lic: LicenseRecord) => {
+    void patchLicense(lic, 'reactivate', 'active')
   }
 
   return (
@@ -467,11 +543,19 @@ export function LicenseManager() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All ERPs</SelectItem>
-            {stats?.byErp?.map((e) => (
-              <SelectItem key={e.name} value={e.name}>
-                {e.name} ({e.count})
-              </SelectItem>
-            ))}
+            {stats?.byErp?.map((e) => {
+              // The API filters `where.erpSystemId = erpId`, which expects an
+              // ErpSystem CUID (e.g. `cmv6my7eg004avfflmb4dbw2f`) — NOT the
+              // ERP display name. The byErp stat only carries `name` + `count`,
+              // so we resolve the CUID via the erpOptions list (loaded on mount).
+              const erp = erpOptions.find((o) => o.name === e.name)
+              const value = erp?.id || e.name
+              return (
+                <SelectItem key={e.name} value={value}>
+                  {e.name} ({e.count})
+                </SelectItem>
+              )
+            })}
           </SelectContent>
         </Select>
         <Button
@@ -525,6 +609,7 @@ export function LicenseManager() {
                     <TableHead className="text-muted-foreground hidden lg:table-cell text-center">Max Users</TableHead>
                     <TableHead className="text-muted-foreground hidden lg:table-cell text-center">Max Devices</TableHead>
                     <TableHead className="text-muted-foreground hidden sm:table-cell">Expires</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -577,6 +662,49 @@ export function LicenseManager() {
                       </TableCell>
                       <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
                         {formatDate(lic.expiresAt)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {(() => {
+                          const normalized = normalizeStatus(lic.status)
+                          const isLoading = actionLoadingId === lic.id
+                          if (normalized === 'revoked') {
+                            return (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={isLoading}
+                                onClick={() => handleReactivate(lic)}
+                                className="h-7 px-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                                title="Reactivate license"
+                              >
+                                {isLoading ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Power className="h-3.5 w-3.5" />
+                                )}
+                                <span className="ml-1 hidden md:inline">Reactivate</span>
+                              </Button>
+                            )
+                          }
+                          // active / expired / suspended / pending → show Revoke
+                          return (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={isLoading}
+                              onClick={() => setRevokeTarget(lic)}
+                              className="h-7 px-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                              title="Revoke license"
+                            >
+                              {isLoading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Ban className="h-3.5 w-3.5" />
+                              )}
+                              <span className="ml-1 hidden md:inline">Revoke</span>
+                            </Button>
+                          )
+                        })()}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -763,6 +891,70 @@ export function LicenseManager() {
                 <Key className="h-4 w-4" />
               )}
               Generate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revoke License Confirmation Dialog */}
+      <Dialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
+        <DialogContent
+          className="bg-gray-950 text-white sm:max-w-md"
+          style={{ borderColor: 'var(--gg-separator)' }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5 text-red-400" />
+              Revoke License
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              The client will no longer be able to activate new devices using this key.
+              The license can be reactivated later from the same row.
+            </DialogDescription>
+          </DialogHeader>
+          {revokeTarget && (
+            <div
+              className="rounded-lg p-3 space-y-1.5 text-sm"
+              style={{ background: 'var(--secondary)', border: '1px solid var(--gg-separator)' }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-muted-foreground">Client</span>
+                <span className="text-white truncate text-right">
+                  {clientDisplay(revokeTarget.client)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-muted-foreground">Serial</span>
+                <span className="font-mono text-xs text-gray-300 truncate text-right">
+                  {revokeTarget.serialKey}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-muted-foreground">Current Status</span>
+                <LicenseStatusBadge status={revokeTarget.status} />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="mt-2">
+            <Button
+              variant="ghost"
+              onClick={() => setRevokeTarget(null)}
+              className="text-muted-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRevokeConfirm}
+              disabled={!revokeTarget || actionLoadingId === revokeTarget?.id}
+              variant="destructive"
+              className="bg-red-600 hover:bg-red-700 text-white gap-1.5"
+            >
+              {actionLoadingId === revokeTarget?.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Ban className="h-4 w-4" />
+              )}
+              Revoke License
             </Button>
           </DialogFooter>
         </DialogContent>

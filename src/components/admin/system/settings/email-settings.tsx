@@ -1,17 +1,80 @@
 'use client'
 
-import { useState } from 'react'
-import { Save, ExternalLink } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { toast } from 'sonner'
+import { Save, ExternalLink, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 
+/**
+ * EmailSettings — email_* sub-tab under System Settings.
+ *
+ * Previously the "Save Email Settings" button had NO `onClick` handler so
+ * no form state was ever persisted (Bug #1). Now the button PATCHes
+ * /api/admin/site-settings with `{ updates: [{ key, value }] }`. Values are
+ * hydrated from the same GET on mount.
+ */
 export function EmailSettings() {
   const [fromName, setFromName] = useState('ApexFlow')
   const [fromEmail, setFromEmail] = useState('noreply@apexflow.com')
   const [footerTemplate, setFooterTemplate] = useState('© 2024 ApexFlow. All rights reserved.')
+  const [saving, setSaving] = useState(false)
+  const fetched = useRef(false)
+
+  // Hydrate from /api/admin/site-settings (grouped). Flatten into key→value.
+  useEffect(() => {
+    if (fetched.current) return
+    fetched.current = true
+    fetch('/api/admin/site-settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (!json?.settings) return
+        const flat: Record<string, string> = {}
+        for (const groupKey of Object.keys(json.settings)) {
+          const bucket = json.settings[groupKey] || {}
+          for (const k of Object.keys(bucket)) {
+            const entry = bucket[k]
+            if (entry && typeof entry === 'object' && 'value' in entry) {
+              flat[k] = String(entry.value)
+            } else if (typeof entry === 'string') {
+              flat[k] = entry
+            }
+          }
+        }
+        if (flat.email_from_name !== undefined) setFromName(flat.email_from_name)
+        if (flat.email_from_address !== undefined) setFromEmail(flat.email_from_address)
+        if (flat.email_footer_template !== undefined) setFooterTemplate(flat.email_footer_template)
+      })
+      .catch(() => { /* use defaults */ })
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const updates = [
+        { key: 'email_from_name', value: fromName },
+        { key: 'email_from_address', value: fromEmail },
+        { key: 'email_footer_template', value: footerTemplate },
+      ]
+      const res = await fetch('/api/admin/site-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+      })
+      const json = await res.json()
+      if (res.ok && (json.updated !== undefined || json.success)) {
+        toast.success('Email settings saved')
+      } else {
+        toast.error(json.error || 'Failed to save email settings')
+      }
+    } catch {
+      toast.error('Network error')
+    }
+    setSaving(false)
+  }
 
   return (
     <Card className="border-border/60">
@@ -40,7 +103,10 @@ export function EmailSettings() {
           <p className="text-xs text-muted-foreground">This footer will be appended to all outgoing emails</p>
         </div>
 
-        <Button className="gap-1.5"><Save className="w-4 h-4" /> Save Email Settings</Button>
+        <Button className="gap-1.5" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {saving ? 'Saving...' : 'Save Email Settings'}
+        </Button>
       </CardContent>
     </Card>
   )

@@ -39,7 +39,7 @@ export function AuditTable({ logs }: AuditTableProps) {
                     {log.changes ? (expanded === log.id ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />) : null}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</td>
-                  <td className="px-4 py-3 hidden sm:table-cell">{log.userName || 'System'}</td>
+                  <td className="px-4 py-3 hidden sm:table-cell">{log.user?.name || 'System'}</td>
                   <td className="px-4 py-3"><StatusBadge variant={ACTION_VARIANT[log.action] || 'neutral'} size="sm">{log.action}</StatusBadge></td>
                   <td className="px-4 py-3 hidden md:table-cell capitalize">{log.entity}</td>
                   <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell font-mono text-xs">{log.entityId?.slice(0, 8) || '—'}</td>

@@ -1,9 +1,13 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { requirePermission } from '@/lib/api-helpers'
 
 // GET /api/admin/settings — Get all settings
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requirePermission(request, 'system')
+  if (!auth.ok) return auth.response
   try {
     const settings = await withRetry((d) =>
       d.siteSetting.findMany({ orderBy: { category: 'asc' } })
@@ -33,12 +37,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Settings object is required' }, { status: 400 })
     }
 
-    // Upsert each setting
+    // Upsert each setting.
+    //
+    // NOTE: We deliberately do NOT set `category` on the `update` clause.
+    // Previously the route forced `category: 'general'` on every touched key,
+    // which collapsed the /api/admin/site-settings grouped view (Bug #3 from
+    // the settings/audit bug audit). The `group` and `category` fields are
+    // owned by the seeding route — only `value` is mutable here.
     const updates = Object.entries(body).map(([key, value]) =>
       withRetry((d) =>
         d.siteSetting.upsert({
           where: { key },
-          update: { value: String(value), category: 'general' },
+          update: { value: String(value) },
           create: { key, value: String(value), category: 'general' },
         })
       )

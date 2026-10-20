@@ -11,7 +11,26 @@ interface AuditFiltersProps {
   onFiltersChange: (filters: any) => void
 }
 
-const ACTIONS = ['all', 'create', 'update', 'delete', 'login', 'export']
+// Bare verbs still work because the API uses substring (`contains`) matching
+// for `action` and `entity` (see /api/admin/audit/route.ts). The namespaced
+// options are also provided so users can narrow down to a specific module
+// (Bug #5 — previously the bare-verb options never matched any stored action
+// because the route did exact match against namespaced strings like
+// 'user.create' / 'client.update').
+const ACTIONS = [
+  { value: 'all', label: 'All Actions' },
+  { value: 'create', label: 'Create' },
+  { value: 'update', label: 'Update' },
+  { value: 'delete', label: 'Delete' },
+  { value: 'login', label: 'Login' },
+  { value: 'logout', label: 'Logout' },
+  { value: 'export', label: 'Export' },
+  { value: 'user.', label: 'User actions' },
+  { value: 'client.', label: 'Client actions' },
+  { value: 'support.', label: 'Support actions' },
+  { value: 'integration.', label: 'Integration actions' },
+  { value: 'settings.', label: 'Settings actions' },
+]
 const ENTITIES = ['all', 'client', 'order', 'invoice', 'payment', 'subscription', 'license', 'user', 'role', 'setting']
 
 export function AuditFilters({ filters, onFiltersChange }: AuditFiltersProps) {
@@ -22,8 +41,8 @@ export function AuditFilters({ filters, onFiltersChange }: AuditFiltersProps) {
       <div className="space-y-1.5">
         <Label className="text-xs">Action</Label>
         <Select value={filters.action} onValueChange={v => update('action', v)}>
-          <SelectTrigger className="w-32 h-9"><SelectValue /></SelectTrigger>
-          <SelectContent>{ACTIONS.map(a => <SelectItem key={a} value={a}>{a === 'all' ? 'All Actions' : a}</SelectItem>)}</SelectContent>
+          <SelectTrigger className="w-40 h-9"><SelectValue /></SelectTrigger>
+          <SelectContent>{ACTIONS.map(a => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}</SelectContent>
         </Select>
       </div>
       <div className="space-y-1.5">

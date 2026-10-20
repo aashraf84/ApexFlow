@@ -111,11 +111,27 @@ export function IntegrationSettings() {
     fetch('/api/admin/site-settings')
       .then((res) => res.json())
       .then((json) => {
-        if (json.settings?.integrationSettings) {
+        // The GET response shape is `{ settings: { [group]: { [key]: { value, description? } } } }`.
+        // Flatten it into a plain key → value map so we can look up the
+        // `integrationSettings` key regardless of which group/category the
+        // server chose to bucket it under.
+        const grouped = json.settings || {}
+        const flat: Record<string, string> = {}
+        for (const groupKey of Object.keys(grouped)) {
+          const bucket = grouped[groupKey] || {}
+          for (const k of Object.keys(bucket)) {
+            const entry = bucket[k]
+            if (entry && typeof entry === 'object' && 'value' in entry) {
+              flat[k] = String(entry.value)
+            } else if (typeof entry === 'string') {
+              flat[k] = entry
+            }
+          }
+        }
+        const raw = flat.integrationSettings
+        if (raw) {
           try {
-            const parsed = typeof json.settings.integrationSettings === 'string'
-              ? JSON.parse(json.settings.integrationSettings)
-              : json.settings.integrationSettings
+            const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
             setSettings((prev) => ({ ...prev, ...parsed }))
           } catch {
             // use defaults
@@ -129,16 +145,25 @@ export function IntegrationSettings() {
     setSettings((prev) => ({ ...prev, [key]: value }))
   }
 
+  // Submit the entire IntegrationSettings object as a single JSON-stringified
+  // value under the `integrationSettings` key. The /api/admin/site-settings
+  // PATCH handler expects body shape `{ updates: [{ key, value }] }` —
+  // previously we sent `{ integrationSettings: '...' }` which the route
+  // rejected with 400 "No updates provided" (Bug #2).
+  const buildPatchBody = (payload: IntegrationSettings) => ({
+    updates: [{ key: 'integrationSettings', value: JSON.stringify(payload) }],
+  })
+
   const handleSave = async () => {
     setSaving(true)
     try {
       const res = await fetch('/api/admin/site-settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ integrationSettings: JSON.stringify(settings) }),
+        body: JSON.stringify(buildPatchBody(settings)),
       })
       const json = await res.json()
-      if (json.success) {
+      if (res.ok && (json.updated !== undefined || json.success)) {
         toast.success('Integration settings saved')
       } else {
         toast.error(json.error || 'Failed to save settings')
@@ -156,10 +181,10 @@ export function IntegrationSettings() {
       const res = await fetch('/api/admin/site-settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ integrationSettings: JSON.stringify(DEFAULT_SETTINGS) }),
+        body: JSON.stringify(buildPatchBody(DEFAULT_SETTINGS)),
       })
       const json = await res.json()
-      if (json.success) {
+      if (res.ok && (json.updated !== undefined || json.success)) {
         toast.success('Settings reset to defaults')
         setResetDialogOpen(false)
       } else {

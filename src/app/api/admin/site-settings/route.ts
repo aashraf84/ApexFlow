@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { writeFile, mkdir } from 'fs/promises'
@@ -201,21 +203,29 @@ async function ensureDefaults() {
 }
 
 // ─── GET: Fetch all site settings ────────────────────────────────────────────
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requirePermission(request, 'system')
+  if (!auth.ok) return auth.response
   try {
     await ensureDefaults()
 
     const settings = await withRetry((db) =>
       db.siteSetting.findMany({
-        orderBy: [{ category: 'asc' }, { key: 'asc' }],
+        orderBy: [{ group: 'asc' }, { category: 'asc' }, { key: 'asc' }],
       })
     )
 
-    // Group by category
+    // Group by `group` first (the canonical grouping used by
+    // /api/system/settings). Fall back to `category` when `group` is null,
+    // and finally to 'general'. Previously this grouped by `category` alone,
+    // but the DB was originally seeded by /api/system/settings POST which only
+    // sets `group` (never `category` → schema default 'general'), so every
+    // setting collapsed into a single 'general' bucket (Bug #6).
     const grouped: Record<string, Record<string, { value: string; description?: string }>> = {}
     for (const s of settings) {
-      if (!grouped[s.category]) grouped[s.category] = {}
-      grouped[s.category][s.key] = { value: s.value, description: s.description || undefined }
+      const groupName = s.group || s.category || 'general'
+      if (!grouped[groupName]) grouped[groupName] = {}
+      grouped[groupName][s.key] = { value: s.value, description: s.description || undefined }
     }
 
     return NextResponse.json({ settings: grouped })
@@ -224,8 +234,9 @@ export async function GET() {
     // Return defaults when database is unavailable
     const grouped: Record<string, Record<string, { value: string; description?: string }>> = {}
     for (const s of DEFAULT_SETTINGS) {
-      if (!grouped[s.category]) grouped[s.category] = {}
-      grouped[s.category][s.key] = { value: s.value, description: s.description || undefined }
+      const groupName = s.category || 'general'
+      if (!grouped[groupName]) grouped[groupName] = {}
+      grouped[groupName][s.key] = { value: s.value, description: s.description || undefined }
     }
     return NextResponse.json({ settings: grouped, dbWarning: 'Database unavailable — showing defaults' })
   }

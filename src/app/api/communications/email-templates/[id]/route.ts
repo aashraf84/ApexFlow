@@ -1,10 +1,15 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb, withRetry } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requirePermission(req, 'communications')
+  if (!auth.ok) return auth.response
   try {
     const { id } = await params
 
@@ -27,6 +32,8 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requirePermission(req, 'communications')
+  if (!auth.ok) return auth.response
   try {
     const { id } = await params
     const body = await req.json()
@@ -59,6 +66,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requirePermission(req, 'communications')
+  if (!auth.ok) return auth.response
   try {
     const { id } = await params
 

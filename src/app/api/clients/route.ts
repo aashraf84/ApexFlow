@@ -1,5 +1,8 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requirePermission } from '@/lib/api-helpers'
 
 /**
  * Clients API
@@ -45,7 +48,9 @@ function extractLicenseType(notes: string | null): string | null {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requirePermission(request, 'clients')
+  if (!auth.ok) return auth.response
   try {
     const clients = await db.client.findMany({
       include: {
@@ -86,6 +91,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'clients')
+  if (!auth.ok) return auth.response
   try {
     const body = await request.json()
 
