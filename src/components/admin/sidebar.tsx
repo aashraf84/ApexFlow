@@ -89,7 +89,7 @@ const navGroups: NavGroup[] = [
       { label: 'ERP Systems', icon: Boxes, path: '/admin/erp' },
       { label: 'Reports', icon: BarChart3, path: '/admin/reports' },
       { label: 'Users & Roles', icon: KeyRound, path: '/admin/system/users' },
-      { label: 'Audit Logs', icon: ScrollText, path: '/admin/audit', badge: 'NEW' },
+      { label: 'Audit Logs', icon: ScrollText, path: '/admin/audit-logs', badge: 'NEW' },
       { label: 'System Settings', icon: Settings, path: '/admin/system' },
     ],
   },

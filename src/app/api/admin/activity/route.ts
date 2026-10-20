@@ -52,7 +52,7 @@ function buildHref(
     switch (category) {
       case 'Auth':
       case 'System':
-        return '/admin/audit'
+        return '/admin/audit-logs'
       case 'Sync':
         return '/admin/sync-logs'
       case 'Clients':
@@ -64,7 +64,7 @@ function buildHref(
   switch (category) {
     case 'Auth':
     case 'System':
-      return '/admin/audit'
+      return '/admin/audit-logs'
     case 'Sync':
       return '/admin/sync-logs'
     case 'Clients':

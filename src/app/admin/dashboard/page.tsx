@@ -25,7 +25,7 @@ export default function AdminDashboardPage() {
       licenses: '/admin/licenses',
       support: '/admin/support',
       'sync-logs': '/admin/sync-logs',
-      audit: '/admin/audit',
+      audit: '/admin/audit-logs',
       activity: '/admin/activity',
       devices: '/admin/devices',
       communications: '/admin/communications',
