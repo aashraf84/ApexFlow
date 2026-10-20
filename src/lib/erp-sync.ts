@@ -543,7 +543,14 @@ export async function syncClientsFromErp(
         const companyStr = row.company == null ? undefined : String(row.company)
         const phoneStr = row.phone == null ? undefined : String(row.phone)
         const statusStr = row.status == null ? undefined : String(row.status)
-        // Upsert by externalId via SyncTenant linkage; fall back to email.
+        // The placeholder email used when the ERP has no email for this client.
+        // This is deterministic per externalId+erpSlug, so we can search by it
+        // to find existing clients even when the real email is empty (prevents
+        // duplicates on re-sync).
+        const placeholderEmail = `${externalId}@${connector.erpSlug}.erp`
+        const searchEmail = email || placeholderEmail
+        // Upsert by externalId via SyncTenant linkage; fall back to email
+        // (or the deterministic placeholder email if the ERP email is empty).
         let client = null
         const existingTenant = await withRetry((tx) =>
           tx.syncTenant.findFirst({
@@ -553,11 +560,12 @@ export async function syncClientsFromErp(
         )
         if (existingTenant?.client) {
           client = existingTenant.client
-        } else if (email) {
-          // email is not @unique on the Client model, so use findFirst
-          // (findUnique would throw "needs at least one of id arguments")
+        } else {
+          // email is not @unique on the Client model, so use findFirst.
+          // Search by the real email if present, otherwise by the placeholder
+          // (so re-syncs find the client created in a previous run, not a dup).
           client = await withRetry((tx) =>
-            tx.client.findFirst({ where: { email } })
+            tx.client.findFirst({ where: { email: searchEmail } })
           )
         }
         if (client) {
