@@ -150,7 +150,7 @@ export async function discoverColumns(
     const sql = neon(connectionUrl)
     const rows = (await withTimeout(
       sql`
-        SELECT column_name AS name, data_type AS dataType
+        SELECT column_name AS "name", data_type AS "dataType"
         FROM information_schema.columns
         WHERE table_name = ${tableName}
         ORDER BY ordinal_position
@@ -491,7 +491,7 @@ export async function syncClientsFromErp(
     // (quoted table/column names) we use sql.query() with an empty params array.
     const rows = (await withTimeout(
       sql.query(
-        `SELECT ${colId} AS id, ${colName} AS name, ${colEmail} AS email, ${colPhone} AS phone, ${colCompany} AS company, ${colStatus} AS status FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`,
+        `SELECT ${colId} AS "id", ${colName} AS "name", ${colEmail} AS "email", ${colPhone} AS "phone", ${colCompany} AS "company", ${colStatus} AS "status" FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`,
         []
       ),
       SYNC_TIMEOUT_MS
@@ -511,6 +511,10 @@ export async function syncClientsFromErp(
         const email = row.email?.trim() || null
         const name = row.name?.trim() || 'Unknown'
         const externalId = String(row.id)
+        // Coerce ERP values to strings (columns may be Date, int, boolean, etc.)
+        const companyStr = row.company == null ? undefined : String(row.company)
+        const phoneStr = row.phone == null ? undefined : String(row.phone)
+        const statusStr = row.status == null ? undefined : String(row.status)
         // Upsert by externalId via SyncTenant linkage; fall back to email.
         let client = null
         const existingTenant = await withRetry((tx) =>
@@ -536,10 +540,10 @@ export async function syncClientsFromErp(
               data: {
                 contactPerson: name,
                 name,
-                company: row.company || client.company,
-                companyName: row.company || client.companyName,
-                phone: row.phone || client.phone,
-                status: (row.status as string) || client.status,
+                company: companyStr || client.company,
+                companyName: companyStr || client.companyName,
+                phone: phoneStr || client.phone,
+                status: statusStr || client.status,
                 erpSlug: connector.erpSlug,
                 erpSystemId: connector.erpSystemId || undefined,
               },
@@ -550,12 +554,12 @@ export async function syncClientsFromErp(
           client = await withRetry((tx) =>
             tx.client.create({
               data: {
-                companyName: row.company || name,
+                companyName: companyStr || name,
                 contactPerson: name,
                 name,
                 email: email || `${externalId}@${connector.erpSlug}.erp`,
-                phone: row.phone || null,
-                status: (row.status as string) || 'active',
+                phone: phoneStr || null,
+                status: statusStr || 'active',
                 erpSlug: connector.erpSlug,
                 erpSystemId: connector.erpSystemId || undefined,
               },
@@ -779,7 +783,7 @@ export async function syncSerialsFromErp(connectorId: string): Promise<SyncResul
 
     const rows = (await withTimeout(
       sql.query(
-        `SELECT ${colId} AS id, ${colKey} AS serialKey, ${colLic} AS licenseKey, ${colClientRef} AS clientRef, ${colProduct} AS product, ${colStatus} AS status FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`,
+        `SELECT ${colId} AS "id", ${colKey} AS "serialKey", ${colLic} AS "licenseKey", ${colClientRef} AS "clientRef", ${colProduct} AS "product", ${colStatus} AS "status" FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`,
         []
       ),
       SYNC_TIMEOUT_MS
@@ -801,13 +805,20 @@ export async function syncSerialsFromErp(connectorId: string): Promise<SyncResul
     const refToClient = new Map(tenants.filter((t) => t.clientId && t.externalId).map((t) => [String(t.externalId), t.clientId!]))
 
     let emptyKeyCount = 0
+    const errorBreakdown = new Map<string, number>()
     for (const row of rows) {
       try {
-        const serialKey = row.serialKey?.trim()
+        // Prefer serialKey, fall back to licenseKey if serialKey column is empty
+        // (not all ERP serial tables have a dedicated serialKey column — some store
+        // the key in licenseKey/activationKey instead)
+        let serialKey = row.serialKey?.trim()
+        if (!serialKey && row.licenseKey) {
+          serialKey = row.licenseKey.trim()
+        }
         if (!serialKey) {
           failed++
           emptyKeyCount++
-          if (!errMsg) errMsg = `Serial sync: ${emptyKeyCount} row(s) have an empty serialKey column (mapped column "${mapping.serialKey}" returned null/empty). Re-map the serialKey field to the correct column in the ERP's ${mapping.serialTable} table.`
+          errorBreakdown.set('empty serialKey + licenseKey', (errorBreakdown.get('empty serialKey + licenseKey') || 0) + 1)
           continue
         }
         // Resolve the ApexFlow clientId from the ERP clientRef via SyncTenant
@@ -815,31 +826,75 @@ export async function syncSerialsFromErp(connectorId: string): Promise<SyncResul
         if (row.clientRef != null) {
           clientId = refToClient.get(String(row.clientRef)) || null
         }
-        await withRetry((tx) =>
-          tx.license.upsert({
-            where: { serialKey },
-            update: {
-              licenseKey: row.licenseKey || undefined,
-              clientId: clientId || undefined,
-              erpSystemId: connector.erpSystemId || undefined,
-              status: (row.status as string) || undefined,
-              type: row.product || undefined,
-            },
-            create: {
-              serialKey,
-              licenseKey: row.licenseKey || serialKey,
-              clientId: clientId || undefined,
-              erpSystemId: connector.erpSystemId || undefined,
-              status: (row.status as string) || 'active',
-              type: row.product || 'standard',
-            },
-          })
-        )
+        // Coerce all values to strings/strings|null — ERP columns may be Date, int, etc.
+        const statusStr = row.status == null ? undefined : String(row.status)
+        const productStr = row.product == null ? undefined : String(row.product)
+        const licenseKeyStr = row.licenseKey == null ? undefined : String(row.licenseKey)
+        try {
+          await withRetry((tx) =>
+            tx.license.upsert({
+              where: { serialKey },
+              update: {
+                licenseKey: licenseKeyStr || undefined,
+                clientId: clientId || undefined,
+                erpSystemId: connector.erpSystemId || undefined,
+                status: statusStr || undefined,
+                type: productStr || undefined,
+              },
+              create: {
+                serialKey,
+                licenseKey: licenseKeyStr || serialKey,
+                clientId: clientId || undefined,
+                erpSystemId: connector.erpSystemId || undefined,
+                status: statusStr || 'active',
+                type: productStr || 'standard',
+              },
+            })
+          )
+        } catch (upsertErr) {
+          // If the upsert failed due to a unique constraint on licenseKey
+          // (another row already claimed that licenseKey), retry without
+          // setting licenseKey so the serial still syncs.
+          const msg = upsertErr instanceof Error ? upsertErr.message : String(upsertErr)
+          if (/unique|constraint|already exists/i.test(msg)) {
+            await withRetry((tx) =>
+              tx.license.upsert({
+                where: { serialKey },
+                update: {
+                  clientId: clientId || undefined,
+                  erpSystemId: connector.erpSystemId || undefined,
+                  status: (row.status as string) || undefined,
+                  type: row.product || undefined,
+                },
+                create: {
+                  serialKey,
+                  licenseKey: serialKey, // use serialKey as licenseKey fallback
+                  clientId: clientId || undefined,
+                  erpSystemId: connector.erpSystemId || undefined,
+                  status: (row.status as string) || 'active',
+                  type: row.product || 'standard',
+                },
+              })
+            )
+          } else {
+            throw upsertErr
+          }
+        }
         synced++
       } catch (rowErr) {
         failed++
-        if (!errMsg) errMsg = `Serial sync failed: ${rowErr instanceof Error ? rowErr.message : String(rowErr)}`
+        const e = rowErr instanceof Error ? rowErr.message : String(rowErr)
+        // Bucket similar errors together (strip IDs/numbers for grouping)
+        const bucket = e.replace(/[a-zA-Z0-9]{15,}/g, 'X').slice(0, 120)
+        errorBreakdown.set(bucket, (errorBreakdown.get(bucket) || 0) + 1)
       }
+    }
+    // Build a comprehensive error message covering ALL distinct failure reasons
+    if (errorBreakdown.size > 0) {
+      const breakdown = Array.from(errorBreakdown.entries())
+        .map(([reason, count]) => `${count}× ${reason}`)
+        .join('; ')
+      errMsg = `Serial sync: ${failed}/${total} failed. ${emptyKeyCount > 0 ? `${emptyKeyCount} empty key(s). ` : ''}Reasons: ${breakdown}`
     }
 
     await withRetry((tx) =>
@@ -930,7 +985,7 @@ export async function syncDevicesFromErp(connectorId: string): Promise<SyncResul
 
     const rows = (await withTimeout(
       sql.query(
-        `SELECT ${colId} AS id, ${colSerial} AS serial, ${colName} AS name, ${colType} AS type, ${colStatus} AS status, ${colClientRef} AS clientRef FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`,
+        `SELECT ${colId} AS "id", ${colSerial} AS "serial", ${colName} AS "name", ${colType} AS "type", ${colStatus} AS "status", ${colClientRef} AS "clientRef" FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`,
         []
       ),
       SYNC_TIMEOUT_MS
@@ -952,27 +1007,32 @@ export async function syncDevicesFromErp(connectorId: string): Promise<SyncResul
     const refToClient = new Map(tenants.filter((t) => t.clientId && t.externalId).map((t) => [String(t.externalId), t.clientId!]))
 
     let emptySerialCount = 0
+    const devErrorBreakdown = new Map<string, number>()
     for (const row of rows) {
       try {
         const serial = row.serial?.trim()
         if (!serial) {
           failed++
           emptySerialCount++
-          if (!errMsg) errMsg = `Device sync: ${emptySerialCount} row(s) have an empty device-serial column (mapped column "${mapping.deviceSerial}" returned null/empty). Re-map the deviceSerial field to the correct column in the ERP's ${mapping.deviceTable} table.`
+          devErrorBreakdown.set('empty deviceSerial', (devErrorBreakdown.get('empty deviceSerial') || 0) + 1)
           continue
         }
         let clientId: string | null = null
         if (row.clientRef != null) {
           clientId = refToClient.get(String(row.clientRef)) || null
         }
+        // Coerce ERP values to strings (columns may be Date, int, boolean, etc.)
+        const nameStr = row.name == null ? null : String(row.name)
+        const typeStr = row.type == null ? null : String(row.type)
+        const statusStr = row.status == null ? 'active' : String(row.status)
         await withRetry((tx) =>
           tx.erpDevice.upsert({
             where: { serialNumber: serial },
             update: {
               externalId: String(row.id),
-              name: row.name || undefined,
-              type: row.type || undefined,
-              status: (row.status as string) || undefined,
+              name: nameStr || undefined,
+              type: typeStr || undefined,
+              status: statusStr || undefined,
               clientId: clientId || undefined,
               erpSystemId: connector.erpSystemId || undefined,
               lastSyncedAt: new Date(),
@@ -980,9 +1040,9 @@ export async function syncDevicesFromErp(connectorId: string): Promise<SyncResul
             create: {
               serialNumber: serial,
               externalId: String(row.id),
-              name: row.name || null,
-              type: row.type || null,
-              status: (row.status as string) || 'active',
+              name: nameStr,
+              type: typeStr,
+              status: statusStr || 'active',
               clientId: clientId || null,
               erpSystemId: connector.erpSystemId || null,
               lastSyncedAt: new Date(),
@@ -992,8 +1052,16 @@ export async function syncDevicesFromErp(connectorId: string): Promise<SyncResul
         synced++
       } catch (rowErr) {
         failed++
-        if (!errMsg) errMsg = `Device sync failed: ${rowErr instanceof Error ? rowErr.message : String(rowErr)}`
+        const e = rowErr instanceof Error ? rowErr.message : String(rowErr)
+        const bucket = e.replace(/[a-zA-Z0-9]{15,}/g, 'X').slice(0, 120)
+        devErrorBreakdown.set(bucket, (devErrorBreakdown.get(bucket) || 0) + 1)
       }
+    }
+    if (devErrorBreakdown.size > 0) {
+      const breakdown = Array.from(devErrorBreakdown.entries())
+        .map(([reason, count]) => `${count}× ${reason}`)
+        .join('; ')
+      errMsg = `Device sync: ${failed}/${total} failed. ${emptySerialCount > 0 ? `${emptySerialCount} empty serial(s). ` : ''}Reasons: ${breakdown}`
     }
 
     await withRetry((tx) =>
