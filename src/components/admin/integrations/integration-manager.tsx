@@ -519,15 +519,17 @@ export function IntegrationManager() {
       const clients = json.clients || {}
       const serials = json.serials || {}
       const devices = json.devices || {}
-      const totalSynced = (clients.synced || 0) + (serials.synced || 0) + (devices.synced || 0)
-      const totalFailed = (clients.failed || 0) + (serials.failed || 0) + (devices.failed || 0)
+      const subscriptions = json.subscriptions || {}
+      const totalSynced = (clients.synced || 0) + (serials.synced || 0) + (devices.synced || 0) + (subscriptions.synced || 0)
+      const totalFailed = (clients.failed || 0) + (serials.failed || 0) + (devices.failed || 0) + (subscriptions.failed || 0)
       // Collect the first non-empty error message across entities
-      const firstError = clients.error || serials.error || devices.error || ''
+      const firstError = clients.error || serials.error || devices.error || subscriptions.error || ''
       if (totalSynced > 0) {
         const parts = []
         if (clients.synced) parts.push(`${clients.synced} clients`)
         if (serials.synced) parts.push(`${serials.synced} serials`)
         if (devices.synced) parts.push(`${devices.synced} devices`)
+        if (subscriptions.synced) parts.push(`${subscriptions.synced} subscriptions`)
         toast.success(`${name}: synced ${parts.join(' + ')}${totalFailed ? ` (${totalFailed} failed)` : ''}`)
         // If some failed, also surface the reason as a warning
         if (totalFailed > 0 && firstError) {

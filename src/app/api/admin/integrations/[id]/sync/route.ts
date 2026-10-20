@@ -17,7 +17,8 @@ export async function POST(
     const clientsOk = !result.clients.error || result.clients.synced > 0
     const serialsOk = !result.serials.error || result.serials.synced > 0
     const devicesOk = !result.devices.error || result.devices.synced > 0
-    const ok = clientsOk && serialsOk && devicesOk
+    const subsOk = !result.subscriptions?.error || result.subscriptions?.synced > 0
+    const ok = clientsOk && serialsOk && devicesOk && subsOk
     return NextResponse.json(
       {
         success: ok,
@@ -25,6 +26,7 @@ export async function POST(
         clients: { synced: result.clients.synced, failed: result.clients.failed, total: result.clients.total, error: result.clients.error },
         serials: { synced: result.serials.synced, failed: result.serials.failed, total: result.serials.total, error: result.serials.error },
         devices: { synced: result.devices.synced, failed: result.devices.failed, total: result.devices.total, error: result.devices.error },
+        subscriptions: { synced: result.subscriptions?.synced || 0, failed: result.subscriptions?.failed || 0, total: result.subscriptions?.total || 0, error: result.subscriptions?.error },
       },
       { status: ok ? 200 : 500 }
     )

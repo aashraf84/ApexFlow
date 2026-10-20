@@ -43,6 +43,19 @@ export interface ClientSchemaMapping {
   deviceType?: string
   deviceStatus?: string
   deviceClientRef?: string
+  // Optional subscription mapping (syncs ERP subscription fields → ApexFlow
+  // Subscription). Many ERPs store subscription data ON the client table
+  // (licenseType, licenseStatus, billingCycle, expiryDate, etc.) rather than
+  // a separate table, so these columns live on the client table.
+  subPlan?: string
+  subStatus?: string
+  subBillingCycle?: string
+  subFee?: string
+  subStartedAt?: string
+  subEndDate?: string
+  subMaxUsers?: string
+  subMaxLocations?: string
+  subClientRef?: string
   // API-mode (mode='api'): connectionUrl = base URL, apiKey = bearer token,
   // endpoints + response field paths replace table/column mappings.
   mode?: string
@@ -323,6 +336,17 @@ function autoMapColumns(tableName: string, columns: Array<{ name: string; dataTy
     phone: find(['phone', 'mobile', 'phonenumber', 'contactnumber', 'cell', 'tel', 'telephone', 'phone_number', 'mobile_number']),
     company: find(['company', 'companyname', 'organization', 'businessname', 'firm', 'company_name', 'org', 'business']),
     status: find(['status', 'isactive', 'state', 'active', 'is_active', 'enabled', 'verified', 'state_id']),
+    // Subscription fields (auto-detect from the client table — many ERPs store
+    // license/subscription data ON the client row, not in a separate table)
+    subPlan: find(['licensetype', 'plan', 'subscriptionplan', 'package', 'tier', 'plan_id']),
+    subStatus: find(['licensestatus', 'subscriptionstatus', 'substatus', 'isactive', 'is_purchased', 'ispurchased']),
+    subBillingCycle: find(['billingcycle', 'billing_cycle', 'subscriptionperiod', 'billing_period', 'cycle']),
+    subFee: find(['customlicenseamount', 'monthlyfee', 'monthly_fee', 'posprice', 'price', 'amount', 'fee', 'licenseamount']),
+    subStartedAt: find(['issueddate', 'startdate', 'start_date', 'activatedat', 'createdat', 'purchasedate']),
+    subEndDate: find(['expirydate', 'enddate', 'end_date', 'expiresat', 'expirationdate', 'validuntil']),
+    subMaxUsers: find(['maxusers', 'max_users', 'userlimit', 'seats']),
+    subMaxLocations: find(['maxshops', 'maxshops', 'maxlocations', 'max_locations', 'maxstores', 'max_shops']),
+    subClientRef: findId(),
   }
 }
 
@@ -984,6 +1008,210 @@ export interface ConnectorSyncResult {
   clients: SyncResult
   serials: SyncResult
   devices: SyncResult
+  subscriptions: SyncResult
+}
+
+// ============================================
+// Inbound sync: ERP → ApexFlow (subscriptions)
+// Many ERPs store subscription/license data ON the client table (licenseType,
+// licenseStatus, billingCycle, expiryDate, etc.) rather than a separate table.
+// This sync reads those columns and creates Subscription records linked to the
+// synced clients.
+// ============================================
+
+export async function syncSubscriptionsFromErp(connectorId: string): Promise<SyncResult> {
+  const connector = await withRetry((tx) =>
+    tx.integrationConnector.findUnique({ where: { id: connectorId } })
+  )
+  if (!connector) return { synced: 0, failed: 0, total: 0, error: 'Connector not found' }
+  if (!connector.connectionUrl) {
+    return { synced: 0, failed: 0, total: 0, error: 'No connection URL on connector' }
+  }
+  const mapping = parseMapping(connector.schemaMapping)
+  if (!mapping || !mapping.clientTable) {
+    return { synced: 0, failed: 0, total: 0, error: 'No client table mapping configured' }
+  }
+  // Only sync subscriptions if at least one sub field is mapped
+  const hasSubFields = mapping.subPlan || mapping.subStatus || mapping.subFee ||
+    mapping.subStartedAt || mapping.subEndDate || mapping.subMaxUsers
+  if (!hasSubFields) {
+    return { synced: 0, failed: 0, total: 0, error: 'No subscription fields mapped (subPlan/subStatus/subFee/etc.) — skipping' }
+  }
+
+  const startedAt = new Date()
+  let synced = 0
+  let failed = 0
+  let total = 0
+  let errMsg: string | undefined
+
+  try {
+    const sql = neon(connector.connectionUrl)
+    // Build SELECT with the mapped sub columns — all optional, fall back to NULL
+    const colSubPlan = mapping.subPlan ? quoteIdent(mapping.subPlan) : 'NULL'
+    const colSubStatus = mapping.subStatus ? quoteIdent(mapping.subStatus) : 'NULL'
+    const colSubCycle = mapping.subBillingCycle ? quoteIdent(mapping.subBillingCycle) : 'NULL'
+    const colSubFee = mapping.subFee ? quoteIdent(mapping.subFee) : 'NULL'
+    const colSubStart = mapping.subStartedAt ? quoteIdent(mapping.subStartedAt) : 'NULL'
+    const colSubEnd = mapping.subEndDate ? quoteIdent(mapping.subEndDate) : 'NULL'
+    const colSubMaxUsers = mapping.subMaxUsers ? quoteIdent(mapping.subMaxUsers) : 'NULL'
+    const colSubMaxLoc = mapping.subMaxLocations ? quoteIdent(mapping.subMaxLocations) : 'NULL'
+    const colId = quoteIdent(mapping.id)
+    const table = quoteIdent(mapping.clientTable)
+
+    const rows = (await withTimeout(
+      sql.query(
+        `SELECT ${colId} AS "id", ${colSubPlan} AS "subPlan", ${colSubStatus} AS "subStatus", ${colSubCycle} AS "subBillingCycle", ${colSubFee} AS "subFee", ${colSubStart} AS "subStartedAt", ${colSubEnd} AS "subEndDate", ${colSubMaxUsers} AS "subMaxUsers", ${colSubMaxLoc} AS "subMaxLocations" FROM ${table} LIMIT ${MAX_CLIENTS_PER_SYNC}`,
+        []
+      ),
+      SYNC_TIMEOUT_MS
+    )) as Array<{
+      id: string | number
+      subPlan: string | null
+      subStatus: string | null
+      subBillingCycle: string | null
+      subFee: string | number | null
+      subStartedAt: string | Date | null
+      subEndDate: string | Date | null
+      subMaxUsers: string | number | null
+      subMaxLocations: string | number | null
+    }>
+
+    total = rows.length
+
+    // Build SyncTenant lookup: externalId → ApexFlow clientId
+    const tenants = await withRetry((tx) =>
+      tx.syncTenant.findMany({ where: { connectorId }, select: { externalId: true, clientId: true } })
+    )
+    const refToClient = new Map(tenants.filter((t) => t.clientId && t.externalId).map((t) => [String(t.externalId), t.clientId!]))
+
+    const errorBreakdown = new Map<string, number>()
+    for (const row of rows) {
+      try {
+        const externalId = String(row.id)
+        const clientId = refToClient.get(externalId) || null
+        if (!clientId) {
+          failed++
+          errorBreakdown.set('no synced client for externalId', (errorBreakdown.get('no synced client for externalId') || 0) + 1)
+          continue
+        }
+        // Coerce all values — ERP columns may be Date, int, boolean, etc.
+        const planStr = row.subPlan == null ? 'starter' : String(row.subPlan).toLowerCase().trim() || 'starter'
+        const statusRaw = row.subStatus == null ? 'active' : String(row.subStatus).toLowerCase().trim()
+        // Normalize common status values
+        const statusStr = /true|active|1/.test(statusRaw) ? 'active'
+          : /false|inactive|0/.test(statusRaw) ? 'canceled'
+          : /trial/.test(statusRaw) ? 'trial'
+          : /expired/.test(statusRaw) ? 'expired'
+          : /past|due|overdue/.test(statusRaw) ? 'past_due'
+          : 'active'
+        const billingCycleStr = row.subBillingCycle == null ? 'monthly' : String(row.subBillingCycle).toLowerCase().trim() || 'monthly'
+        // Normalize billing cycle: "1-year" → "annual", "monthly" → "monthly"
+        const billingCycle = /year|annual|1-year/.test(billingCycleStr) ? 'annual' : 'monthly'
+        const feeNum = row.subFee == null ? 0 : parseFloat(String(row.subFee)) || 0
+        const maxUsersNum = row.subMaxUsers == null ? 5 : parseInt(String(row.subMaxUsers), 10) || 5
+        const maxLocNum = row.subMaxLocations == null ? null : parseInt(String(row.subMaxLocations), 10) || null
+        // Parse dates — ERP may return ISO strings or Date objects
+        const parseDate = (v: any) => {
+          if (!v) return null
+          const d = new Date(v)
+          return isNaN(d.getTime()) ? null : d
+        }
+        const startDate = parseDate(row.subStartedAt) || new Date()
+        const endDate = parseDate(row.subEndDate)
+
+        // Upsert subscription by clientId + erpSystemId
+        // (one subscription per client per ERP)
+        const existing = await withRetry((tx) =>
+          tx.subscription.findFirst({
+            where: { clientId, erpSystemId: connector.erpSystemId || null },
+          })
+        )
+        if (existing) {
+          await withRetry((tx) =>
+            tx.subscription.update({
+              where: { id: existing.id },
+              data: {
+                plan: planStr,
+                status: statusStr,
+                billingCycle,
+                monthlyFee: feeNum,
+                startDate,
+                endDate,
+                maxUsers: maxUsersNum,
+                maxLocations: maxLocNum || undefined,
+              },
+            })
+          )
+        } else {
+          await withRetry((tx) =>
+            tx.subscription.create({
+              data: {
+                clientId,
+                erpSystemId: connector.erpSystemId || undefined,
+                plan: planStr,
+                status: statusStr,
+                billingCycle,
+                monthlyFee: feeNum,
+                startDate,
+                endDate,
+                maxUsers: maxUsersNum,
+                maxLocations: maxLocNum || undefined,
+              },
+            })
+          )
+        }
+        synced++
+      } catch (rowErr) {
+        failed++
+        const e = rowErr instanceof Error ? rowErr.message : String(rowErr)
+        const bucket = e.replace(/[a-zA-Z0-9]{15,}/g, 'X').slice(0, 120)
+        errorBreakdown.set(bucket, (errorBreakdown.get(bucket) || 0) + 1)
+      }
+    }
+    if (errorBreakdown.size > 0) {
+      const breakdown = Array.from(errorBreakdown.entries()).map(([reason, count]) => `${count}× ${reason}`).join('; ')
+      errMsg = `Subscription sync: ${failed}/${total} failed. Reasons: ${breakdown}`
+    }
+
+    await withRetry((tx) =>
+      tx.syncLog.create({
+        data: {
+          erpSystemId: connector.erpSystemId || undefined,
+          erpSlug: connector.erpSlug,
+          erpName: connector.erpName,
+          direction: 'inbound',
+          status: failed === 0 ? 'success' : 'partial',
+          syncType: 'manual',
+          recordsSynced: synced,
+          recordsFailed: failed,
+          durationMs: Date.now() - startedAt.getTime(),
+          metadata: JSON.stringify({ entity: 'subscriptions' }),
+          errorMessage: errMsg,
+        },
+      })
+    )
+    return { synced, failed, total, error: errMsg }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    await withRetry((tx) =>
+      tx.syncLog.create({
+        data: {
+          erpSystemId: connector.erpSystemId || undefined,
+          erpSlug: connector.erpSlug,
+          erpName: connector.erpName,
+          direction: 'inbound',
+          status: 'failed',
+          syncType: 'manual',
+          recordsSynced: 0,
+          recordsFailed: 0,
+          durationMs: Date.now() - startedAt.getTime(),
+          metadata: JSON.stringify({ entity: 'subscriptions' }),
+          errorMessage: msg,
+        },
+      })
+    ).catch(() => {})
+    return { synced: 0, failed: 0, total: 0, error: msg }
+  }
 }
 
 // ============================================
@@ -1151,14 +1379,20 @@ export async function syncConnector(connectorId: string): Promise<ConnectorSyncR
   const clients = isApi ? await syncClientsFromErpApi(connectorId) : await syncClientsFromErp(connectorId)
   let serials: SyncResult = { synced: 0, failed: 0, total: 0 }
   let devices: SyncResult = { synced: 0, failed: 0, total: 0 }
+  let subscriptions: SyncResult = { synced: 0, failed: 0, total: 0 }
   if (isApi) {
     if (mapping?.serialsEndpoint && mapping?.serialFieldKey) serials = await syncSerialsFromErpApi(connectorId)
     if (mapping?.devicesEndpoint && mapping?.deviceFieldSerial) devices = await syncDevicesFromErpApi(connectorId)
   } else {
     if (mapping?.serialTable && mapping?.serialKey) serials = await syncSerialsFromErp(connectorId)
     if (mapping?.deviceTable && mapping?.deviceSerial) devices = await syncDevicesFromErp(connectorId)
+    // Sync subscriptions (reads from the client table — many ERPs store
+    // subscription data ON the client row, not in a separate table)
+    if (mapping?.subPlan || mapping?.subStatus || mapping?.subFee) {
+      subscriptions = await syncSubscriptionsFromErp(connectorId)
+    }
   }
-  return { connectorId, erpName: connector?.erpName || 'Unknown', clients, serials, devices }
+  return { connectorId, erpName: connector?.erpName || 'Unknown', clients, serials, devices, subscriptions }
 }
 
 /**
