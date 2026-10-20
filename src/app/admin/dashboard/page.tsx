@@ -1,12 +1,11 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { DashboardView } from '@/components/admin/panel/dashboard-view'
-import type { PanelSection } from '@/components/admin/panel/dashboard-view'
+import { AdvancedDashboard } from '@/components/admin/panel/advanced-dashboard'
 
 export default function AdminDashboardPage() {
   const router = useRouter()
-  const handleNavigate = (section: PanelSection) => {
+  const handleNavigate = (section: string) => {
     if (section === 'dashboard') {
       router.push('/admin/dashboard')
       return
@@ -21,6 +20,14 @@ export default function AdminDashboardPage() {
       clients: '/admin/clients',
       deals: '/admin/deals',
       finance: '/admin/finance',
+      payments: '/admin/payments',
+      subscriptions: '/admin/subscriptions',
+      licenses: '/admin/licenses',
+      support: '/admin/support',
+      'sync-logs': '/admin/sync-logs',
+      audit: '/admin/audit',
+      activity: '/admin/activity',
+      devices: '/admin/devices',
       communications: '/admin/communications',
       marketing: '/admin/marketing',
       reports: '/admin/reports',
@@ -30,5 +37,5 @@ export default function AdminDashboardPage() {
     if (path) router.push(path)
   }
 
-  return <DashboardView onNavigate={handleNavigate} />
+  return <AdvancedDashboard onNavigate={handleNavigate} />
 }

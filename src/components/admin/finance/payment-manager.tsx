@@ -16,6 +16,14 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -24,7 +32,9 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import {
   RefreshCw,
@@ -41,6 +51,9 @@ import {
   Wallet,
   Banknote,
   Globe,
+  Plus,
+  Building2,
+  FileText,
 } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -212,6 +225,22 @@ export function PaymentManager() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
+  // Record Payment dialog state
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [clients, setClients] = useState<ClientInfo[]>([])
+  const [invoices, setInvoices] = useState<InvoiceInfo[]>([])
+  const [form, setForm] = useState({
+    clientId: '',
+    amount: '',
+    currency: 'PKR',
+    method: 'manual',
+    status: 'completed',
+    transactionId: '',
+    invoiceId: '',
+    notes: '',
+  })
+
   const fetchPayments = useCallback(async () => {
     setLoading(true)
     try {
@@ -237,6 +266,45 @@ export function PaymentManager() {
       setLoading(false)
     }
   }, [statusFilter, gatewayFilter, dateFrom, dateTo, search])
+
+  // Fetch dropdown options (clients + invoices) — only when dialog opens
+  const fetchOptions = useCallback(async () => {
+    try {
+      const [cRes, iRes] = await Promise.all([
+        fetch('/api/clients'),
+        fetch('/api/finance/invoices'),
+      ])
+      if (cRes.ok) {
+        const data = await cRes.json()
+        const list = (data.data || data || []).map((c: ClientInfo & { company?: string | null }) => ({
+          id: c.id,
+          companyName: c.companyName || c.name || '',
+          contactPerson: c.contactPerson || '',
+          name: c.name || null,
+          email: c.email || '',
+          company: c.company || null,
+        }))
+        setClients(list)
+      }
+      if (iRes.ok) {
+        const data = await iRes.json()
+        const list = (data.data || data || []).map((i: InvoiceInfo) => ({
+          id: i.id,
+          invoiceNumber: i.invoiceNumber || null,
+          number: i.number || null,
+          total: i.total ?? null,
+          currency: i.currency || null,
+        }))
+        setInvoices(list)
+      }
+    } catch {
+      // silent
+    }
+  }, [])
+
+  useEffect(() => {
+    if (createOpen) fetchOptions()
+  }, [createOpen, fetchOptions])
 
   useEffect(() => {
     const t = setTimeout(fetchPayments, 300)
@@ -345,6 +413,60 @@ export function PaymentManager() {
     toast.success(`Exported ${payments.length} payments to CSV`)
   }
 
+  const handleRecord = async () => {
+    if (!form.clientId) {
+      toast.error('Please select a client')
+      return
+    }
+    const amountNum = parseFloat(form.amount)
+    if (Number.isNaN(amountNum) || amountNum < 0) {
+      toast.error('Please enter a valid amount')
+      return
+    }
+    setCreating(true)
+    try {
+      const payload: Record<string, unknown> = {
+        clientId: form.clientId,
+        amount: amountNum,
+        currency: form.currency,
+        method: form.method,
+        status: form.status,
+      }
+      if (form.transactionId) payload.transactionId = form.transactionId
+      if (form.invoiceId && form.invoiceId !== 'none') payload.invoiceId = form.invoiceId
+      if (form.notes) payload.notes = form.notes
+
+      const res = await fetch('/api/admin/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null)
+        throw new Error(j?.error || 'Failed')
+      }
+      const json = await res.json()
+      toast.success(`Payment recorded for ${clientDisplay(json.payment?.client)}`)
+      setForm({
+        clientId: '',
+        amount: '',
+        currency: 'PKR',
+        method: 'manual',
+        status: 'completed',
+        transactionId: '',
+        invoiceId: '',
+        notes: '',
+      })
+      setCreateOpen(false)
+      fetchPayments()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to record payment'
+      toast.error(msg)
+    } finally {
+      setCreating(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -371,10 +493,19 @@ export function PaymentManager() {
             <span className="ml-1.5">Refresh</span>
           </Button>
           <Button
-            onClick={handleExportCsv}
+            onClick={() => setCreateOpen(true)}
             className="hover:opacity-90 text-white gap-1.5"
             style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+          >
+            <Plus className="h-4 w-4" />
+            Record Payment
+          </Button>
+          <Button
+            onClick={handleExportCsv}
+            className="hover:opacity-90 text-white gap-1.5"
+            style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', color: 'var(--foreground)' }}
             disabled={!payments.length}
+            variant="outline"
           >
             <Download className="h-4 w-4" />
             Export CSV
@@ -605,11 +736,20 @@ export function PaymentManager() {
             </div>
           ) : payments.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-              <CreditCard className="h-10 w-10 mb-3 text-gray-600" />
-              <p className="text-sm">No payments found</p>
-              <p className="text-xs text-gray-600 mt-1">
-                Try adjusting filters or wait for new transactions to be recorded.
+              <CreditCard className="h-12 w-12 mb-4 text-gray-600" />
+              <p className="text-base font-medium text-foreground">No payments yet</p>
+              <p className="text-xs text-gray-500 mt-1 max-w-md text-center">
+                Payments are recorded automatically when clients are charged via checkout,
+                but you can also manually record a payment for any client using the button below.
               </p>
+              <Button
+                onClick={() => setCreateOpen(true)}
+                className="mt-5 hover:opacity-90 text-white gap-1.5"
+                style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+              >
+                <Plus className="h-4 w-4" />
+                Record Payment
+              </Button>
             </div>
           ) : (
             <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
@@ -692,6 +832,212 @@ export function PaymentManager() {
           )}
         </CardContent>
       </Card>
+
+      {/* Record Payment Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent
+          className="bg-gray-950 text-white max-h-[90vh] overflow-y-auto sm:max-w-lg"
+          style={{ borderColor: 'var(--gg-separator)' }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" style={{ color: 'var(--gg-vermillion)' }} />
+              Record Payment
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Manually record a payment for a client. A unique transaction ID is auto-generated if you leave the field blank.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label className="text-gray-300 text-xs">Client *</Label>
+              <Select
+                value={form.clientId}
+                onValueChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+              >
+                <SelectTrigger
+                  className="text-white"
+                  style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                >
+                  <SelectValue placeholder="Select client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.companyName || c.name || c.contactPerson || c.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {clients.length === 0 && (
+                <p className="text-xs text-gray-500">Loading clients...</p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-gray-300 text-xs flex items-center gap-1.5">
+                  <DollarSign className="h-3 w-3" /> Amount *
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  value={form.amount}
+                  onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                  className="text-white"
+                  style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-gray-300 text-xs">Currency</Label>
+                <Select
+                  value={form.currency}
+                  onValueChange={(v) => setForm((f) => ({ ...f, currency: v }))}
+                >
+                  <SelectTrigger
+                    className="text-white"
+                    style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PKR">PKR</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="EUR">EUR</SelectItem>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-gray-300 text-xs">Gateway / Method</Label>
+                <Select
+                  value={form.method}
+                  onValueChange={(v) => setForm((f) => ({ ...f, method: v }))}
+                >
+                  <SelectTrigger
+                    className="text-white"
+                    style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="stripe">Stripe</SelectItem>
+                    <SelectItem value="paypal">PayPal</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="credit_card">Credit Card</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-gray-300 text-xs">Status</Label>
+                <Select
+                  value={form.status}
+                  onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                >
+                  <SelectTrigger
+                    className="text-white"
+                    style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                    <SelectItem value="refunded">Refunded</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-gray-300 text-xs flex items-center gap-1.5">
+                <FileText className="h-3 w-3" /> Invoice (optional)
+              </Label>
+              <Select
+                value={form.invoiceId || 'none'}
+                onValueChange={(v) => setForm((f) => ({ ...f, invoiceId: v === 'none' ? '' : v }))}
+              >
+                <SelectTrigger
+                  className="text-white"
+                  style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                >
+                  <SelectValue placeholder="No invoice" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No invoice</SelectItem>
+                  {invoices.map((i) => (
+                    <SelectItem key={i.id} value={i.id}>
+                      {i.invoiceNumber || i.number || i.id.slice(-8)}{i.total ? ` — ${i.total}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-gray-300 text-xs">Transaction ID (optional)</Label>
+              <Input
+                type="text"
+                placeholder="Auto-generated if blank"
+                value={form.transactionId}
+                onChange={(e) => setForm((f) => ({ ...f, transactionId: e.target.value }))}
+                className="text-white font-mono text-sm"
+                style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-gray-300 text-xs">Notes (optional)</Label>
+              <Input
+                type="text"
+                placeholder="Reference, check #, etc."
+                value={form.notes}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                className="text-white"
+                style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+              />
+            </div>
+            <div
+              className="rounded-lg p-3 flex items-start gap-2"
+              style={{ background: 'var(--secondary)', border: '1px solid var(--gg-separator)' }}
+            >
+              <Building2 className="h-4 w-4 text-gray-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                Payments are normally created via Stripe webhooks when clients are
+                charged. Use this form to manually record a payment — it will appear
+                immediately in the revenue chart and stats.
+              </p>
+            </div>
+          </div>
+          <Separator style={{ background: 'var(--gg-separator)' }} />
+          <DialogFooter className="mt-2">
+            <Button
+              variant="ghost"
+              onClick={() => setCreateOpen(false)}
+              className="text-muted-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRecord}
+              disabled={creating || !form.clientId || !form.amount}
+              className="hover:opacity-90 text-white gap-1.5"
+              style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+            >
+              {creating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <DollarSign className="h-4 w-4" />
+              )}
+              Record Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

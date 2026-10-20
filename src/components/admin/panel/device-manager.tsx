@@ -330,30 +330,58 @@ export function DeviceManager() {
     </div>
   )
 
-  const renderEmpty = () => (
-    <div className="flex flex-col items-center justify-center py-16">
-      <Smartphone className="h-12 w-12 text-gray-600 mb-4" />
-      <p className="text-muted-foreground text-lg font-medium">No devices found</p>
-      <p className="text-gray-500 text-sm mt-1">
-        {search || statusFilter !== 'all' || erpFilter !== 'all'
-          ? 'Try adjusting your filters to see more devices.'
-          : 'Devices synced from connected ERPs will appear here.'}
-      </p>
-      {(search || statusFilter !== 'all' || erpFilter !== 'all') && (
-        <Button
-          variant="outline"
-          onClick={() => {
-            setSearch('')
-            setStatusFilter('all')
-            setErpFilter('all')
-          }}
-          className="mt-4 text-foreground"
-        >
-          Clear filters
-        </Button>
-      )}
-    </div>
-  )
+  const renderEmpty = () => {
+    const hasFilters = search || statusFilter !== 'all' || erpFilter !== 'all'
+    if (hasFilters) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16">
+          <Smartphone className="h-12 w-12 text-gray-600 mb-4" />
+          <p className="text-muted-foreground text-lg font-medium">No devices match your filters</p>
+          <p className="text-gray-500 text-sm mt-1">
+            Try adjusting your filters to see more devices.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSearch('')
+              setStatusFilter('all')
+              setErpFilter('all')
+            }}
+            className="mt-4 text-foreground"
+          >
+            Clear filters
+          </Button>
+        </div>
+      )
+    }
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+        <Smartphone className="h-12 w-12 text-gray-600 mb-4" />
+        <p className="text-muted-foreground text-lg font-medium">No devices synced</p>
+        <p className="text-gray-500 text-sm mt-1 max-w-md">
+          Map a device table in the{' '}
+          <a
+            href="/admin/integrations"
+            className="font-medium text-foreground hover:underline"
+            style={{ color: 'var(--gg-vermillion)' }}
+          >
+            Integration Hub
+          </a>{' '}
+          to sync devices from your ERP.
+        </p>
+        <a href="/admin/integrations" className="mt-4 inline-block">
+          <Button
+            variant="outline"
+            className="text-foreground"
+            style={{ borderColor: 'var(--gg-separator)' }}
+          >
+            <ExternalLink className="h-4 w-4 mr-1.5" />
+            Open Integration Hub
+          </Button>
+        </a>
+      </div>
+    )
+  }
 
   const rowVariants = {
     hidden: { opacity: 0, x: -6 },

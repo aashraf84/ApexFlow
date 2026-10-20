@@ -152,3 +152,123 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+// POST /api/admin/payments — manually record a payment
+// Body: { clientId, amount, currency?, method?, status?, transactionId?, invoiceId?, notes? }
+// If invoiceId is provided, the payment is linked to that invoice (must exist).
+export async function POST(request: NextRequest) {
+  try {
+    const auth = await requirePermission(request, 'finance')
+    if (!auth.ok) return auth.response
+
+    const body = await request.json()
+    const {
+      clientId,
+      amount,
+      currency = 'PKR',
+      method = 'manual',
+      status = 'completed',
+      transactionId,
+      invoiceId,
+      notes,
+      cardBrand,
+      cardLast4,
+    } = body as {
+      clientId?: string
+      amount?: number
+      currency?: string
+      method?: string
+      status?: string
+      transactionId?: string
+      invoiceId?: string
+      notes?: string
+      cardBrand?: string
+      cardLast4?: string
+    }
+
+    // Basic validation
+    if (!clientId) {
+      return NextResponse.json(
+        { error: 'Client is required' },
+        { status: 400 }
+      )
+    }
+    if (typeof amount !== 'number' || Number.isNaN(amount) || amount < 0) {
+      return NextResponse.json(
+        { error: 'A valid amount (number ≥ 0) is required' },
+        { status: 400 }
+      )
+    }
+
+    // Validate client exists
+    const client = await withRetry((d) =>
+      d.client.findUnique({
+        where: { id: clientId },
+        select: { id: true, companyName: true, contactPerson: true, email: true, company: true },
+      })
+    )
+    if (!client) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    }
+
+    // Validate invoice if provided
+    if (invoiceId) {
+      const inv = await withRetry((d) =>
+        d.invoice.findUnique({ where: { id: invoiceId }, select: { id: true } })
+      )
+      if (!inv) {
+        return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+      }
+    }
+
+    // Auto-generate a transaction id if none provided so the row is traceable.
+    const finalTxnId =
+      transactionId ||
+      `MAN-${Date.now().toString(36).toUpperCase()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)
+        .toUpperCase()}`
+
+    const created = await withRetry((d) =>
+      d.payment.create({
+        data: {
+          clientId,
+          invoiceId: invoiceId || null,
+          amount: Number(amount),
+          currency,
+          method,
+          status,
+          transactionId: finalTxnId,
+          notes: notes || null,
+          cardBrand: cardBrand || null,
+          cardLast4: cardLast4 || null,
+          verifiedAt: status === 'completed' ? new Date() : null,
+        },
+        include: {
+          client: {
+            select: {
+              id: true,
+              companyName: true,
+              contactPerson: true,
+              name: true,
+              email: true,
+              company: true,
+            },
+          },
+          invoice: {
+            select: { id: true, invoiceNumber: true, number: true, total: true, currency: true },
+          },
+        },
+      })
+    )
+
+    return NextResponse.json({ payment: created }, { status: 201 })
+  } catch (error) {
+    console.error('[ADMIN-PAYMENTS] Failed to create:', error)
+    return NextResponse.json(
+      { error: 'Failed to record payment' },
+      { status: 500 }
+    )
+  }
+}
+

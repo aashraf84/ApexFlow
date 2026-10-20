@@ -125,6 +125,169 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// POST /api/admin/subscriptions — manually create a subscription
+// Body: { clientId, packageId?, plan?, billingCycle?, monthlyFee?, currency?, status?, maxUsers?, trialEndsAt?, endDate? }
+// If packageId is provided, plan / billingCycle / monthlyFee / currency are
+// auto-resolved from the Package row unless explicitly overridden in the body.
+export async function POST(request: NextRequest) {
+  try {
+    const auth = await requirePermission(request, 'finance')
+    if (!auth.ok) return auth.response
+
+    const body = await request.json()
+    const {
+      clientId,
+      packageId,
+      plan,
+      billingCycle,
+      monthlyFee,
+      currency,
+      status = 'active',
+      maxUsers,
+      trialEndsAt,
+      endDate,
+      erpSystemId,
+    } = body as {
+      clientId?: string
+      packageId?: string
+      plan?: string
+      billingCycle?: string
+      monthlyFee?: number
+      currency?: string
+      status?: string
+      maxUsers?: number
+      trialEndsAt?: string
+      endDate?: string
+      erpSystemId?: string
+    }
+
+    if (!clientId) {
+      return NextResponse.json(
+        { error: 'Client is required' },
+        { status: 400 }
+      )
+    }
+
+    // Validate client exists
+    const client = await withRetry((d) =>
+      d.client.findUnique({
+        where: { id: clientId },
+        select: { id: true, companyName: true, erpSystemId: true },
+      })
+    )
+    if (!client) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    }
+
+    // Resolve package (optional)
+    let pkgPlan: string | undefined
+    let pkgCycle: string | undefined
+    let pkgPrice: number | undefined
+    let pkgCurrency: string | undefined
+    let pkgMaxUsers: number | undefined
+    let pkgErpId: string | undefined
+    if (packageId) {
+      const pkg = await withRetry((d) =>
+        d.package.findUnique({
+          where: { id: packageId },
+          select: {
+            id: true,
+            name: true,
+            plan: true,
+            billingCycle: true,
+            price: true,
+            currency: true,
+            maxUsers: true,
+            erpSystemId: true,
+          },
+        })
+      )
+      if (!pkg) {
+        return NextResponse.json({ error: 'Package not found' }, { status: 404 })
+      }
+      pkgPlan = pkg.plan
+      pkgCycle = pkg.billingCycle
+      pkgPrice = pkg.price
+      pkgCurrency = pkg.currency
+      pkgMaxUsers = pkg.maxUsers ?? undefined
+      pkgErpId = pkg.erpSystemId ?? undefined
+    }
+
+    // Compose the final field values — explicit body wins, else package, else defaults.
+    const finalPlan = plan || pkgPlan || 'starter'
+    const finalCycle = billingCycle || pkgCycle || 'monthly'
+    const finalFee =
+      typeof monthlyFee === 'number'
+        ? monthlyFee
+        : typeof pkgPrice === 'number'
+        ? pkgPrice
+        : 0
+    const finalCurrency = currency || pkgCurrency || 'PKR'
+    const finalMaxUsers =
+      typeof maxUsers === 'number'
+        ? maxUsers
+        : typeof pkgMaxUsers === 'number'
+        ? pkgMaxUsers
+        : 5
+    // Resolve erpSystemId — explicit > client's > package's
+    const finalErpId = erpSystemId || client.erpSystemId || pkgErpId || null
+
+    const created = await withRetry((d) =>
+      d.subscription.create({
+        data: {
+          clientId,
+          packageId: packageId || null,
+          erpSystemId: finalErpId,
+          plan: finalPlan,
+          status,
+          monthlyFee: Number(finalFee),
+          currency: finalCurrency,
+          billingCycle: finalCycle,
+          maxUsers: Number(finalMaxUsers),
+          startDate: new Date(),
+          endDate: endDate ? new Date(endDate) : null,
+          trialEndsAt: trialEndsAt ? new Date(trialEndsAt) : null,
+        },
+        include: {
+          client: {
+            select: {
+              id: true,
+              companyName: true,
+              contactPerson: true,
+              name: true,
+              email: true,
+              phone: true,
+              company: true,
+              status: true,
+              industry: true,
+              country: true,
+            },
+          },
+          package: {
+            select: {
+              id: true,
+              name: true,
+              price: true,
+              billingCycle: true,
+              plan: true,
+              currency: true,
+            },
+          },
+          erpSystem: { select: { id: true, name: true, slug: true } },
+        },
+      })
+    )
+
+    return NextResponse.json({ subscription: created }, { status: 201 })
+  } catch (error) {
+    console.error('[ADMIN-SUBSCRIPTIONS] Failed to create:', error)
+    return NextResponse.json(
+      { error: 'Failed to create subscription' },
+      { status: 500 }
+    )
+  }
+}
+
 // PATCH /api/admin/subscriptions — update a subscription (cancel, change plan, update status)
 export async function PATCH(request: NextRequest) {
   try {

@@ -1,28 +1,19 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import {
   Select,
   SelectContent,
@@ -31,6 +22,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet'
+import {
   Table,
   TableBody,
   TableCell,
@@ -38,50 +36,81 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Checkbox } from '@/components/ui/checkbox'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import {
   Users,
-  Download,
-  Plus,
   Search,
-  ArrowLeft,
-  Edit2,
-  Trash2,
+  ArrowUpDown,
+  RefreshCw,
+  Plus,
   Mail,
   Phone,
+  Building2,
   Globe,
   MapPin,
-  Building2,
-  Star,
-  UserPlus,
-  PhoneCall,
   Calendar,
   FileText,
   TrendingUp,
-  MessageSquare,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  ChevronRight,
-  User,
+  ShieldCheck,
+  KeyRound,
+  CreditCard,
+  Activity as ActivityIcon,
+  RefreshCcw,
+  Star,
+  ExternalLink,
+  Hash,
 } from 'lucide-react'
 
-// ============================================
+// ──────────────────────────────────────────────────────────────
 // Types
-// ============================================
+// ──────────────────────────────────────────────────────────────
+interface ClientListItem {
+  id: string
+  companyName: string
+  contactPerson: string
+  email: string
+  phone: string | null
+  city: string | null
+  country: string | null
+  industry: string | null
+  status: string
+  erpSlug: string | null
+  erpSystemId: string | null
+  erpSystem: { id: string; name: string; slug: string; color: string } | null
+  createdAt: string
+  dealCount: number
+  licenseCount: number
+  subscriptionCount: number
+  activeSubscriptionCount: number
+  invoiceCount: number
+  activityCount: number
+}
+
+interface ErpOption {
+  id: string
+  name: string
+  slug: string
+  color: string
+}
+
+interface ErpBreakdown {
+  slug: string
+  count: number
+}
+
+interface ClientListResponse {
+  success: boolean
+  data: ClientListItem[]
+  pagination: { page: number; pageSize: number; total: number; totalPages: number }
+  stats: { total: number; active: number; prospect: number; churned: number; inactive: number }
+  erpSystems: ErpOption[]
+  erpBreakdown: ErpBreakdown[]
+}
+
 interface ClientContact {
   id: string
-  clientId: string
   name: string
   email: string | null
   phone: string | null
@@ -89,258 +118,345 @@ interface ClientContact {
   isPrimary: boolean
   notes: string | null
   createdAt: string
-  updatedAt: string
 }
 
-interface ClientActivity {
+interface ClientDeal {
   id: string
-  clientId: string
+  title: string
+  value: number
+  stage: string
+  probability: number
+  source: string | null
+  expectedCloseDate: string | null
+  createdAt: string
+}
+
+interface ClientLicense {
+  id: string
+  serialKey: string
+  licenseKey: string
+  type: string
+  status: string
+  maxUsers: number
+  maxDevices: number
+  expiresAt: string | null
+  erpSystem: { id: string; name: string; slug: string } | null
+  createdAt: string
+}
+
+interface ClientSubscription {
+  id: string
+  plan: string
+  status: string
+  billingCycle: string
+  monthlyFee: number
+  currency: string
+  startDate: string
+  endDate: string | null
+  erpSystem: { id: string; name: string; slug: string } | null
+}
+
+interface ClientActivityRow {
+  id: string
   type: string
   subject: string
   notes: string | null
   createdAt: string
 }
 
-interface Deal {
+interface ClientDetail {
   id: string
-  title: string
-  clientId: string | null
-  value: number
-  stage: string
-  probability: number
-  source: string | null
-  expectedCloseDate: string | null
-  notes: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-interface ClientData {
-  id: string
-  name: string
-  email: string | null
+  companyName: string
+  contactPerson: string
+  email: string
   phone: string | null
-  company: string | null
   address: string | null
   city: string | null
   state: string | null
   country: string | null
-  zipCode: string | null
+  postalCode: string | null
   website: string | null
-  industry: string | null
+  taxId: string | null
   status: string
+  industry: string | null
   notes: string | null
-  avatar: string | null
+  databaseName: string | null
+  erpSlug: string | null
+  erpSystemId: string | null
   createdAt: string
-  updatedAt: string
-  contacts?: ClientContact[]
-  activities?: ClientActivity[]
-  deals?: Deal[]
-  _count?: {
+  erpSystem: { id: string; name: string; slug: string; color: string; website: string | null } | null
+  contacts: ClientContact[]
+  deals: ClientDeal[]
+  licenses: ClientLicense[]
+  subscriptions: ClientSubscription[]
+  invoices: any[]
+  activities: ClientActivityRow[]
+  _count: {
     deals: number
-    invoices: number
-    payments: number
+    licenses: number
     subscriptions: number
+    invoices: number
+    activities: number
+    orders: number
+    payments: number
   }
 }
 
-// ============================================
-// Status badge helper
-// ============================================
+// ──────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────
+function formatDate(dateStr: string) {
+  try {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    })
+  } catch {
+    return dateStr
+  }
+}
+
+function formatDateTime(dateStr: string) {
+  try {
+    return new Date(dateStr).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return dateStr
+  }
+}
+
+function formatMoney(amount: number, currency = 'PKR') {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount || 0)
+  } catch {
+    return `${currency} ${(amount || 0).toLocaleString()}`
+  }
+}
+
 function StatusBadge({ status }: { status: string }) {
-  const config: Record<string, { label: string; className: string; style?: React.CSSProperties }> = {
+  const map: Record<string, { label: string; cls: string; style?: React.CSSProperties }> = {
     active: {
       label: 'Active',
-      className: '',
+      cls: '',
       style: {
-        background: 'color-mix(in srgb, var(--gg-vermillion) 15%, transparent)',
-        color: 'var(--gg-vermillion)',
-        borderColor: 'color-mix(in srgb, var(--gg-vermillion) 20%, transparent)',
+        background: 'color-mix(in srgb, #10b981 18%, transparent)',
+        color: '#10b981',
+        borderColor: 'color-mix(in srgb, #10b981 30%, transparent)',
       },
     },
-    inactive: { label: 'Inactive', className: 'bg-red-500/15 text-red-400 border-red-500/20' },
-    prospect: { label: 'Prospect', className: 'bg-amber-500/15 text-amber-400 border-amber-500/20' },
-    churned: { label: 'Churned', className: 'bg-gray-500/15 text-gray-400 border-gray-500/20' },
+    trial: {
+      label: 'Trial',
+      cls: '',
+      style: {
+        background: 'color-mix(in srgb, var(--gg-amber) 18%, transparent)',
+        color: 'var(--gg-amber)',
+        borderColor: 'color-mix(in srgb, var(--gg-amber) 30%, transparent)',
+      },
+    },
+    prospect: { label: 'Prospect', cls: 'bg-amber-500/15 text-amber-400 border-amber-500/20' },
+    inactive: { label: 'Inactive', cls: 'bg-red-500/15 text-red-400 border-red-500/20' },
+    churned: { label: 'Churned', cls: 'bg-gray-500/15 text-gray-400 border-gray-500/20' },
   }
-  const c = config[status] || config.prospect
+  const c = map[status] || { label: status, cls: 'bg-gray-500/15 text-gray-400 border-gray-500/20' }
   return (
-    <Badge variant="outline" className={`text-xs ${c.className}`} style={c.style}>
+    <Badge variant="outline" className={`text-xs ${c.cls}`} style={c.style}>
       {c.label}
     </Badge>
   )
 }
 
-// ============================================
-// Activity icon helper
-// ============================================
-function ActivityIcon({ type }: { type: string }) {
-  const icons: Record<string, React.ReactNode> = {
-    call: <PhoneCall className="h-4 w-4 text-blue-400" />,
-    email: <Mail className="h-4 w-4" style={{ color: 'var(--gg-vermillion)' }} />,
-    meeting: <Calendar className="h-4 w-4 text-purple-400" />,
-    note: <FileText className="h-4 w-4 text-amber-400" />,
-    deal_update: <TrendingUp className="h-4 w-4 text-cyan-400" />,
+function ErpBadge({ erp }: { erp: ClientListItem['erpSystem'] }) {
+  if (!erp) {
+    return (
+      <Badge variant="outline" className="text-xs bg-white/5 text-gray-500" style={{ borderColor: 'var(--gg-separator)' }}>
+        no ERP
+      </Badge>
+    )
   }
-  return <>{icons[type] || <MessageSquare className="h-4 w-4 text-gray-400" />}</>
+  return (
+    <Badge
+      variant="outline"
+      className="text-xs"
+      style={{
+        background: `color-mix(in srgb, ${erp.color || 'var(--gg-vermillion)'} 15%, transparent)`,
+        color: erp.color || 'var(--gg-vermillion)',
+        borderColor: `color-mix(in srgb, ${erp.color || 'var(--gg-vermillion)'} 30%, transparent)`,
+      }}
+    >
+      {erp.slug}
+    </Badge>
+  )
 }
 
-// ============================================
-// Deal stage badge
-// ============================================
 function DealStageBadge({ stage }: { stage: string }) {
-  const config: Record<string, { label: string; className: string; style?: React.CSSProperties }> = {
-    lead: { label: 'Lead', className: 'bg-gray-500/15 text-gray-300 border-gray-500/20' },
-    qualified: { label: 'Qualified', className: 'bg-blue-500/15 text-blue-400 border-blue-500/20' },
-    proposal: { label: 'Proposal', className: 'bg-purple-500/15 text-purple-400 border-purple-500/20' },
-    negotiation: { label: 'Negotiation', className: 'bg-amber-500/15 text-amber-400 border-amber-500/20' },
-    closed_won: {
-      label: 'Won',
-      className: '',
-      style: {
-        background: 'color-mix(in srgb, var(--gg-vermillion) 15%, transparent)',
-        color: 'var(--gg-vermillion)',
-        borderColor: 'color-mix(in srgb, var(--gg-vermillion) 20%, transparent)',
-      },
-    },
-    closed_lost: { label: 'Lost', className: 'bg-red-500/15 text-red-400 border-red-500/20' },
+  const map: Record<string, { label: string; cls: string }> = {
+    lead: { label: 'Lead', cls: 'bg-gray-500/15 text-gray-300 border-gray-500/20' },
+    qualified: { label: 'Qualified', cls: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20' },
+    proposal: { label: 'Proposal', cls: 'bg-purple-500/15 text-purple-400 border-purple-500/20' },
+    negotiation: { label: 'Negotiation', cls: 'bg-amber-500/15 text-amber-400 border-amber-500/20' },
+    closed_won: { label: 'Won', cls: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' },
+    closed_lost: { label: 'Lost', cls: 'bg-red-500/15 text-red-400 border-red-500/20' },
   }
-  const c = config[stage] || config.lead
+  const c = map[stage] || { label: stage, cls: 'bg-gray-500/15 text-gray-300 border-gray-500/20' }
   return (
-    <Badge variant="outline" className={`text-xs ${c.className}`} style={c.style}>
+    <Badge variant="outline" className={`text-xs ${c.cls}`}>
       {c.label}
     </Badge>
   )
 }
 
-// ============================================
-// Client form data
-// ============================================
-interface ClientFormData {
-  name: string
+function LicenseStatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    active: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+    suspended: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+    revoked: 'bg-red-500/15 text-red-400 border-red-500/20',
+    expired: 'bg-gray-500/15 text-gray-400 border-gray-500/20',
+  }
+  return (
+    <Badge variant="outline" className={`text-xs ${map[status] || 'bg-gray-500/15 text-gray-400 border-gray-500/20'}`}>
+      {status}
+    </Badge>
+  )
+}
+
+function SubStatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    active: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+    trial: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+    past_due: 'bg-red-500/15 text-red-400 border-red-500/20',
+    cancelled: 'bg-gray-500/15 text-gray-400 border-gray-500/20',
+    expired: 'bg-gray-500/15 text-gray-400 border-gray-500/20',
+  }
+  return (
+    <Badge variant="outline" className={`text-xs ${map[status] || 'bg-gray-500/15 text-gray-400 border-gray-500/20'}`}>
+      {status}
+    </Badge>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────
+// New Client Form
+// ──────────────────────────────────────────────────────────────
+interface NewClientForm {
+  companyName: string
+  contactPerson: string
   email: string
   phone: string
-  company: string
-  address: string
-  city: string
-  state: string
-  country: string
-  zipCode: string
-  website: string
   industry: string
   status: string
-  notes: string
+  erpSlug: string
 }
 
-const emptyClientForm: ClientFormData = {
-  name: '',
+const emptyForm: NewClientForm = {
+  companyName: '',
+  contactPerson: '',
   email: '',
   phone: '',
-  company: '',
-  address: '',
-  city: '',
-  state: '',
-  country: '',
-  zipCode: '',
-  website: '',
   industry: '',
-  status: 'prospect',
-  notes: '',
+  status: 'trial',
+  erpSlug: '',
 }
 
-// ============================================
-// Main Component
-// ============================================
+// ──────────────────────────────────────────────────────────────
+// Main component
+// ──────────────────────────────────────────────────────────────
 export default function AdminClientsPage() {
-  // State
-  const [clients, setClients] = useState<ClientData[]>([])
+  const [clients, setClients] = useState<ClientListItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [erpFilter, setErpFilter] = useState('all')
+  const [sort, setSort] = useState<'createdAt' | 'companyName' | 'status'>('createdAt')
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc')
 
-  // View state
-  const [selectedClient, setSelectedClient] = useState<ClientData | null>(null)
+  const [erpOptions, setErpOptions] = useState<ErpOption[]>([])
+  const [erpBreakdown, setErpBreakdown] = useState<ErpBreakdown[]>([])
+  const [stats, setStats] = useState({ total: 0, active: 0, prospect: 0, churned: 0, inactive: 0 })
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 })
+  const [page, setPage] = useState(1)
+
+  // Detail drawer state
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<ClientDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
-  // Dialog state
-  const [clientDialogOpen, setClientDialogOpen] = useState(false)
-  const [editingClient, setEditingClient] = useState<ClientData | null>(null)
-  const [clientForm, setClientForm] = useState<ClientFormData>(emptyClientForm)
+  // New Client dialog
+  const [newDialogOpen, setNewDialogOpen] = useState(false)
+  const [newForm, setNewForm] = useState<NewClientForm>(emptyForm)
   const [submitting, setSubmitting] = useState(false)
 
-  // Delete dialog
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [deletingClient, setDeletingClient] = useState<ClientData | null>(null)
+  // Debounced search
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
 
-  // Contact dialog
-  const [contactDialogOpen, setContactDialogOpen] = useState(false)
-  const [contactForm, setContactForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    role: '',
-    isPrimary: false,
-    notes: '',
-  })
+  // ── Fetch list ──
+  const fetchClients = useCallback(
+    async (silent = false) => {
+      try {
+        if (silent) setRefreshing(true)
+        else setLoading(true)
+        const params = new URLSearchParams()
+        if (debouncedSearch) params.set('search', debouncedSearch)
+        if (statusFilter !== 'all') params.set('status', statusFilter)
+        if (erpFilter !== 'all') params.set('erpSlug', erpFilter)
+        params.set('sort', sort)
+        params.set('order', order)
+        params.set('page', String(page))
+        params.set('pageSize', '25')
 
-  // Activity dialog
-  const [activityDialogOpen, setActivityDialogOpen] = useState(false)
-  const [activityForm, setActivityForm] = useState({
-    type: 'note',
-    subject: '',
-    notes: '',
-  })
-
-  // Contact delete
-  const [deleteContactDialogOpen, setDeleteContactDialogOpen] = useState(false)
-  const [deletingContactId, setDeletingContactId] = useState<string | null>(null)
-
-  // ============================================
-  // Fetch clients
-  // ============================================
-  const fetchClients = useCallback(async () => {
-    try {
-      setLoading(true)
-      const params = new URLSearchParams()
-      if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter)
-      if (search) params.set('search', search)
-      params.set('pageSize', '100')
-
-      const res = await fetch(`/api/clients?${params.toString()}`)
-      if (res.ok) {
-        const json = await res.json()
-        // Normalize alias fields: the canonical API writes contactPerson/companyName,
-        // while legacy/catch-all routes + this UI read name/company. Fall back so the
-        // table (client.name.charAt(0), client.company) never crashes on null.
-        setClients(
-          (json.data || []).map((c: any) => ({
-            ...c,
-            name: c.name || c.contactPerson || '',
-            company: c.company || c.companyName || '',
-          }))
-        )
+        const res = await fetch(`/api/admin/clients?${params.toString()}`)
+        if (res.ok) {
+          const json: ClientListResponse = await res.json()
+          setClients(json.data || [])
+          setPagination(json.pagination)
+          setStats(json.stats)
+          setErpOptions(json.erpSystems || [])
+          setErpBreakdown(json.erpBreakdown || [])
+        } else {
+          if (!silent) toast.error('Failed to load clients')
+        }
+      } catch {
+        if (!silent) toast.error('Failed to load clients')
+      } finally {
+        setLoading(false)
+        setRefreshing(false)
       }
-    } catch {
-      toast.error('Failed to load clients')
-    } finally {
-      setLoading(false)
-    }
-  }, [search, statusFilter])
+    },
+    [debouncedSearch, statusFilter, erpFilter, sort, order, page]
+  )
 
   useEffect(() => {
-    fetchClients()
+    fetchClients(false)
   }, [fetchClients])
 
-  // ============================================
-  // Fetch client detail
-  // ============================================
-  const fetchClientDetail = async (id: string) => {
+  // Reset to page 1 when filters/sort change.
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, statusFilter, erpFilter, sort, order])
+
+  // ── Fetch detail ──
+  const fetchDetail = useCallback(async (id: string) => {
     try {
       setDetailLoading(true)
-      const res = await fetch(`/api/clients/${id}`)
+      const res = await fetch(`/api/admin/clients/${id}`)
       if (res.ok) {
         const json = await res.json()
-        setSelectedClient(json.data)
+        setDetail(json.data)
       } else {
         toast.error('Failed to load client details')
       }
@@ -349,324 +465,166 @@ export default function AdminClientsPage() {
     } finally {
       setDetailLoading(false)
     }
-  }
+  }, [])
 
-  // ============================================
-  // Client CRUD
-  // ============================================
-  const openCreateDialog = () => {
-    setEditingClient(null)
-    setClientForm(emptyClientForm)
-    setClientDialogOpen(true)
-  }
+  useEffect(() => {
+    if (selectedId) fetchDetail(selectedId)
+    else setDetail(null)
+  }, [selectedId, fetchDetail])
 
-  const openEditDialog = (client: ClientData) => {
-    setEditingClient(client)
-    setClientForm({
-      name: client.name,
-      email: client.email || '',
-      phone: client.phone || '',
-      company: client.company || '',
-      address: client.address || '',
-      city: client.city || '',
-      state: client.state || '',
-      country: client.country || '',
-      zipCode: client.zipCode || '',
-      website: client.website || '',
-      industry: client.industry || '',
-      status: client.status,
-      notes: client.notes || '',
-    })
-    setClientDialogOpen(true)
-  }
-
-  const handleClientSubmit = async () => {
-    if (!clientForm.name.trim()) {
-      toast.error('Client name is required')
+  // ── Sync Now ──
+  const handleSyncNow = async () => {
+    if (!detail?.erpSlug) {
+      toast.error('This client has no linked ERP — cannot sync')
       return
     }
-
     try {
-      setSubmitting(true)
-
-      if (editingClient) {
-        // Update
-        const res = await fetch(`/api/clients/${editingClient.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(clientForm),
-        })
-        if (res.ok) {
-          toast.success('Client updated successfully')
-          setClientDialogOpen(false)
-          fetchClients()
-          if (selectedClient?.id === editingClient.id) {
-            fetchClientDetail(editingClient.id)
-          }
-        } else {
-          const json = await res.json()
-          toast.error(json.error || 'Failed to update client')
-        }
-      } else {
-        // Create
-        const res = await fetch('/api/clients', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(clientForm),
-        })
-        if (res.ok) {
-          toast.success('Client created successfully')
-          setClientDialogOpen(false)
-          fetchClients()
-        } else {
-          const json = await res.json()
-          toast.error(json.error || 'Failed to create client')
-        }
-      }
-    } catch {
-      toast.error('An error occurred')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleDeleteClient = async () => {
-    if (!deletingClient) return
-    try {
-      const res = await fetch(`/api/clients/${deletingClient.id}`, { method: 'DELETE' })
-      if (res.ok) {
-        toast.success('Client deleted successfully')
-        setDeleteDialogOpen(false)
-        setDeletingClient(null)
-        if (selectedClient?.id === deletingClient.id) {
-          setSelectedClient(null)
-        }
-        fetchClients()
-      } else {
-        toast.error('Failed to delete client')
-      }
-    } catch {
-      toast.error('An error occurred')
-    }
-  }
-
-  // ============================================
-  // Bulk operations
-  // ============================================
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const allSelected = clients.length > 0 && selectedIds.size === clients.length
-  const selectAll = () => {
-    if (allSelected) setSelectedIds(new Set())
-    else setSelectedIds(new Set(clients.map((c) => c.id)))
-  }
-
-  const clearSelection = () => setSelectedIds(new Set())
-
-  const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return
-    if (!confirm(`Delete ${selectedIds.size} client(s)? This cannot be undone.`)) return
-    try {
-      const results = await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          fetch(`/api/clients/${id}`, { method: 'DELETE' }).then((r) => r.ok)
-        )
-      )
-      const ok = results.filter(Boolean).length
-      const fail = results.length - ok
-      if (fail === 0) toast.success(`Deleted ${ok} client(s)`)
-      else toast.warning(`Deleted ${ok}, ${fail} failed`)
-      if (selectedClient && selectedIds.has(selectedClient.id)) setSelectedClient(null)
-      clearSelection()
-      fetchClients()
-    } catch {
-      toast.error('Bulk delete failed')
-    }
-  }
-
-  const exportClientsCSV = () => {
-    const selected = clients.filter((c) => selectedIds.has(c.id))
-    const rows = selected.length > 0 ? selected : clients
-    const header = ['Name', 'Email', 'Company', 'Status', 'Industry', 'Phone', 'City', 'Country', 'CreatedAt']
-    const lines = rows.map((c) =>
-      [c.name, c.email, c.company, c.status, c.industry, c.phone, c.city, c.country, c.createdAt]
-        .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
-        .join(',')
-    )
-    const csv = [header.join(','), ...lines].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `apexflow-clients-${Date.now()}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-    toast.success(`Exported ${rows.length} client(s) to CSV`)
-  }
-
-  // ============================================
-  // Contact CRUD
-  // ============================================
-  const handleAddContact = async () => {
-    if (!selectedClient || !contactForm.name.trim()) {
-      toast.error('Contact name is required')
-      return
-    }
-
-    try {
-      setSubmitting(true)
-      const res = await fetch(`/api/clients/${selectedClient.id}/contacts`, {
+      setSyncing(true)
+      const res = await fetch('/api/admin/sync-control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contactForm),
+        body: JSON.stringify({ action: 'trigger', erpSlug: detail.erpSlug }),
       })
-      if (res.ok) {
-        toast.success('Contact added successfully')
-        setContactDialogOpen(false)
-        setContactForm({ name: '', email: '', phone: '', role: '', isPrimary: false, notes: '' })
-        fetchClientDetail(selectedClient.id)
+      const json = await res.json()
+      if (res.ok && json.success !== false) {
+        toast.success(json.message || `Sync completed for ${detail.erpSlug}`)
       } else {
-        toast.error('Failed to add contact')
+        toast.error(json.error || 'Sync failed')
       }
     } catch {
-      toast.error('An error occurred')
+      toast.error('Sync request failed')
     } finally {
-      setSubmitting(false)
+      setSyncing(false)
     }
   }
 
-  const handleDeleteContact = async () => {
-    if (!selectedClient || !deletingContactId) return
-    try {
-      const res = await fetch(
-        `/api/clients/${selectedClient.id}/contacts?contactId=${deletingContactId}`,
-        { method: 'DELETE' }
-      )
-      if (res.ok) {
-        toast.success('Contact deleted')
-        setDeleteContactDialogOpen(false)
-        setDeletingContactId(null)
-        fetchClientDetail(selectedClient.id)
-      } else {
-        toast.error('Failed to delete contact')
-      }
-    } catch {
-      toast.error('An error occurred')
-    }
-  }
-
-  // ============================================
-  // Activity CRUD
-  // ============================================
-  const handleAddActivity = async () => {
-    if (!selectedClient || !activityForm.subject.trim()) {
-      toast.error('Subject is required')
+  // ── New Client submit ──
+  const handleNewClient = async () => {
+    if (!newForm.companyName.trim() || !newForm.contactPerson.trim() || !newForm.email.trim()) {
+      toast.error('Company name, contact person, and email are required')
       return
     }
-
     try {
       setSubmitting(true)
-      const res = await fetch(`/api/clients/${selectedClient.id}/activities`, {
+      const res = await fetch('/api/admin/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(activityForm),
+        body: JSON.stringify({
+          companyName: newForm.companyName,
+          contactPerson: newForm.contactPerson,
+          email: newForm.email,
+          phone: newForm.phone,
+          industry: newForm.industry,
+          status: newForm.status,
+          erpSlug: newForm.erpSlug || undefined,
+        }),
       })
-      if (res.ok) {
-        toast.success('Activity added successfully')
-        setActivityDialogOpen(false)
-        setActivityForm({ type: 'note', subject: '', notes: '' })
-        fetchClientDetail(selectedClient.id)
+      const json = await res.json()
+      if (res.ok && json.success !== false) {
+        toast.success('Client created successfully')
+        setNewDialogOpen(false)
+        setNewForm(emptyForm)
+        fetchClients(true)
       } else {
-        toast.error('Failed to add activity')
+        toast.error(json.error || 'Failed to create client')
       }
     } catch {
-      toast.error('An error occurred')
+      toast.error('Failed to create client')
     } finally {
       setSubmitting(false)
     }
   }
 
-  // ============================================
-  // Format date
-  // ============================================
-  const formatDate = (dateStr: string) => {
-    try {
-      return new Date(dateStr).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    } catch {
-      return dateStr
+  const sortedErpOptions = useMemo(() => {
+    return erpOptions.map((o) => ({
+      ...o,
+      count: erpBreakdown.find((b) => b.slug === o.slug)?.count || 0,
+    }))
+  }, [erpOptions, erpBreakdown])
+
+  const toggleSort = (col: 'createdAt' | 'companyName' | 'status') => {
+    if (sort === col) setOrder(order === 'asc' ? 'desc' : 'asc')
+    else {
+      setSort(col)
+      setOrder('desc')
     }
   }
 
-  const formatDateTime = (dateStr: string) => {
-    try {
-      return new Date(dateStr).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    } catch {
-      return dateStr
-    }
-  }
-
-  // ============================================
-  // Render: Loading skeletons
-  // ============================================
-  const renderSkeletons = () => (
-    <div className="space-y-3">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 p-4 rounded-lg bg-white/[0.02]">
-          <Skeleton className="h-10 w-10 rounded-full bg-white/5" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-40 bg-white/5" />
-            <Skeleton className="h-3 w-56 bg-white/5" />
-          </div>
-          <Skeleton className="h-6 w-20 bg-white/5" />
-        </div>
-      ))}
-    </div>
-  )
-
-  // ============================================
-  // RENDER: Client List View
-  // ============================================
-  const renderClientList = () => (
+  return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Clients</h2>
-          <p className="text-muted-foreground mt-1">Manage your client relationships and CRM</p>
+          <p className="text-muted-foreground mt-1">
+            Manage your client relationships, deals, licenses and ERP syncs
+          </p>
         </div>
-        <Button
-          onClick={openCreateDialog}
-          className="hover:opacity-90 text-white"
-          style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Client
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchClients(true)}
+            disabled={refreshing}
+            className="text-foreground"
+            style={{ borderColor: 'var(--gg-separator)', background: 'var(--secondary)' }}
+          >
+            <RefreshCw className={`h-4 w-4 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </Button>
+          <Button
+            onClick={() => {
+              setNewForm(emptyForm)
+              setNewDialogOpen(true)
+            }}
+            className="hover:opacity-90 text-white"
+            style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Client
+          </Button>
+        </div>
       </div>
 
-      {/* Search & Filter */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Total Clients', value: stats.total, icon: Users, accent: true },
+          { label: 'Active', value: stats.active, icon: ShieldCheck, color: 'text-emerald-400' },
+          { label: 'Prospects', value: stats.prospect, icon: TrendingUp, color: 'text-amber-400' },
+          { label: 'Churned', value: stats.churned, icon: Building2, color: 'text-gray-400' },
+        ].map((s) => (
+          <Card
+            key={s.label}
+            style={{
+              background: 'var(--card)',
+              borderColor: 'var(--gg-separator)',
+              boxShadow: 'var(--gg-shadow-card)',
+            }}
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="rounded-lg bg-white/5 p-2">
+                {s.accent ? (
+                  <s.icon className="h-4 w-4" style={{ color: 'var(--gg-vermillion)' }} />
+                ) : (
+                  <s.icon className={`h-4 w-4 ${s.color}`} />
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className="text-lg font-bold text-foreground">{s.value}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex flex-col lg:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
           <Input
-            placeholder="Search clients by name, email, company..."
+            placeholder="Search by company, contact, email or phone…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10 text-foreground placeholder:text-gray-500"
@@ -674,1070 +632,727 @@ export default function AdminClientsPage() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger
-            className="w-full sm:w-44 text-foreground"
-            style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
-          >
-            <SelectValue placeholder="Filter status" />
+          <SelectTrigger className="w-full lg:w-44 text-foreground" style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}>
+            <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
+            <SelectItem value="trial">Trial</SelectItem>
             <SelectItem value="prospect">Prospect</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
             <SelectItem value="churned">Churned</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={erpFilter} onValueChange={setErpFilter}>
+          <SelectTrigger className="w-full lg:w-56 text-foreground" style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}>
+            <SelectValue placeholder="All ERPs" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All ERPs</SelectItem>
+            {sortedErpOptions.map((e) => (
+              <SelectItem key={e.id} value={e.slug}>
+                {e.name} ({e.count})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
+          <SelectTrigger className="w-full lg:w-40 text-foreground" style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}>
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="createdAt">Created Date</SelectItem>
+            <SelectItem value="companyName">Company Name</SelectItem>
+            <SelectItem value="status">Status</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setOrder(order === 'asc' ? 'desc' : 'asc')}
+          className="text-foreground"
+          style={{ borderColor: 'var(--gg-separator)', background: 'var(--card)' }}
+        >
+          <ArrowUpDown className="h-4 w-4 mr-1.5" />
+          {order === 'asc' ? 'Asc' : 'Desc'}
+        </Button>
       </div>
 
-      {/* Bulk action bar */}
-      {selectedIds.size > 0 && (
-        <div
-          className="flex items-center justify-between gap-3 p-3 rounded-xl border flex-wrap"
-          style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}
-        >
-          <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={exportClientsCSV} className="text-foreground">
-              <Download className="h-4 w-4 mr-1.5" />
-              Export CSV
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleBulkDelete}
-              className="text-red-400 border-red-500/30 hover:bg-red-500/10 hover:text-red-300"
-            >
-              <Trash2 className="h-4 w-4 mr-1.5" />
-              Delete
-            </Button>
-            <Button variant="ghost" size="sm" onClick={clearSelection} className="text-muted-foreground">
-              Clear
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Client Table / Cards */}
+      {/* Table */}
       <Card
         style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
       >
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-4">{renderSkeletons()}</div>
+            <div className="p-4 space-y-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 p-3 rounded-lg bg-white/[0.02]">
+                  <Skeleton className="h-10 w-10 rounded-full bg-white/5" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/3 bg-white/5" />
+                    <Skeleton className="h-3 w-1/2 bg-white/5" />
+                  </div>
+                  <Skeleton className="h-6 w-16 bg-white/5" />
+                </div>
+              ))}
+            </div>
           ) : clients.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Users className="h-12 w-12 text-gray-600 mb-4" />
-              {search ? (
+              {debouncedSearch || statusFilter !== 'all' || erpFilter !== 'all' ? (
                 <>
-                  <p className="text-muted-foreground text-lg font-medium">No results for “{search}”</p>
-                  <p className="text-gray-500 text-sm mt-1">No clients match your search</p>
-                  <Button variant="outline" onClick={() => setSearch('')} className="mt-4 text-foreground">
-                    Clear search
-                  </Button>
-                </>
-              ) : statusFilter !== 'all' ? (
-                <>
-                  <p className="text-muted-foreground text-lg font-medium">No {statusFilter} clients</p>
-                  <p className="text-gray-500 text-sm mt-1">No clients match this status filter</p>
-                  <Button variant="outline" onClick={() => setStatusFilter('all')} className="mt-4 text-foreground">
-                    Clear filter
+                  <p className="text-muted-foreground text-lg font-medium">No matching clients</p>
+                  <p className="text-gray-500 text-sm mt-1">Try adjusting your filters</p>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearch('')
+                      setStatusFilter('all')
+                      setErpFilter('all')
+                    }}
+                    className="mt-4 text-foreground"
+                    style={{ borderColor: 'var(--gg-separator)' }}
+                  >
+                    Clear filters
                   </Button>
                 </>
               ) : (
                 <>
                   <p className="text-muted-foreground text-lg font-medium">No clients yet</p>
-                  <p className="text-gray-500 text-sm mt-1">Get started by adding your first client</p>
+                  <p className="text-gray-500 text-sm mt-1">Get started by creating your first client</p>
                   <Button
-                    onClick={openCreateDialog}
+                    onClick={() => setNewDialogOpen(true)}
                     className="mt-4 hover:opacity-90 text-white"
                     style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Client
+                    New Client
                   </Button>
                 </>
               )}
             </div>
           ) : (
-            <>
-              {/* Desktop Table */}
-              <div className="hidden md:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow
-                      className="hover:bg-transparent"
-                      style={{ borderColor: 'var(--gg-separator)' }}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent" style={{ borderColor: 'var(--gg-separator)' }}>
+                    <TableHead
+                      className="text-muted-foreground font-medium cursor-pointer select-none hover:text-foreground"
+                      onClick={() => toggleSort('companyName')}
                     >
-                      <TableHead className="w-10">
-                        <Checkbox
-                          checked={allSelected}
-                          onCheckedChange={selectAll}
-                          aria-label="Select all clients"
-                        />
-                      </TableHead>
-                      <TableHead className="text-muted-foreground font-medium">Name</TableHead>
-                      <TableHead className="text-muted-foreground font-medium">Email</TableHead>
-                      <TableHead className="text-muted-foreground font-medium">Company</TableHead>
-                      <TableHead className="text-muted-foreground font-medium">Status</TableHead>
-                      <TableHead className="text-muted-foreground font-medium">Industry</TableHead>
-                      <TableHead className="text-muted-foreground font-medium">Created</TableHead>
-                      <TableHead className="w-8"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {clients.map((client) => (
-                      <TableRow
-                        key={client.id}
-                        className="hover:bg-white/[0.03] cursor-pointer"
-                        style={{ borderColor: 'var(--gg-separator)' }}
-                        onClick={() => fetchClientDetail(client.id)}
-                      >
-                        <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
-                          <Checkbox
-                            checked={selectedIds.has(client.id)}
-                            onCheckedChange={() => toggleSelect(client.id)}
-                            aria-label={`Select ${client.name}`}
-                          />
-                        </TableCell>
-                        <TableCell className="font-medium text-foreground">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className="h-8 w-8 rounded-full flex items-center justify-center"
-                              style={{ background: 'color-mix(in srgb, var(--gg-vermillion) 10%, transparent)' }}
-                            >
-                              <span
-                                className="text-sm font-semibold"
-                                style={{ color: 'var(--gg-vermillion)' }}
-                              >
-                                {client.name.charAt(0).toUpperCase()}
-                              </span>
-                            </div>
-                            {client.name}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{client.email || '—'}</TableCell>
-                        <TableCell className="text-muted-foreground">{client.company || '—'}</TableCell>
-                        <TableCell><StatusBadge status={client.status} /></TableCell>
-                        <TableCell className="text-muted-foreground">{client.industry || '—'}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatDate(client.createdAt)}</TableCell>
-                        <TableCell>
-                          <ChevronRight className="h-4 w-4 text-gray-600" />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Mobile Cards */}
-              <div className="md:hidden divide-y divide-[var(--gg-separator)]">
-                {clients.map((client) => (
-                  <div
-                    key={client.id}
-                    className="p-4 hover:bg-white/[0.03] cursor-pointer"
-                    onClick={() => fetchClientDetail(client.id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span onClick={(e) => e.stopPropagation()} className="inline-flex">
-                          <Checkbox
-                            checked={selectedIds.has(client.id)}
-                            onCheckedChange={() => toggleSelect(client.id)}
-                            aria-label={`Select ${client.name}`}
-                          />
-                        </span>
-                        <div
-                          className="h-10 w-10 rounded-full flex items-center justify-center"
-                          style={{ background: 'color-mix(in srgb, var(--gg-vermillion) 10%, transparent)' }}
-                        >
-                          <span
-                            className="font-semibold"
-                            style={{ color: 'var(--gg-vermillion)' }}
+                      <span className="inline-flex items-center gap-1">
+                        Company
+                        {sort === 'companyName' && <ArrowUpDown className="h-3 w-3" />}
+                      </span>
+                    </TableHead>
+                    <TableHead className="text-muted-foreground font-medium">Contact</TableHead>
+                    <TableHead className="text-muted-foreground font-medium">Email / Phone</TableHead>
+                    <TableHead className="text-muted-foreground font-medium">ERP</TableHead>
+                    <TableHead
+                      className="text-muted-foreground font-medium cursor-pointer select-none hover:text-foreground"
+                      onClick={() => toggleSort('status')}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        Status
+                        {sort === 'status' && <ArrowUpDown className="h-3 w-3" />}
+                      </span>
+                    </TableHead>
+                    <TableHead className="text-muted-foreground font-medium text-center">Deals</TableHead>
+                    <TableHead className="text-muted-foreground font-medium text-center">Licenses</TableHead>
+                    <TableHead className="text-muted-foreground font-medium text-center">Active Subs</TableHead>
+                    <TableHead
+                      className="text-muted-foreground font-medium cursor-pointer select-none hover:text-foreground"
+                      onClick={() => toggleSort('createdAt')}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        Created
+                        {sort === 'createdAt' && <ArrowUpDown className="h-3 w-3" />}
+                      </span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {clients.map((c) => (
+                    <TableRow
+                      key={c.id}
+                      className="hover:bg-white/[0.03] cursor-pointer"
+                      style={{ borderColor: 'var(--gg-separator)' }}
+                      onClick={() => setSelectedId(c.id)}
+                    >
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-3 min-w-[180px]">
+                          <div
+                            className="h-8 w-8 rounded-full flex items-center justify-center shrink-0"
+                            style={{ background: 'color-mix(in srgb, var(--gg-vermillion) 10%, transparent)' }}
                           >
-                            {client.name.charAt(0).toUpperCase()}
-                          </span>
+                            <span
+                              className="text-sm font-semibold"
+                              style={{ color: 'var(--gg-vermillion)' }}
+                            >
+                              {c.companyName.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-foreground truncate">{c.companyName}</p>
+                            {c.industry && (
+                              <p className="text-xs text-gray-500 truncate">{c.industry}</p>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-foreground font-medium">{client.name}</p>
-                          <p className="text-muted-foreground text-sm">{client.company || client.email || '—'}</p>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{c.contactPerson || '—'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          {c.email && (
+                            <span className="text-xs text-muted-foreground truncate max-w-[180px]">{c.email}</span>
+                          )}
+                          {c.phone && (
+                            <span className="text-xs text-gray-500 truncate max-w-[180px]">{c.phone}</span>
+                          )}
+                          {!c.email && !c.phone && <span className="text-gray-600">—</span>}
                         </div>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-gray-600" />
-                    </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <StatusBadge status={client.status} />
-                      {client.industry && (
-                        <span className="text-xs text-gray-500">{client.industry}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
+                      </TableCell>
+                      <TableCell><ErpBadge erp={c.erpSystem} /></TableCell>
+                      <TableCell><StatusBadge status={c.status} /></TableCell>
+                      <TableCell className="text-center">
+                        <span className={`text-xs font-medium ${c.dealCount > 0 ? 'text-foreground' : 'text-gray-600'}`}>
+                          {c.dealCount}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={`text-xs font-medium ${c.licenseCount > 0 ? 'text-foreground' : 'text-gray-600'}`}>
+                          {c.licenseCount}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={`text-xs font-medium ${c.activeSubscriptionCount > 0 ? 'text-emerald-400' : 'text-gray-600'}`}>
+                          {c.activeSubscriptionCount}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-xs">{formatDate(c.createdAt)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
-    </div>
-  )
 
-  // ============================================
-  // RENDER: Client Detail View
-  // ============================================
-  const renderClientDetail = () => {
-    if (!selectedClient) return null
-
-    return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelectedClient(null)}
-            className="text-muted-foreground hover:text-foreground hover:bg-white/5"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back
-          </Button>
+      {/* Pagination */}
+      {!loading && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>
+            Showing {(pagination.page - 1) * pagination.pageSize + 1}–
+            {Math.min(pagination.page * pagination.pageSize, pagination.total)} of {pagination.total}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pagination.page === 1}
+              onClick={() => {
+                const next = Math.max(1, pagination.page - 1)
+                setPage(next)
+              }}
+              className="text-foreground"
+              style={{ borderColor: 'var(--gg-separator)' }}
+            >
+              Previous
+            </Button>
+            <span className="py-1 px-2 text-foreground">
+              {pagination.page} / {pagination.totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pagination.page >= pagination.totalPages}
+              onClick={() => {
+                const next = Math.min(pagination.totalPages, pagination.page + 1)
+                setPage(next)
+              }}
+              className="text-foreground"
+              style={{ borderColor: 'var(--gg-separator)' }}
+            >
+              Next
+            </Button>
+          </div>
         </div>
+      )}
 
-        {/* Client Info Card */}
-        <Card
-          style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
+      {/* Detail drawer */}
+      <Sheet open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)}>
+        <SheetContent
+          side="right"
+          className="w-full sm:!max-w-2xl flex flex-col p-0"
+          style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }}
         >
-          <CardHeader className="pb-4">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-              <div className="flex items-start gap-4">
-                <div
-                  className="h-14 w-14 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ background: 'color-mix(in srgb, var(--gg-vermillion) 10%, transparent)' }}
-                >
-                  <span
-                    className="text-xl font-bold"
-                    style={{ color: 'var(--gg-vermillion)' }}
-                  >
-                    {selectedClient.name.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <div>
-                  <CardTitle className="text-foreground text-xl">{selectedClient.name}</CardTitle>
-                  <div className="flex items-center gap-2 mt-1">
-                    <StatusBadge status={selectedClient.status} />
-                    {selectedClient.industry && (
-                      <Badge
-                        variant="outline"
-                        className="text-xs bg-white/5 text-gray-300"
-                        style={{ borderColor: 'var(--gg-separator)' }}
-                      >
-                        {selectedClient.industry}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openEditDialog(selectedClient)}
-                  style={{ borderColor: 'var(--gg-separator)' }}
-                  className="text-foreground hover:bg-white/5"
-                >
-                  <Edit2 className="h-4 w-4 mr-1" />
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setDeletingClient(selectedClient)
-                    setDeleteDialogOpen(true)
-                  }}
-                  className="border-red-500/20 text-red-400 hover:bg-red-500/10"
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Delete
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {selectedClient.email && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Mail className="h-4 w-4 text-gray-500" />
-                  <span className="text-muted-foreground">{selectedClient.email}</span>
-                </div>
-              )}
-              {selectedClient.phone && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Phone className="h-4 w-4 text-gray-500" />
-                  <span className="text-muted-foreground">{selectedClient.phone}</span>
-                </div>
-              )}
-              {selectedClient.company && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Building2 className="h-4 w-4 text-gray-500" />
-                  <span className="text-muted-foreground">{selectedClient.company}</span>
-                </div>
-              )}
-              {selectedClient.website && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Globe className="h-4 w-4 text-gray-500" />
-                  <span className="text-muted-foreground">{selectedClient.website}</span>
-                </div>
-              )}
-              {(selectedClient.city || selectedClient.state || selectedClient.country) && (
-                <div className="flex items-center gap-2 text-sm">
-                  <MapPin className="h-4 w-4 text-gray-500" />
-                  <span className="text-muted-foreground">
-                    {[selectedClient.city, selectedClient.state, selectedClient.country].filter(Boolean).join(', ')}
-                  </span>
-                </div>
-              )}
-              {selectedClient.createdAt && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="h-4 w-4 text-gray-500" />
-                  <span className="text-muted-foreground">Created {formatDate(selectedClient.createdAt)}</span>
-                </div>
-              )}
-            </div>
-            {selectedClient.notes && (
-              <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--gg-separator)' }}>
-                <p className="text-xs text-gray-500 mb-1">Notes</p>
-                <p className="text-sm text-gray-300">{selectedClient.notes}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Deals', value: selectedClient._count?.deals ?? 0, icon: TrendingUp, color: 'text-cyan-400' },
-            { label: 'Invoices', value: selectedClient._count?.invoices ?? 0, icon: FileText, color: 'text-amber-400' },
-            { label: 'Payments', value: selectedClient._count?.payments ?? 0, icon: CheckCircle2, ggColor: true },
-            { label: 'Contacts', value: selectedClient.contacts?.length ?? 0, icon: Users, color: 'text-purple-400' },
-          ].map((stat) => (
-            <Card
-              key={stat.label}
-              style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
-            >
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className={`rounded-lg bg-white/5 p-2 ${stat.ggColor ? '' : stat.color}`}>
-                  <stat.icon
-                    className="h-4 w-4"
-                    {...(stat.ggColor ? { style: { color: 'var(--gg-vermillion)' } } : {})}
-                  />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">{stat.label}</p>
-                  <p className="text-lg font-bold text-foreground">{stat.value}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Tabs */}
-        <Tabs defaultValue="contacts" className="space-y-4">
-          <TabsList
-            style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
-            className="border"
+          <SheetHeader
+            className="border-b shrink-0"
+            style={{ borderColor: 'var(--gg-separator)' }}
           >
-            <TabsTrigger
-              value="contacts"
-              className="data-[state=active]:bg-[var(--gg-vermillion)] data-[state=active]:text-white text-muted-foreground"
-            >
-              Contacts
-            </TabsTrigger>
-            <TabsTrigger
-              value="activities"
-              className="data-[state=active]:bg-[var(--gg-vermillion)] data-[state=active]:text-white text-muted-foreground"
-            >
-              Activities
-            </TabsTrigger>
-            <TabsTrigger
-              value="deals"
-              className="data-[state=active]:bg-[var(--gg-vermillion)] data-[state=active]:text-white text-muted-foreground"
-            >
-              Deals
-            </TabsTrigger>
-          </TabsList>
+            <SheetTitle className="text-foreground">
+              {detailLoading ? 'Loading…' : detail?.companyName || 'Client Detail'}
+            </SheetTitle>
+            <SheetDescription className="text-muted-foreground">
+              Full client record — deals, licenses, subscriptions, activities
+            </SheetDescription>
+          </SheetHeader>
 
-          {/* Contacts Tab */}
-          <TabsContent value="contacts">
-            <Card
-              style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-foreground text-base">Contacts</CardTitle>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setContactForm({ name: '', email: '', phone: '', role: '', isPrimary: false, notes: '' })
-                      setContactDialogOpen(true)
-                    }}
-                    className="hover:opacity-90 text-white"
-                    style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
-                  >
-                    <UserPlus className="h-4 w-4 mr-1" />
-                    Add
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {!selectedClient.contacts || selectedClient.contacts.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10">
-                    <Users className="h-10 w-10 text-gray-600 mb-3" />
-                    <p className="text-muted-foreground text-sm">No contacts yet</p>
-                    <p className="text-gray-500 text-xs mt-1">Add a contact for this client</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {selectedClient.contacts.map((contact) => (
+          {detailLoading ? (
+            <div className="p-4 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full rounded-xl bg-white/5" />
+              ))}
+            </div>
+          ) : detail ? (
+            <ScrollArea className="flex-1">
+              <div className="p-4 space-y-5">
+                {/* Header card */}
+                <Card
+                  style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-4">
                       <div
-                        key={contact.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+                        className="h-12 w-12 rounded-xl flex items-center justify-center shrink-0"
+                        style={{ background: 'color-mix(in srgb, var(--gg-vermillion) 12%, transparent)' }}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-9 w-9 rounded-full bg-white/5 flex items-center justify-center shrink-0">
-                            {contact.isPrimary ? (
-                              <Star className="h-4 w-4 text-amber-400" />
-                            ) : (
-                              <User className="h-4 w-4 text-gray-500" />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="text-foreground text-sm font-medium truncate">{contact.name}</p>
-                              {contact.isPrimary && (
-                                <Badge className="text-[10px] bg-amber-500/15 text-amber-400 border-amber-500/20 px-1.5">
-                                  Primary
-                                </Badge>
-                              )}
-                              {contact.role && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] bg-white/5 text-muted-foreground px-1.5"
-                                  style={{ borderColor: 'var(--gg-separator)' }}
-                                >
-                                  {contact.role}
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3 mt-0.5">
-                              {contact.email && (
-                                <span className="text-gray-500 text-xs truncate">{contact.email}</span>
-                              )}
-                              {contact.phone && (
-                                <span className="text-gray-500 text-xs">{contact.phone}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setDeletingContactId(contact.id)
-                            setDeleteContactDialogOpen(true)
-                          }}
-                          className="text-gray-500 hover:text-red-400 hover:bg-red-500/10 shrink-0"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <span className="text-lg font-bold" style={{ color: 'var(--gg-vermillion)' }}>
+                          {detail.companyName.charAt(0).toUpperCase()}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-foreground font-semibold truncate">{detail.companyName}</h3>
+                          <StatusBadge status={detail.status} />
+                          {detail.erpSystem && <ErpBadge erp={detail.erpSystem} />}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{detail.contactPerson}</p>
+                      </div>
+                      {detail.erpSlug && (
+                        <Button
+                          size="sm"
+                          onClick={handleSyncNow}
+                          disabled={syncing}
+                          className="hover:opacity-90 text-white shrink-0"
+                          style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+                        >
+                          <RefreshCcw className={`h-4 w-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
+                          {syncing ? 'Syncing…' : 'Sync Now'}
+                        </Button>
+                      )}
+                    </div>
 
-          {/* Activities Tab */}
-          <TabsContent value="activities">
-            <Card
-              style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-foreground text-base">Activities</CardTitle>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setActivityForm({ type: 'note', subject: '', notes: '' })
-                      setActivityDialogOpen(true)
-                    }}
-                    className="hover:opacity-90 text-white"
-                    style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Log Activity
-                  </Button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+                      <ContactLine icon={Mail} value={detail.email} href={`mailto:${detail.email}`} />
+                      <ContactLine icon={Phone} value={detail.phone || ''} href={detail.phone ? `tel:${detail.phone}` : null} />
+                      <ContactLine icon={Building2} value={detail.industry || ''} />
+                      <ContactLine icon={MapPin} value={[detail.city, detail.country].filter(Boolean).join(', ')} />
+                      <ContactLine icon={Globe} value={detail.website || ''} href={detail.website || null} />
+                      <ContactLine icon={Calendar} value={`Created ${formatDate(detail.createdAt)}`} />
+                    </div>
+
+                    {detail.erpSystem?.website && (
+                      <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--gg-separator)' }}>
+                        <Link
+                          href={`/admin/integrations?erp=${detail.erpSystem.slug}`}
+                          className="inline-flex items-center gap-1 text-xs hover:underline"
+                          style={{ color: 'var(--gg-teal)' }}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          View integration for {detail.erpSystem.name}
+                        </Link>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Quick stats */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { label: 'Deals', value: detail._count?.deals ?? detail.deals?.length ?? 0, icon: TrendingUp },
+                    { label: 'Licenses', value: detail._count?.licenses ?? detail.licenses?.length ?? 0, icon: KeyRound },
+                    { label: 'Subscriptions', value: detail._count?.subscriptions ?? detail.subscriptions?.length ?? 0, icon: CreditCard },
+                    { label: 'Invoices', value: detail._count?.invoices ?? detail.invoices?.length ?? 0, icon: FileText },
+                  ].map((s) => (
+                    <div
+                      key={s.label}
+                      className="rounded-lg border p-3"
+                      style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}
+                    >
+                      <div className="flex items-center gap-1.5 text-gray-500">
+                        <s.icon className="h-3 w-3" />
+                        <span className="text-xs">{s.label}</span>
+                      </div>
+                      <p className="text-lg font-bold text-foreground mt-1">{s.value}</p>
+                    </div>
+                  ))}
                 </div>
-              </CardHeader>
-              <CardContent>
-                {!selectedClient.activities || selectedClient.activities.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10">
-                    <Clock className="h-10 w-10 text-gray-600 mb-3" />
-                    <p className="text-muted-foreground text-sm">No activities yet</p>
-                    <p className="text-gray-500 text-xs mt-1">Log a call, email, or meeting</p>
-                  </div>
-                ) : (
-                  <div className="relative max-h-96 overflow-y-auto">
-                    {/* Timeline line */}
-                    <div className="absolute left-5 top-2 bottom-2 w-px bg-white/5" />
-                    <div className="space-y-1">
-                      {selectedClient.activities.map((activity) => (
-                        <div key={activity.id} className="flex items-start gap-4 p-3 rounded-lg hover:bg-white/[0.02] relative">
-                          <div
-                            className="relative z-10 h-8 w-8 rounded-full bg-gray-800 border flex items-center justify-center shrink-0"
-                            style={{ borderColor: 'var(--gg-separator)' }}
-                          >
-                            <ActivityIcon type={activity.type} />
-                          </div>
-                          <div className="flex-1 min-w-0 pt-0.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-foreground text-sm font-medium truncate">{activity.subject}</p>
-                              <span className="text-gray-500 text-xs shrink-0">{formatDateTime(activity.createdAt)}</span>
+
+                {/* Deals */}
+                <DetailSection title="Deals" icon={TrendingUp} count={detail.deals?.length ?? 0}>
+                  {!detail.deals || detail.deals.length === 0 ? (
+                    <EmptyRow text="No deals for this client" />
+                  ) : (
+                    <div className="space-y-2">
+                      {detail.deals.map((d) => (
+                        <div
+                          key={d.id}
+                          className="flex items-center justify-between p-2.5 rounded-lg"
+                          style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)', borderWidth: 1 }}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm text-foreground font-medium truncate">{d.title}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <DealStageBadge stage={d.stage} />
+                              <span className="text-xs text-gray-500">{d.probability}% prob.</span>
                             </div>
-                            {activity.notes && (
-                              <p className="text-muted-foreground text-xs mt-1 line-clamp-2">{activity.notes}</p>
-                            )}
-                            <Badge
-                              variant="outline"
-                              className="mt-1 text-[10px] bg-white/5 text-muted-foreground px-1.5"
-                              style={{ borderColor: 'var(--gg-separator)' }}
-                            >
-                              {activity.type.replace('_', ' ')}
-                            </Badge>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-semibold text-foreground">{formatMoney(d.value)}</p>
+                            {d.source && <p className="text-xs text-gray-500">{d.source}</p>}
                           </div>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                  )}
+                </DetailSection>
 
-          {/* Deals Tab */}
-          <TabsContent value="deals">
-            <Card
-              style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
-            >
-              <CardHeader className="pb-3">
-                <CardTitle className="text-foreground text-base">Deals</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!selectedClient.deals || selectedClient.deals.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10">
-                    <TrendingUp className="h-10 w-10 text-gray-600 mb-3" />
-                    <p className="text-muted-foreground text-sm">No deals yet</p>
-                    <p className="text-gray-500 text-xs mt-1">Deals for this client will appear here</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {selectedClient.deals.map((deal) => (
-                      <div
-                        key={deal.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]"
-                      >
-                        <div>
-                          <p className="text-foreground text-sm font-medium">{deal.title}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <DealStageBadge stage={deal.stage} />
-                            {deal.source && (
-                              <span className="text-gray-500 text-xs">{deal.source}</span>
+                {/* Licenses */}
+                <DetailSection title="Licenses" icon={KeyRound} count={detail.licenses?.length ?? 0}>
+                  {!detail.licenses || detail.licenses.length === 0 ? (
+                    <EmptyRow text="No licenses for this client" />
+                  ) : (
+                    <div className="space-y-2">
+                      {detail.licenses.map((l) => (
+                        <div
+                          key={l.id}
+                          className="p-2.5 rounded-lg"
+                          style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)', borderWidth: 1 }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-mono text-foreground truncate">{l.serialKey}</p>
+                            <LicenseStatusBadge status={l.status} />
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                            <span className="inline-flex items-center gap-1">
+                              <Hash className="h-3 w-3" />
+                              {l.type}
+                            </span>
+                            <span>{l.maxUsers} users · {l.maxDevices} devices</span>
+                            {l.expiresAt && (
+                              <span>exp {formatDate(l.expiresAt)}</span>
                             )}
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-foreground text-sm font-semibold">
-                            ${deal.value.toLocaleString()}
+                      ))}
+                    </div>
+                  )}
+                </DetailSection>
+
+                {/* Subscriptions */}
+                <DetailSection title="Subscriptions" icon={CreditCard} count={detail.subscriptions?.length ?? 0}>
+                  {!detail.subscriptions || detail.subscriptions.length === 0 ? (
+                    <EmptyRow text="No subscriptions for this client" />
+                  ) : (
+                    <div className="space-y-2">
+                      {detail.subscriptions.map((s) => (
+                        <div
+                          key={s.id}
+                          className="flex items-center justify-between p-2.5 rounded-lg"
+                          style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)', borderWidth: 1 }}
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm text-foreground font-medium capitalize">{s.plan}</p>
+                              <SubStatusBadge status={s.status} />
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {s.billingCycle} · started {formatDate(s.startDate)}
+                              {s.erpSystem ? ` · ${s.erpSystem.name}` : ''}
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold text-foreground shrink-0">
+                            {formatMoney(s.monthlyFee, s.currency)}
                           </p>
-                          <p className="text-gray-500 text-xs">{deal.probability}% prob.</p>
                         </div>
+                      ))}
+                    </div>
+                  )}
+                </DetailSection>
+
+                {/* Contacts */}
+                <DetailSection title="Contacts" icon={Users} count={detail.contacts?.length ?? 0}>
+                  {!detail.contacts || detail.contacts.length === 0 ? (
+                    <EmptyRow text="No contacts for this client" />
+                  ) : (
+                    <div className="space-y-2">
+                      {detail.contacts.map((c) => (
+                        <div
+                          key={c.id}
+                          className="flex items-center justify-between p-2.5 rounded-lg"
+                          style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)', borderWidth: 1 }}
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm text-foreground font-medium truncate">{c.name}</p>
+                              {c.isPrimary && (
+                                <Badge className="text-[10px] bg-amber-500/15 text-amber-400 border-amber-500/20 px-1.5">
+                                  <Star className="h-2.5 w-2.5 mr-0.5 inline" />
+                                  Primary
+                                </Badge>
+                              )}
+                              {c.role && (
+                                <Badge variant="outline" className="text-[10px] bg-white/5 text-muted-foreground px-1.5" style={{ borderColor: 'var(--gg-separator)' }}>
+                                  {c.role}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
+                              {c.email && <span className="truncate">{c.email}</span>}
+                              {c.phone && <span>{c.phone}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </DetailSection>
+
+                {/* Recent Activities */}
+                <DetailSection title="Recent Activities" icon={ActivityIcon} count={detail.activities?.length ?? 0}>
+                  {!detail.activities || detail.activities.length === 0 ? (
+                    <EmptyRow text="No activities logged yet" />
+                  ) : (
+                    <div className="relative pl-6">
+                      <div
+                        className="absolute left-2 top-1 bottom-2 w-px"
+                        style={{ background: 'var(--gg-separator)' }}
+                      />
+                      <div className="space-y-3">
+                        {detail.activities.map((a) => (
+                          <div key={a.id} className="relative">
+                            <div
+                              className="absolute -left-[18px] top-1 h-2.5 w-2.5 rounded-full"
+                              style={{ background: 'var(--gg-vermillion)', boxShadow: '0 0 0 3px var(--background)' }}
+                            />
+                            <div className="rounded-lg p-2.5" style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)', borderWidth: 1 }}>
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm text-foreground font-medium truncate">{a.subject}</p>
+                                <span className="text-xs text-gray-500 shrink-0" title={a.createdAt}>
+                                  {formatDateTime(a.createdAt)}
+                                </span>
+                              </div>
+                              {a.notes && (
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{a.notes}</p>
+                              )}
+                              <Badge variant="outline" className="mt-1.5 text-[10px] bg-white/5 text-muted-foreground px-1.5" style={{ borderColor: 'var(--gg-separator)' }}>
+                                {a.type.replace('_', ' ')}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
                       </div>
+                    </div>
+                  )}
+                </DetailSection>
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center py-16">
+              <Users className="h-12 w-12 text-gray-600 mb-4" />
+              <p className="text-muted-foreground">Client not found</p>
+              <Button variant="outline" onClick={() => setSelectedId(null)} className="mt-4 text-foreground" style={{ borderColor: 'var(--gg-separator)' }}>
+                Close
+              </Button>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* New Client Dialog */}
+      <Dialog open={newDialogOpen} onOpenChange={setNewDialogOpen}>
+        <DialogContent className="text-foreground max-w-lg" style={{ background: 'var(--background)', borderColor: 'var(--gg-separator)' }}>
+          <DialogHeader>
+            <DialogTitle>New Client</DialogTitle>
+            <DialogDescription>Create a new client record. You can edit the rest of the fields later.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Company Name *</Label>
+              <Input
+                value={newForm.companyName}
+                onChange={(e) => setNewForm({ ...newForm, companyName: e.target.value })}
+                placeholder="Acme Corp"
+                style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Contact Person *</Label>
+              <Input
+                value={newForm.contactPerson}
+                onChange={(e) => setNewForm({ ...newForm, contactPerson: e.target.value })}
+                placeholder="Jane Doe"
+                style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Email *</Label>
+                <Input
+                  type="email"
+                  value={newForm.email}
+                  onChange={(e) => setNewForm({ ...newForm, email: e.target.value })}
+                  placeholder="jane@acme.com"
+                  style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Phone</Label>
+                <Input
+                  value={newForm.phone}
+                  onChange={(e) => setNewForm({ ...newForm, phone: e.target.value })}
+                  placeholder="+1 (555) 000-0000"
+                  style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Industry</Label>
+                <Input
+                  value={newForm.industry}
+                  onChange={(e) => setNewForm({ ...newForm, industry: e.target.value })}
+                  placeholder="e.g. Apparel, Retail"
+                  style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Status</Label>
+                <Select
+                  value={newForm.status}
+                  onValueChange={(v) => setNewForm({ ...newForm, status: v })}
+                >
+                  <SelectTrigger style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}>
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="trial">Trial</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="prospect">Prospect</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="churned">Churned</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {/* Optional ERP link */}
+            {erpOptions.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Linked ERP (optional)</Label>
+                <Select
+                  value={newForm.erpSlug}
+                  onValueChange={(v) =>
+                    setNewForm({ ...newForm, erpSlug: v })
+                  }
+                >
+                  <SelectTrigger style={{ background: 'var(--secondary)', borderColor: 'var(--gg-separator)' }}>
+                    <SelectValue placeholder="No ERP linked" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {erpOptions.map((e) => (
+                      <SelectItem key={e.id} value={e.slug}>
+                        {e.name}
+                      </SelectItem>
                     ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-    )
-  }
-
-  // ============================================
-  // RENDER: Client Form Dialog
-  // ============================================
-  const renderClientDialog = () => (
-    <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
-      <DialogContent
-        className="bg-gray-900 text-foreground max-w-2xl max-h-[85vh] overflow-y-auto"
-        style={{ borderColor: 'var(--gg-separator)' }}
-      >
-        <DialogHeader>
-          <DialogTitle>{editingClient ? 'Edit Client' : 'Add New Client'}</DialogTitle>
-        </DialogHeader>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
-          <div className="space-y-2 sm:col-span-2">
-            <Label className="text-gray-300">Name *</Label>
-            <Input
-              value={clientForm.name}
-              onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
-              placeholder="Client name"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500">
+                  Note: erpSlug is saved on the client; full ERP sync configuration is in the Integration Hub.
+                </p>
+              </div>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Email</Label>
-            <Input
-              value={clientForm.email}
-              onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
-              placeholder="email@example.com"
-              type="email"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setNewDialogOpen(false)}
+              className="text-muted-foreground"
               style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Phone</Label>
-            <Input
-              value={clientForm.phone}
-              onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })}
-              placeholder="+1 (555) 000-0000"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Company</Label>
-            <Input
-              value={clientForm.company}
-              onChange={(e) => setClientForm({ ...clientForm, company: e.target.value })}
-              placeholder="Company name"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Industry</Label>
-            <Input
-              value={clientForm.industry}
-              onChange={(e) => setClientForm({ ...clientForm, industry: e.target.value })}
-              placeholder="e.g. Technology, Finance"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Status</Label>
-            <Select
-              value={clientForm.status}
-              onValueChange={(v) => setClientForm({ ...clientForm, status: v })}
             >
-              <SelectTrigger
-                className="bg-gray-800 text-foreground"
-                style={{ borderColor: 'var(--gg-separator)' }}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="prospect">Prospect</SelectItem>
-                <SelectItem value="churned">Churned</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Website</Label>
-            <Input
-              value={clientForm.website}
-              onChange={(e) => setClientForm({ ...clientForm, website: e.target.value })}
-              placeholder="https://example.com"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label className="text-gray-300">Address</Label>
-            <Input
-              value={clientForm.address}
-              onChange={(e) => setClientForm({ ...clientForm, address: e.target.value })}
-              placeholder="Street address"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">City</Label>
-            <Input
-              value={clientForm.city}
-              onChange={(e) => setClientForm({ ...clientForm, city: e.target.value })}
-              placeholder="City"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">State</Label>
-            <Input
-              value={clientForm.state}
-              onChange={(e) => setClientForm({ ...clientForm, state: e.target.value })}
-              placeholder="State"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Country</Label>
-            <Input
-              value={clientForm.country}
-              onChange={(e) => setClientForm({ ...clientForm, country: e.target.value })}
-              placeholder="Country"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Zip Code</Label>
-            <Input
-              value={clientForm.zipCode}
-              onChange={(e) => setClientForm({ ...clientForm, zipCode: e.target.value })}
-              placeholder="Zip code"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label className="text-gray-300">Notes</Label>
-            <Textarea
-              value={clientForm.notes}
-              onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })}
-              placeholder="Additional notes about this client..."
-              rows={3}
-              className="bg-gray-800 text-foreground placeholder:text-gray-500 resize-none"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-        </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <Button
-            variant="outline"
-            onClick={() => setClientDialogOpen(false)}
-            style={{ borderColor: 'var(--gg-separator)' }}
-            className="text-gray-300 hover:bg-white/5"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleClientSubmit}
-            disabled={submitting}
-            className="hover:opacity-90 text-white"
-            style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
-          >
-            {submitting ? 'Saving...' : editingClient ? 'Update Client' : 'Create Client'}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-
-  // ============================================
-  // RENDER: Delete Confirmation Dialog
-  // ============================================
-  const renderDeleteDialog = () => (
-    <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-      <AlertDialogContent className="bg-gray-900" style={{ borderColor: 'var(--gg-separator)' }}>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="text-foreground">Delete Client</AlertDialogTitle>
-          <AlertDialogDescription className="text-muted-foreground">
-            Are you sure you want to delete <span className="text-foreground font-medium">{deletingClient?.name}</span>?
-            This action cannot be undone. All associated contacts, activities, and deals will also be removed.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel
-            style={{ borderColor: 'var(--gg-separator)' }}
-            className="text-gray-300 hover:bg-white/5"
-          >
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleDeleteClient}
-            className="bg-red-600 hover:bg-red-700 text-white"
-          >
-            Delete
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-
-  // ============================================
-  // RENDER: Contact Dialog
-  // ============================================
-  const renderContactDialog = () => (
-    <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
-      <DialogContent
-        className="bg-gray-900 text-foreground max-w-md"
-        style={{ borderColor: 'var(--gg-separator)' }}
-      >
-        <DialogHeader>
-          <DialogTitle>Add Contact</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label className="text-gray-300">Name *</Label>
-            <Input
-              value={contactForm.name}
-              onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
-              placeholder="Contact name"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Email</Label>
-            <Input
-              value={contactForm.email}
-              onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-              placeholder="email@example.com"
-              type="email"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Phone</Label>
-            <Input
-              value={contactForm.phone}
-              onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
-              placeholder="+1 (555) 000-0000"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Role</Label>
-            <Select
-              value={contactForm.role}
-              onValueChange={(v) => setContactForm({ ...contactForm, role: v })}
+              Cancel
+            </Button>
+            <Button
+              onClick={handleNewClient}
+              disabled={submitting}
+              className="hover:opacity-90 text-white"
+              style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
             >
-              <SelectTrigger
-                className="bg-gray-800 text-foreground"
-                style={{ borderColor: 'var(--gg-separator)' }}
-              >
-                <SelectValue placeholder="Select role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="decision_maker">Decision Maker</SelectItem>
-                <SelectItem value="influencer">Influencer</SelectItem>
-                <SelectItem value="user">User</SelectItem>
-              </SelectContent>
-            </Select>
+              {submitting ? 'Saving…' : 'Create Client'}
+            </Button>
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="isPrimary"
-              checked={contactForm.isPrimary}
-              onChange={(e) => setContactForm({ ...contactForm, isPrimary: e.target.checked })}
-              className="h-4 w-4 rounded bg-gray-800 text-[var(--gg-vermillion)] focus:ring-[var(--gg-vermillion)]"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-            <Label htmlFor="isPrimary" className="text-gray-300 cursor-pointer">
-              Primary contact
-            </Label>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Notes</Label>
-            <Textarea
-              value={contactForm.notes}
-              onChange={(e) => setContactForm({ ...contactForm, notes: e.target.value })}
-              placeholder="Notes about this contact..."
-              rows={2}
-              className="bg-gray-800 text-foreground placeholder:text-gray-500 resize-none"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-        </div>
-        <div className="flex justify-end gap-3">
-          <Button
-            variant="outline"
-            onClick={() => setContactDialogOpen(false)}
-            style={{ borderColor: 'var(--gg-separator)' }}
-            className="text-gray-300 hover:bg-white/5"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleAddContact}
-            disabled={submitting}
-            className="hover:opacity-90 text-white"
-            style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
-          >
-            {submitting ? 'Adding...' : 'Add Contact'}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </div>
   )
+}
 
-  // ============================================
-  // RENDER: Activity Dialog
-  // ============================================
-  const renderActivityDialog = () => (
-    <Dialog open={activityDialogOpen} onOpenChange={setActivityDialogOpen}>
-      <DialogContent
-        className="bg-gray-900 text-foreground max-w-md"
-        style={{ borderColor: 'var(--gg-separator)' }}
-      >
-        <DialogHeader>
-          <DialogTitle>Log Activity</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label className="text-gray-300">Type</Label>
-            <Select
-              value={activityForm.type}
-              onValueChange={(v) => setActivityForm({ ...activityForm, type: v })}
-            >
-              <SelectTrigger
-                className="bg-gray-800 text-foreground"
-                style={{ borderColor: 'var(--gg-separator)' }}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="call">📞 Call</SelectItem>
-                <SelectItem value="email">✉️ Email</SelectItem>
-                <SelectItem value="meeting">📅 Meeting</SelectItem>
-                <SelectItem value="note">📝 Note</SelectItem>
-                <SelectItem value="deal_update">💰 Deal Update</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Subject *</Label>
-            <Input
-              value={activityForm.subject}
-              onChange={(e) => setActivityForm({ ...activityForm, subject: e.target.value })}
-              placeholder="Activity subject"
-              className="bg-gray-800 text-foreground placeholder:text-gray-500"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-gray-300">Notes</Label>
-            <Textarea
-              value={activityForm.notes}
-              onChange={(e) => setActivityForm({ ...activityForm, notes: e.target.value })}
-              placeholder="Activity details..."
-              rows={3}
-              className="bg-gray-800 text-foreground placeholder:text-gray-500 resize-none"
-              style={{ borderColor: 'var(--gg-separator)' }}
-            />
-          </div>
-        </div>
-        <div className="flex justify-end gap-3">
-          <Button
-            variant="outline"
-            onClick={() => setActivityDialogOpen(false)}
-            style={{ borderColor: 'var(--gg-separator)' }}
-            className="text-gray-300 hover:bg-white/5"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleAddActivity}
-            disabled={submitting}
-            className="hover:opacity-90 text-white"
-            style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
-          >
-            {submitting ? 'Saving...' : 'Log Activity'}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-
-  // ============================================
-  // RENDER: Delete Contact Confirmation
-  // ============================================
-  const renderDeleteContactDialog = () => (
-    <AlertDialog open={deleteContactDialogOpen} onOpenChange={setDeleteContactDialogOpen}>
-      <AlertDialogContent className="bg-gray-900" style={{ borderColor: 'var(--gg-separator)' }}>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="text-foreground">Delete Contact</AlertDialogTitle>
-          <AlertDialogDescription className="text-muted-foreground">
-            Are you sure you want to remove this contact? This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel
-            style={{ borderColor: 'var(--gg-separator)' }}
-            className="text-gray-300 hover:bg-white/5"
-          >
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleDeleteContact}
-            className="bg-red-600 hover:bg-red-700 text-white"
-          >
-            Delete
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-
-  // ============================================
-  // Main Render
-  // ============================================
+// ──────────────────────────────────────────────────────────────
+// Small building blocks
+// ──────────────────────────────────────────────────────────────
+function ContactLine({
+  icon: Icon,
+  value,
+  href,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  value: string
+  href?: string | null
+}) {
+  if (!value) return null
   return (
-    <div className="space-y-6">
-      {detailLoading ? (
-        <div className="space-y-6">
-          <Skeleton className="h-8 w-24 bg-white/5" />
-          <Card
-            style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)', boxShadow: 'var(--gg-shadow-card)' }}
-          >
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-4">
-                <Skeleton className="h-14 w-14 rounded-xl bg-white/5" />
-                <div className="space-y-2">
-                  <Skeleton className="h-6 w-48 bg-white/5" />
-                  <Skeleton className="h-5 w-24 bg-white/5" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-4 w-40 bg-white/5" />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : selectedClient ? (
-        renderClientDetail()
+    <div className="flex items-center gap-2 text-sm">
+      <Icon className="h-4 w-4 text-gray-500 shrink-0" />
+      {href ? (
+        <a href={href} className="text-muted-foreground hover:underline truncate">{value}</a>
       ) : (
-        renderClientList()
+        <span className="text-muted-foreground truncate">{value}</span>
       )}
+    </div>
+  )
+}
 
-      {renderClientDialog()}
-      {renderDeleteDialog()}
-      {renderContactDialog()}
-      {renderActivityDialog()}
-      {renderDeleteContactDialog()}
+function DetailSection({
+  title,
+  icon: Icon,
+  count,
+  children,
+}: {
+  title: string
+  icon: React.ComponentType<{ className?: string }>
+  count: number
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className="h-4 w-4" style={{ color: 'var(--gg-vermillion)' }} />
+        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+        <Badge variant="outline" className="text-[10px] bg-white/5 text-muted-foreground px-1.5" style={{ borderColor: 'var(--gg-separator)' }}>
+          {count}
+        </Badge>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function EmptyRow({ text }: { text: string }) {
+  return (
+    <div className="rounded-lg border border-dashed p-4 text-center" style={{ borderColor: 'var(--gg-separator)' }}>
+      <p className="text-xs text-gray-500">{text}</p>
     </div>
   )
 }

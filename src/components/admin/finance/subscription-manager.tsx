@@ -24,6 +24,14 @@ import {
   DrawerClose,
 } from '@/components/ui/drawer'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -55,6 +63,7 @@ import {
   Ban,
   RefreshCcw,
   ExternalLink,
+  Plus,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -214,6 +223,23 @@ export function SubscriptionManager() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
 
+  // New Subscription dialog state
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [clients, setClients] = useState<ClientInfo[]>([])
+  const [packages, setPackages] = useState<PackageInfo[]>([])
+  const [form, setForm] = useState({
+    clientId: '',
+    packageId: '',
+    plan: 'starter',
+    billingCycle: 'monthly',
+    monthlyFee: '',
+    currency: 'PKR',
+    maxUsers: '5',
+    trialEndsAt: '',
+    endDate: '',
+  })
+
   const fetchSubscriptions = useCallback(async () => {
     setLoading(true)
     try {
@@ -237,6 +263,65 @@ export function SubscriptionManager() {
       setLoading(false)
     }
   }, [statusFilter, planFilter, search])
+
+  // Fetch dropdown options (clients + packages) — only when dialog opens
+  const fetchOptions = useCallback(async () => {
+    try {
+      const [cRes, pRes] = await Promise.all([
+        fetch('/api/clients'),
+        fetch('/api/finance/packages'),
+      ])
+      if (cRes.ok) {
+        const data = await cRes.json()
+        const list = (data.data || data || []).map((c: ClientInfo & { company?: string | null }) => ({
+          id: c.id,
+          companyName: c.companyName || c.name || '',
+          contactPerson: c.contactPerson || '',
+          name: c.name || null,
+          email: c.email || '',
+          phone: c.phone || null,
+          company: c.company || null,
+          status: c.status || 'active',
+          industry: null,
+          country: null,
+        }))
+        setClients(list)
+      }
+      if (pRes.ok) {
+        const data = await pRes.json()
+        const list = (data.data || data || []).map((p: PackageInfo) => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          billingCycle: p.billingCycle || 'monthly',
+          plan: p.plan || 'starter',
+          currency: p.currency || 'PKR',
+        }))
+        setPackages(list)
+      }
+    } catch {
+      // silent
+    }
+  }, [])
+
+  useEffect(() => {
+    if (createOpen) fetchOptions()
+  }, [createOpen, fetchOptions])
+
+  // When package is selected, auto-fill plan + billing cycle + currency + monthlyFee
+  useEffect(() => {
+    if (!form.packageId) return
+    const pkg = packages.find((p) => p.id === form.packageId)
+    if (pkg) {
+      setForm((f) => ({
+        ...f,
+        plan: pkg.plan || f.plan,
+        billingCycle: pkg.billingCycle || f.billingCycle,
+        currency: pkg.currency || f.currency,
+        monthlyFee: String(pkg.price ?? ''),
+      }))
+    }
+  }, [form.packageId, packages])
 
   useEffect(() => {
     const t = setTimeout(fetchSubscriptions, 300)
@@ -300,6 +385,60 @@ export function SubscriptionManager() {
     }
   }
 
+  const handleCreate = async () => {
+    if (!form.clientId) {
+      toast.error('Please select a client')
+      return
+    }
+    setCreating(true)
+    try {
+      const payload: Record<string, unknown> = {
+        clientId: form.clientId,
+        packageId: form.packageId || undefined,
+        plan: form.plan,
+        billingCycle: form.billingCycle,
+        currency: form.currency,
+        maxUsers: parseInt(form.maxUsers) || 5,
+      }
+      if (form.monthlyFee) {
+        const n = parseFloat(form.monthlyFee)
+        if (!Number.isNaN(n)) payload.monthlyFee = n
+      }
+      if (form.trialEndsAt) payload.trialEndsAt = form.trialEndsAt
+      if (form.endDate) payload.endDate = form.endDate
+
+      const res = await fetch('/api/admin/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null)
+        throw new Error(j?.error || 'Failed')
+      }
+      const json = await res.json()
+      toast.success(`Subscription created for ${clientDisplay(json.subscription?.client)}`)
+      setForm({
+        clientId: '',
+        packageId: '',
+        plan: 'starter',
+        billingCycle: 'monthly',
+        monthlyFee: '',
+        currency: 'PKR',
+        maxUsers: '5',
+        trialEndsAt: '',
+        endDate: '',
+      })
+      setCreateOpen(false)
+      fetchSubscriptions()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to create subscription'
+      toast.error(msg)
+    } finally {
+      setCreating(false)
+    }
+  }
+
   // Stats cards
   const statCards = [
     {
@@ -341,11 +480,21 @@ export function SubscriptionManager() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">Subscriptions</h2>
-        <p className="text-muted-foreground mt-1">
-          Manage recurring client subscriptions, billing cycles, and plan changes.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Subscriptions</h2>
+          <p className="text-muted-foreground mt-1">
+            Manage recurring client subscriptions, billing cycles, and plan changes.
+          </p>
+        </div>
+        <Button
+          onClick={() => setCreateOpen(true)}
+          className="hover:opacity-90 text-white gap-1.5"
+          style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+        >
+          <Plus className="h-4 w-4" />
+          New Subscription
+        </Button>
       </div>
 
       {/* Stats cards */}
@@ -490,11 +639,20 @@ export function SubscriptionManager() {
             </div>
           ) : subscriptions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-              <RefreshCw className="h-10 w-10 mb-3 text-gray-600" />
-              <p className="text-sm">No subscriptions found</p>
-              <p className="text-xs text-gray-600 mt-1">
-                Try adjusting filters or add a subscription from a client&apos;s profile.
+              <CreditCard className="h-12 w-12 mb-4 text-gray-600" />
+              <p className="text-base font-medium text-foreground">No subscriptions yet</p>
+              <p className="text-xs text-gray-500 mt-1 max-w-md text-center">
+                Subscriptions are created when clients purchase a plan via checkout,
+                but you can also manually create one for any client using the button below.
               </p>
+              <Button
+                onClick={() => setCreateOpen(true)}
+                className="mt-5 hover:opacity-90 text-white gap-1.5"
+                style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+              >
+                <Plus className="h-4 w-4" />
+                New Subscription
+              </Button>
             </div>
           ) : (
             <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
@@ -768,6 +926,221 @@ export function SubscriptionManager() {
           </div>
         </DrawerContent>
       </Drawer>
+
+      {/* New Subscription Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent
+          className="bg-gray-950 text-white max-h-[90vh] overflow-y-auto sm:max-w-lg"
+          style={{ borderColor: 'var(--gg-separator)' }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" style={{ color: 'var(--gg-vermillion)' }} />
+              New Subscription
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Manually create a recurring subscription for a client. Selecting a package auto-fills plan, billing cycle, currency, and amount.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label className="text-gray-300 text-xs">Client *</Label>
+              <Select
+                value={form.clientId}
+                onValueChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+              >
+                <SelectTrigger
+                  className="text-white"
+                  style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                >
+                  <SelectValue placeholder="Select client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.companyName || c.name || c.contactPerson || c.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {clients.length === 0 && (
+                <p className="text-xs text-gray-500">Loading clients...</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label className="text-gray-300 text-xs flex items-center gap-1.5">
+                <PackageIcon className="h-3 w-3" /> Package
+              </Label>
+              <Select
+                value={form.packageId}
+                onValueChange={(v) => setForm((f) => ({ ...f, packageId: v }))}
+              >
+                <SelectTrigger
+                  className="text-white"
+                  style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                >
+                  <SelectValue placeholder="Optional — pick a package to auto-fill" />
+                </SelectTrigger>
+                <SelectContent>
+                  {packages.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} — {p.plan} ({p.billingCycle})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-gray-300 text-xs">Plan</Label>
+                <Select
+                  value={form.plan}
+                  onValueChange={(v) => setForm((f) => ({ ...f, plan: v }))}
+                >
+                  <SelectTrigger
+                    className="text-white"
+                    style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="starter">Starter</SelectItem>
+                    <SelectItem value="professional">Professional</SelectItem>
+                    <SelectItem value="enterprise">Enterprise</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-gray-300 text-xs">Billing Cycle</Label>
+                <Select
+                  value={form.billingCycle}
+                  onValueChange={(v) => setForm((f) => ({ ...f, billingCycle: v }))}
+                >
+                  <SelectTrigger
+                    className="text-white"
+                    style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="annual">Annual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-gray-300 text-xs">Monthly Fee</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0"
+                  value={form.monthlyFee}
+                  onChange={(e) => setForm((f) => ({ ...f, monthlyFee: e.target.value }))}
+                  className="text-white"
+                  style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-gray-300 text-xs">Currency</Label>
+                <Select
+                  value={form.currency}
+                  onValueChange={(v) => setForm((f) => ({ ...f, currency: v }))}
+                >
+                  <SelectTrigger
+                    className="text-white"
+                    style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PKR">PKR</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="EUR">EUR</SelectItem>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-gray-300 text-xs flex items-center gap-1.5">
+                  <User className="h-3 w-3" /> Max Users
+                </Label>
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="5"
+                  value={form.maxUsers}
+                  onChange={(e) => setForm((f) => ({ ...f, maxUsers: e.target.value }))}
+                  className="text-white"
+                  style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-gray-300 text-xs flex items-center gap-1.5">
+                  <Calendar className="h-3 w-3" /> Trial Ends At
+                </Label>
+                <Input
+                  type="date"
+                  value={form.trialEndsAt}
+                  onChange={(e) => setForm((f) => ({ ...f, trialEndsAt: e.target.value }))}
+                  className="text-white"
+                  style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-gray-300 text-xs flex items-center gap-1.5">
+                <Calendar className="h-3 w-3" /> End Date (optional — leave empty for perpetual)
+              </Label>
+              <Input
+                type="date"
+                value={form.endDate}
+                onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
+                className="text-white"
+                style={{ background: 'var(--card)', borderColor: 'var(--gg-separator)' }}
+              />
+            </div>
+            <div
+              className="rounded-lg p-3 flex items-start gap-2"
+              style={{ background: 'var(--secondary)', border: '1px solid var(--gg-separator)' }}
+            >
+              <Building2 className="h-4 w-4 text-gray-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                Subscriptions are normally created via Stripe checkout. Use this form
+                to grant a complimentary or manual subscription. Status defaults to
+                <span className="text-gray-300 font-medium"> active</span>.
+              </p>
+            </div>
+          </div>
+          <Separator style={{ background: 'var(--gg-separator)' }} />
+          <DialogFooter className="mt-2">
+            <Button
+              variant="ghost"
+              onClick={() => setCreateOpen(false)}
+              className="text-muted-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={creating || !form.clientId}
+              className="hover:opacity-90 text-white gap-1.5"
+              style={{ background: 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))' }}
+            >
+              {creating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Create Subscription
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
