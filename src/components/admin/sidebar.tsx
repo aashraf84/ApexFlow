@@ -115,12 +115,10 @@ interface SidebarProps {
 
 export function Sidebar({ className, onNavClick }: SidebarProps) {
   const pathname = usePathname()
-  // Auto-expand the group containing the active route
-  const activeGroup = navGroups.find((g) =>
-    g.items.some((i) => pathname === i.path || pathname.startsWith(i.path + '/'))
-  )
+  // All groups expanded by default so the full navigation is visible without
+  // needing to click each group header. Users can collapse groups they don't need.
   const [expanded, setExpanded] = useState<Set<string>>(
-    new Set(activeGroup ? [activeGroup.label] : ['Overview', 'CRM'])
+    new Set(navGroups.map((g) => g.label))
   )
 
   const toggleGroup = (label: string) => {
