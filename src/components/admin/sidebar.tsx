@@ -131,7 +131,7 @@ export function Sidebar({ className, onNavClick }: SidebarProps) {
   }
 
   return (
-    <div className={cn('flex h-full flex-col bg-gradient-to-b from-gray-950 to-gray-900', className)}>
+    <div className={cn('flex h-full flex-col bg-card', className)}>
       {/* Subtle vermillion gradient overlay at top */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-40 opacity-30"
@@ -157,7 +157,7 @@ export function Sidebar({ className, onNavClick }: SidebarProps) {
             <Zap className="h-5 w-5 text-white" />
           </div>
         </div>
-        <span className="text-lg font-bold text-white tracking-tight">ApexFlow</span>
+        <span className="text-lg font-bold text-foreground tracking-tight">ApexFlow</span>
       </div>
 
       {/* Navigation */}
@@ -174,7 +174,7 @@ export function Sidebar({ className, onNavClick }: SidebarProps) {
               <div key={group.label} className="mb-1">
                 <button
                   onClick={() => toggleGroup(group.label)}
-                  className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+                  className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <span className="flex-1 text-left">{group.label}</span>
                   <ChevronDown
@@ -205,7 +205,7 @@ export function Sidebar({ className, onNavClick }: SidebarProps) {
                                   'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200',
                                   isActive
                                     ? 'text-[var(--gg-vermillion)]'
-                                    : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                                 )}
                                 style={
                                   isActive
@@ -225,7 +225,7 @@ export function Sidebar({ className, onNavClick }: SidebarProps) {
                                   />
                                 )}
                                 <item.icon
-                                  className={cn('h-4 w-4 shrink-0 transition-all duration-200', isActive ? '' : 'text-gray-500 group-hover:text-gray-300')}
+                                  className={cn('h-4 w-4 shrink-0 transition-all duration-200', isActive ? '' : 'text-muted-foreground group-hover:text-foreground')}
                                   style={isActive ? { color: 'var(--gg-vermillion)' } : undefined}
                                 />
                                 <span className="flex-1">{item.label}</span>
@@ -264,12 +264,12 @@ export function Sidebar({ className, onNavClick }: SidebarProps) {
       <div className="px-3 py-3 space-y-1" style={{ borderTop: '1px solid var(--gg-separator)' }}>
         <Link
           href="/"
-          className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-500 hover:bg-white/5 transition-all duration-200"
+          className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-all duration-200"
         >
           <ArrowLeft className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:-translate-x-0.5 group-hover:text-[var(--gg-teal)]" />
           <span className="transition-colors duration-200 group-hover:text-[var(--gg-teal)]">Back to Site</span>
         </Link>
-        <p className="px-3 pt-1 text-xs text-gray-600">ApexFlow Cloud Enterprise v2.0</p>
+        <p className="px-3 pt-1 text-xs text-muted-foreground/60">ApexFlow Cloud Enterprise v2.0</p>
       </div>
     </div>
   )
