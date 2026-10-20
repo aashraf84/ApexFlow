@@ -334,9 +334,9 @@ function autoMapSerial(tableName: string, columns: Array<{ name: string; dataTyp
     serialId: find(['id', 'uuid', 'cuid']),
     serialKey: find(['serial', 'serialkey', 'serialnumber', 'imei', 'licensekey', 'key', 'activationkey']),
     licenseKey: find(['license', 'licensekey', 'activationkey', 'license_code']),
-    serialClientRef: find(['clientid', 'customerid', 'ownerid', 'tenantid', 'userid', 'client_id', 'customer_id']),
+    serialClientRef: find(['clientid', 'customerid', 'ownerid', 'tenantid', 'userid', 'client_id', 'customer_id', 'clientcompanyid', 'clientcompany', 'companyid', 'company_id', 'clientref', 'customerref', 'clientrefid']),
     serialProduct: find(['product', 'productname', 'sku', 'item', 'plan']),
-    serialStatus: find(['status', 'isactive', 'activated', 'state']),
+    serialStatus: find(['status', 'isactive', 'activated', 'state', 'is_active']),
   }
 }
 
@@ -346,11 +346,11 @@ function autoMapDevice(tableName: string, columns: Array<{ name: string; dataTyp
   return {
     deviceTable: tableName,
     deviceId: find(['id', 'uuid', 'cuid']),
-    deviceSerial: find(['serial', 'serialnumber', 'imei', 'deviceid', 'mac', 'device_serial']),
-    deviceName: find(['name', 'devicename', 'model', 'product', 'label']),
-    deviceType: find(['type', 'devicetype', 'category', 'model']),
-    deviceStatus: find(['status', 'isactive', 'state']),
-    deviceClientRef: find(['clientid', 'customerid', 'ownerid', 'tenantid', 'userid', 'client_id']),
+    deviceSerial: find(['serial', 'serialnumber', 'imei', 'deviceid', 'mac', 'device_serial', 'machineid', 'machine_id', 'machinecode', 'code']),
+    deviceName: find(['name', 'devicename', 'model', 'product', 'label', 'machinelabel', 'machine_label', 'devicelabel']),
+    deviceType: find(['type', 'devicetype', 'category', 'model', 'machinetype', 'device_type']),
+    deviceStatus: find(['status', 'isactive', 'state', 'is_active', 'active']),
+    deviceClientRef: find(['clientid', 'customerid', 'ownerid', 'tenantid', 'userid', 'client_id', 'customer_id', 'clientcompanyid', 'clientcompany', 'companyid', 'company_id', 'organizationid', 'organization_id']),
   }
 }
 
@@ -419,7 +419,35 @@ export async function autoDetectSchema(connectionUrl: string): Promise<AutoDetec
 
     const clientTable = findBest(CLIENT_NAME_PATTERNS, 'client')
     const serialTable = findBest(SERIAL_NAME_PATTERNS, 'serial')
-    const deviceTable = findBest(DEVICE_NAME_PATTERNS, 'device')
+    let deviceTable = findBest(DEVICE_NAME_PATTERNS, 'device')
+
+    // Fallback: if no device table was found by name, but the serial/license table
+    // has device-like columns (machineId, machineLabel, imei, mac), treat it as
+    // the device table too — each license activation = a device record.
+    if (!deviceTable && serialTable) {
+      const serialColNames = serialTable.columns.map((c) => c.name.toLowerCase())
+      const hasDeviceCols = serialColNames.some((c) =>
+        c.includes('machineid') || c.includes('machine_id') ||
+        c.includes('machinelabel') || c.includes('machine_label') ||
+        c.includes('imei') || c.includes('macaddress') || c.includes('mac_address') ||
+        c.includes('ipaddress') || c.includes('ip_address')
+      )
+      if (hasDeviceCols) {
+        deviceTable = { name: serialTable.name, columns: serialTable.columns, score: 1 }
+      }
+    }
+    // Second fallback: scan ALL tables for device-like columns
+    if (!deviceTable) {
+      for (const [name, columns] of Object.entries(tableMap)) {
+        const colNames = columns.map((c) => c.name.toLowerCase())
+        if (colNames.some((c) => c.includes('machineid') || c.includes('machinelabel') || c.includes('imei') || c.includes('macaddress'))) {
+          if (!/(migration|schema|_prisma)/i.test(name)) {
+            deviceTable = { name, columns, score: 1 }
+            break
+          }
+        }
+      }
+    }
 
     const clientMapping = clientTable ? autoMapColumns(clientTable.name, clientTable.columns) : undefined
     const serialMapping = serialTable ? autoMapSerial(serialTable.name, serialTable.columns) : undefined

@@ -82,6 +82,53 @@ function groupByClientRevenue(rows: Array<{ clientId: string | null; amount: num
   return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue)
 }
 
+// ─── trend helpers ─────────────────────────────────────────────────────────────
+
+type RangeShape = { gte?: Date; lte?: Date }
+type ReportBuilder = (range: RangeShape) => Promise<Row>
+
+function computePreviousRange(range: RangeShape): RangeShape | null {
+  if (!range.gte || !range.lte) return null
+  const durationMs = range.lte.getTime() - range.gte.getTime()
+  if (durationMs <= 0) return null
+  const prevLte = new Date(range.gte.getTime() - 1)
+  const prevGte = new Date(prevLte.getTime() - durationMs)
+  return { gte: prevGte, lte: prevLte }
+}
+
+async function withTrend(
+  currentPromise: Promise<Row>,
+  range: RangeShape,
+  prevBuilder: ReportBuilder
+): Promise<Row> {
+  const current = await currentPromise
+  const prevRange = computePreviousRange(range)
+  if (!prevRange) return current
+  try {
+    const prev = await prevBuilder(prevRange)
+    const curSummary = Array.isArray(current.summary) ? (current.summary as Array<Record<string, unknown>>) : null
+    const prevSummary = Array.isArray(prev.summary) ? (prev.summary as Array<Record<string, unknown>>) : null
+    if (curSummary && prevSummary) {
+      current.summary = curSummary.map((s) => {
+        const prevStat = prevSummary.find((p) => p.label === s.label)
+        let trend: number | undefined
+        if (prevStat && typeof prevStat.value === 'number' && typeof s.value === 'number') {
+          if (prevStat.value === 0) {
+            trend = s.value > 0 ? 100 : 0
+          } else {
+            trend = ((s.value - prevStat.value) / prevStat.value) * 100
+          }
+        }
+        return { ...s, trend }
+      })
+    }
+  } catch (e) {
+    // Silent — trend computation is best-effort
+    console.warn('[ADMIN-REPORTS] trend computation failed:', (e as Error)?.message)
+  }
+  return current
+}
+
 // ─── main GET ──────────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest, ctx: { params: Promise<{ type: string }> }) {
@@ -97,22 +144,22 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ type: s
     let payload: Row = {}
     switch (type) {
       case 'sales':
-        payload = await buildSales(range)
+        payload = await withTrend(buildSales(range), range, buildSales)
         break
       case 'clients':
-        payload = await buildClients(range)
+        payload = await withTrend(buildClients(range), range, buildClients)
         break
       case 'subscriptions':
-        payload = await buildSubscriptions(range)
+        payload = await withTrend(buildSubscriptions(range), range, buildSubscriptions)
         break
       case 'support':
-        payload = await buildSupport(range)
+        payload = await withTrend(buildSupport(range), range, buildSupport)
         break
       case 'integrations':
-        payload = await buildIntegrations(range)
+        payload = await withTrend(buildIntegrations(range), range, buildIntegrations)
         break
       case 'financial':
-        payload = await buildFinancial(range)
+        payload = await withTrend(buildFinancial(range), range, buildFinancial)
         break
       default:
         return NextResponse.json(

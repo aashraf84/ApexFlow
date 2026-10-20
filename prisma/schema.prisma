@@ -181,7 +181,9 @@ model IntegrationConnector {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+  erpSystem   ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
+  syncTenants SyncTenant[]
+  syncEvents  SyncEvent[]
 }
 
 model SyncConnector {
@@ -196,9 +198,7 @@ model SyncConnector {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  erpSystem   ErpSystem?   @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
-  syncEvents  SyncEvent[]
-  syncTenants SyncTenant[]
+  erpSystem ErpSystem? @relation(fields: [erpSystemId], references: [id], onDelete: SetNull)
 }
 
 model SyncEvent {
@@ -214,7 +214,7 @@ model SyncEvent {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  connector  SyncConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  connector  IntegrationConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
   syncTenant SyncTenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 }
 
@@ -229,7 +229,7 @@ model SyncTenant {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  connector  SyncConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  connector  IntegrationConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
   client     Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
   syncEvents SyncEvent[]
 }
