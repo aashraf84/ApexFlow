@@ -6,7 +6,9 @@ import { db, withRetry } from '@/lib/db'
 import { requirePermission } from '@/lib/api-helpers'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface ContentBlock {
+// Exported so the PUBLIC /api/content route (no auth) can share the same
+// source of truth without duplicating ~50 lines of defaults.
+export interface ContentBlock {
   key: string
   value: string
   page: string
@@ -20,7 +22,14 @@ interface ContentBlock {
 // The values mirror the hardcoded text in src/components/pages/landing-page.tsx
 // and other public pages so the Content Manager shows the actual live content
 // even before any admin has saved an override.
-const DEFAULT_CONTENT: ContentBlock[] = [
+//
+// Link defaults (nav_links, footer_links, social_links, cta_links) are defined
+// in the dedicated /api/admin/content/links/route.ts handler. They are also
+// returned by the GET below so the Content Manager can render both tabs in one
+// fetch when desired.
+// Exported so the PUBLIC /api/content route (no auth) can share the same
+// source of truth without duplicating ~50 lines of defaults.
+export const DEFAULT_CONTENT: ContentBlock[] = [
   // ═════════════ Homepage ═════════════
   {
     key: 'home_hero_title',
@@ -59,6 +68,15 @@ const DEFAULT_CONTENT: ContentBlock[] = [
     description: 'Text on the secondary call-to-action button in the hero.',
   },
   {
+    key: 'home_hero_badge',
+    value: 'Featured Platforms',
+    page: 'Homepage',
+    section: 'Hero Section',
+    label: 'Hero Badge',
+    type: 'text',
+    description: 'Pill badge label shown above the hero or featured-ERP showcase (e.g. "Featured Platforms").',
+  },
+  {
     key: 'home_stats_label_1',
     value: 'Industry ERPs',
     page: 'Homepage',
@@ -86,6 +104,15 @@ const DEFAULT_CONTENT: ContentBlock[] = [
     description: 'Label for the third hero stat card.',
   },
   {
+    key: 'home_stats_label_4',
+    value: 'Provisioning Time',
+    page: 'Homepage',
+    section: 'Stats Section',
+    label: 'Stat 4 Label',
+    type: 'text',
+    description: 'Label for the fourth hero stat card (provisioning time).',
+  },
+  {
     key: 'home_industries_heading',
     value: 'An ERP for Every Industry',
     page: 'Homepage',
@@ -93,6 +120,15 @@ const DEFAULT_CONTENT: ContentBlock[] = [
     label: 'Industries Heading',
     type: 'text',
     description: 'Heading above the industries showcase on the homepage.',
+  },
+  {
+    key: 'home_industries_subtitle',
+    value: 'Each platform is purpose-built — not adapted — for its industry. The terminology, workflows, and KPIs are yours from day one.',
+    page: 'Homepage',
+    section: 'Industries Section',
+    label: 'Industries Subtitle',
+    type: 'textarea',
+    description: 'Sub-headline beneath the industries showcase heading.',
   },
   {
     key: 'home_pricing_heading',
@@ -104,6 +140,15 @@ const DEFAULT_CONTENT: ContentBlock[] = [
     description: 'Label shown for the pricing tier stat on the homepage.',
   },
   {
+    key: 'home_pricing_subtitle',
+    value: 'Starter for lean teams, Professional for growing businesses, Business for established operations, Enterprise for unlimited scale. Transparent pricing, no surprises.',
+    page: 'Homepage',
+    section: 'How It Works Section',
+    label: 'Pricing Step Subtitle',
+    type: 'textarea',
+    description: 'Description for the "Select Your Plan" pipeline step.',
+  },
+  {
     key: 'home_checkout_heading',
     value: 'Secure Checkout',
     page: 'Homepage',
@@ -113,6 +158,15 @@ const DEFAULT_CONTENT: ContentBlock[] = [
     description: 'Heading for the secure checkout step.',
   },
   {
+    key: 'home_checkout_subtitle',
+    value: 'Bank-grade encryption via Stripe. Pay with any major debit or credit card. Your license and invoice arrive instantly by email.',
+    page: 'Homepage',
+    section: 'How It Works Section',
+    label: 'Checkout Step Subtitle',
+    type: 'textarea',
+    description: 'Description for the secure checkout pipeline step.',
+  },
+  {
     key: 'home_go_live_heading',
     value: 'Go Live in 24 Hours',
     page: 'Homepage',
@@ -120,6 +174,60 @@ const DEFAULT_CONTENT: ContentBlock[] = [
     label: 'Go Live Heading',
     type: 'text',
     description: 'Heading for the go-live step.',
+  },
+  {
+    key: 'home_go_live_subtitle',
+    value: 'Your ERP is provisioned within a day. Onboarding materials, video tutorials, and dedicated support get your team productive immediately.',
+    page: 'Homepage',
+    section: 'How It Works Section',
+    label: 'Go Live Step Subtitle',
+    type: 'textarea',
+    description: 'Description for the go-live pipeline step.',
+  },
+  {
+    key: 'home_final_cta_heading',
+    value: 'Find the ERP That Speaks Your Language',
+    page: 'Homepage',
+    section: 'Final CTA Section',
+    label: 'Final CTA Heading',
+    type: 'text',
+    description: 'Headline shown in the final call-to-action banner at the bottom of the homepage.',
+  },
+  {
+    key: 'home_final_cta_subtitle',
+    value: '21 industries. 21 purpose-built platforms. Each one ready to run your business from day one. No customization. No workarounds. No compromises.',
+    page: 'Homepage',
+    section: 'Final CTA Section',
+    label: 'Final CTA Subtitle',
+    type: 'textarea',
+    description: 'Sub-headline beneath the final call-to-action banner.',
+  },
+  {
+    key: 'home_final_cta_primary',
+    value: 'Get Started',
+    page: 'Homepage',
+    section: 'Final CTA Section',
+    label: 'Final CTA Primary Button',
+    type: 'text',
+    description: 'Primary CTA button label in the final call-to-action banner.',
+  },
+  {
+    key: 'home_final_cta_secondary',
+    value: 'Browse All Products',
+    page: 'Homepage',
+    section: 'Final CTA Section',
+    label: 'Final CTA Secondary Button',
+    type: 'text',
+    description: 'Secondary CTA button label in the final call-to-action banner.',
+  },
+  {
+    key: 'home_final_cta_tertiary',
+    value: 'Talk to Sales',
+    page: 'Homepage',
+    section: 'Final CTA Section',
+    label: 'Final CTA Tertiary Button',
+    type: 'text',
+    description: 'Tertiary CTA button label in the final call-to-action banner.',
   },
   {
     key: 'home_footer_copyright',
@@ -142,7 +250,7 @@ const DEFAULT_CONTENT: ContentBlock[] = [
   },
   {
     key: 'about_page_description',
-    value: 'AI Powered Operating Systems that run entire industries. Built for scale, designed for simplicity.',
+    value: 'We build enterprise software that runs entire industries — not adapts to them, but is built for them from the ground up. Each platform is purpose-engineered for the unique workflows, regulations, and challenges of its sector.',
     page: 'About',
     section: 'Page Header',
     label: 'Page Description',
@@ -176,7 +284,7 @@ const DEFAULT_CONTENT: ContentBlock[] = [
   // ═════════════ Pricing ═════════════
   {
     key: 'pricing_page_title',
-    value: 'Simple, Transparent Pricing',
+    value: 'Simple Pricing',
     page: 'Pricing',
     section: 'Page Header',
     label: 'Page Title',
@@ -184,7 +292,7 @@ const DEFAULT_CONTENT: ContentBlock[] = [
   },
   {
     key: 'pricing_page_description',
-    value: 'Starter for lean teams, Professional for growing businesses, Business for established operations, Enterprise for unlimited scale. Transparent pricing, no surprises.',
+    value: 'Start free. Scale as you grow. No hidden fees, no surprises — just powerful ERP software at a price that makes sense for your business.',
     page: 'Pricing',
     section: 'Page Header',
     label: 'Page Description',
@@ -192,7 +300,7 @@ const DEFAULT_CONTENT: ContentBlock[] = [
   },
   {
     key: 'pricing_plans_heading',
-    value: 'Choose Your Plan',
+    value: 'Choose Your ERP Platforms',
     page: 'Pricing',
     section: 'Plans Section',
     label: 'Plans Heading',
@@ -218,7 +326,7 @@ const DEFAULT_CONTENT: ContentBlock[] = [
   },
   {
     key: 'contact_page_description',
-    value: "Have a question about our ERPs, pricing, or partnerships? Our team is here to help — reach out and we'll respond within one business day.",
+    value: "Whether you have a question, need a demo, or want to discuss a custom solution — we're here to help.",
     page: 'Contact',
     section: 'Page Header',
     label: 'Page Description',
@@ -242,7 +350,7 @@ const DEFAULT_CONTENT: ContentBlock[] = [
   },
   {
     key: 'contact_address_label',
-    value: 'Address',
+    value: 'Office',
     page: 'Contact',
     section: 'Contact Info Section',
     label: 'Address Label',
@@ -481,10 +589,29 @@ export async function GET(request: NextRequest) {
       grouped[page] = grouped[page] || []
     }
 
+    // Also pull the link JSON blocks (nav_links, footer_links,
+    // social_links, cta_links) so the Content Manager can render
+    // both tabs in a single fetch when desired. The dedicated
+    // /api/admin/content/links endpoint does the heavy lifting.
+    const linkKeys = ['nav_links', 'footer_links', 'social_links', 'cta_links']
+    const linkRows = rows.filter((r) => linkKeys.includes(r.key))
+    const links: Record<string, unknown> = {}
+    for (const k of linkKeys) {
+      const row = linkRows.find((r) => r.key === k)
+      if (!row) continue
+      try {
+        links[k] = JSON.parse(row.value)
+      } catch {
+        // ignore malformed JSON — caller will fall back to defaults via the
+        // dedicated links endpoint.
+      }
+    }
+
     return NextResponse.json({
       content: grouped,
       pages: Object.keys(grouped),
       total: Object.values(grouped).reduce((n, arr) => n + arr.length, 0),
+      links,
     })
   } catch (error) {
     console.error('[CONTENT] Failed to fetch:', error)
@@ -513,6 +640,8 @@ export async function POST(request: NextRequest) {
       label: string
       type?: 'text' | 'textarea'
       description?: string
+      isJson?: boolean
+      group?: string
     }
 
     if (!body.key || typeof body.key !== 'string') {
@@ -525,24 +654,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Page is required' }, { status: 400 })
     }
 
+    // When the caller marks the payload as JSON, validate it parses before we
+    // store it. This guards the link editor (nav_links, footer_links, …)
+    // against persisting malformed JSON.
+    if (body.isJson) {
+      try {
+        JSON.parse(body.value)
+      } catch {
+        return NextResponse.json(
+          { error: 'isJson was set but value is not valid JSON' },
+          { status: 400 }
+        )
+      }
+    }
+
     // Compose a human-friendly description when one isn't provided.
     const description =
       body.description ||
       `${body.label || body.key} — managed by Content Manager (${body.page} / ${body.section || 'general'})`
+
+    // `group` from the body takes precedence (used by the links editor which
+    // stores rows under group='navigation' / 'footer' / 'social' / 'cta').
+    const group = body.group || body.page
 
     const upserted = await withRetry((db) =>
       db.siteSetting.upsert({
         where: { key: body.key },
         update: {
           value: body.value,
-          group: body.page,
+          group,
           description,
         },
         create: {
           key: body.key,
           value: body.value,
           category: 'content',
-          group: body.page,
+          group,
           description,
         },
       })

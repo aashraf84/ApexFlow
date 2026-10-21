@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { InteractiveCard } from '@/components/shared/interactive-card'
 import { useEffect, useRef, useState, useMemo, useCallback, useLayoutEffect } from 'react'
+import { useContent } from '@/hooks/use-content'
 
 /* ───────────────── Golden Gate Color Mapping ───────────────── */
 const ggColorMap: Record<string, { bg: string; text: string; border: string; accent: string }> = {
@@ -508,6 +509,7 @@ const colorVarMap: Record<string, string> = {
 
 function FeaturedErpShowcase() {
   const { navigate } = useNavigate()
+  const { get } = useContent()
   const [activeIdx, setActiveIdx] = useState(0)
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 })
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
@@ -543,7 +545,7 @@ function FeaturedErpShowcase() {
         >
           <div className="gg-pill inline-flex items-center gap-2 bg-[var(--gg-amber)]/10 border border-[var(--gg-amber)]/20 px-4 py-1.5 mb-5">
             <Star className="w-3.5 h-3.5 text-[var(--gg-amber)]" />
-            <span className="text-xs text-[var(--gg-amber)] font-medium tracking-wide">Featured Platforms</span>
+            <span className="text-xs text-[var(--gg-amber)] font-medium tracking-wide">{get('Homepage', 'home_hero_badge', 'Featured Platforms')}</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-extrabold text-foreground">
             Built for <span className="text-gradient-golden">Your Industry</span>, Not Everyone Else&apos;s
@@ -851,6 +853,7 @@ const AUTO_PLAY_INTERVAL = 4000
 
 function IndustryShowcaseSection() {
   const { navigate } = useNavigate()
+  const { get } = useContent()
   const [activeIndex, setActiveIndex] = useState(0)
   const [isAutoPlaying, setIsAutoPlaying] = useState(true)
   const [direction, setDirection] = useState(1) // 1 = forward, -1 = backward
@@ -950,10 +953,17 @@ function IndustryShowcaseSection() {
             <span className="text-xs text-[var(--gg-vermillion)] font-medium tracking-wide">21 Industries Served</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-extrabold text-foreground">
-            An ERP for <span className="text-gradient-primary">Every Industry</span>
+            {(() => {
+              const v = get('Homepage', 'home_industries_heading', 'An ERP for Every Industry')
+              const d = 'An ERP for Every Industry'
+              if (v === d) {
+                return <>An ERP for <span className="text-gradient-primary">Every Industry</span></>
+              }
+              return v
+            })()}
           </h2>
           <p className="mt-4 max-w-2xl mx-auto text-base sm:text-lg text-muted-foreground">
-            Each platform is purpose-built — not adapted — for its industry. The terminology, workflows, and KPIs are yours from day one.
+            {get('Homepage', 'home_industries_subtitle', 'Each platform is purpose-built — not adapted — for its industry. The terminology, workflows, and KPIs are yours from day one.')}
           </p>
         </motion.div>
 
@@ -1280,13 +1290,14 @@ function IndustryShowcaseSection() {
 /* ═══════════════════════════════════════════════════════ */
 export function LandingPage() {
   const { navigate } = useNavigate()
+  const { get } = useContent()
   const { activeErps, industryVerticals, loading: erpsLoading } = useErpSystems('active')
 
   const heroStats = useMemo(() => [
-    { icon: <Layers className="w-5 h-5 text-[var(--gg-vermillion)]" />, value: activeErps.length, suffix: '', label: 'Industry ERPs' },
-    { icon: <Globe className="w-5 h-5 text-[var(--gg-teal)]" />, value: industryVerticals, suffix: '', label: 'Industry Verticals' },
-    { icon: <Shield className="w-5 h-5 text-[var(--gg-amber)]" />, value: 99.9, suffix: '%', label: 'Uptime SLA' },
-  ], [activeErps.length, industryVerticals])
+    { icon: <Layers className="w-5 h-5 text-[var(--gg-vermillion)]" />, value: activeErps.length, suffix: '', label: get('Homepage', 'home_stats_label_1', 'Industry ERPs') },
+    { icon: <Globe className="w-5 h-5 text-[var(--gg-teal)]" />, value: industryVerticals, suffix: '', label: get('Homepage', 'home_stats_label_2', 'Industry Verticals') },
+    { icon: <Shield className="w-5 h-5 text-[var(--gg-amber)]" />, value: 99.9, suffix: '%', label: get('Homepage', 'home_stats_label_3', 'Uptime SLA') },
+  ], [activeErps.length, industryVerticals, get])
 
   return (
     <PageLayout>
@@ -1319,19 +1330,37 @@ export function LandingPage() {
 
                 {/* Headline */}
                 <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-[3.75rem] font-black leading-[1.08] tracking-tight text-foreground">
-                  Software That Speaks{' '}
-                  <span className="text-gradient-golden">
-                    Your Industry&apos;s
-                  </span>
-                  <br />
-                  Language.
+                  {(() => {
+                    const v = get('Homepage', 'home_hero_title', "Software That Speaks Your Industry's Language.")
+                    const d = "Software That Speaks Your Industry's Language."
+                    if (v === d) {
+                      return <>
+                        Software That Speaks{' '}
+                        <span className="text-gradient-golden">
+                          Your Industry&apos;s
+                        </span>
+                        <br />
+                        Language.
+                      </>
+                    }
+                    return v
+                  })()}
                 </h1>
 
                 {/* Subtitle */}
                 <p className="mt-6 text-lg sm:text-xl text-muted-foreground max-w-xl leading-relaxed">
-                  <span className="text-gradient-primary font-semibold">21 purpose-built ERPs</span>{' '}
-                  — each designed from the ground up for a specific industry.{' '}
-                  <span className="text-foreground font-semibold">No customization needed. No workarounds. No compromises.</span>
+                  {(() => {
+                    const v = get('Homepage', 'home_hero_subtitle', '21 purpose-built ERPs — each designed from the ground up for a specific industry. No customization needed. No workarounds. No compromises.')
+                    const d = '21 purpose-built ERPs — each designed from the ground up for a specific industry. No customization needed. No workarounds. No compromises.'
+                    if (v === d) {
+                      return <>
+                        <span className="text-gradient-primary font-semibold">21 purpose-built ERPs</span>{' '}
+                        — each designed from the ground up for a specific industry.{' '}
+                        <span className="text-foreground font-semibold">No customization needed. No workarounds. No compromises.</span>
+                      </>
+                    }
+                    return v
+                  })()}
                 </p>
               </div>
 
@@ -1342,7 +1371,7 @@ export function LandingPage() {
                   className="btn-glow bg-[var(--gg-vermillion)] text-white font-semibold rounded-xl px-8 h-12 transition-all duration-200 group hover:bg-[var(--gg-vermillion-light)]"
                   onClick={() => navigate('pricing')}
                 >
-                  Get Started
+                  {get('Homepage', 'home_hero_cta_primary', 'Get Started')}
                   <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-200 group-hover:translate-x-1" />
                 </Button>
                 <Button
@@ -1351,7 +1380,7 @@ export function LandingPage() {
                   className="border-[var(--gg-vermillion)]/30 text-[var(--gg-vermillion)] hover:bg-[var(--gg-vermillion)]/5 rounded-xl px-8 h-12 transition-all duration-200"
                   onClick={() => navigate('products')}
                 >
-                  Explore Products
+                  {get('Homepage', 'home_hero_cta_secondary', 'Explore Products')}
                 </Button>
               </div>
             </motion.div>
@@ -1394,7 +1423,7 @@ export function LandingPage() {
                   <Rocket className="w-5 h-5 text-[var(--gg-vermillion)]" />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-foreground">Go Live in 24 Hours</div>
+                  <div className="text-sm font-semibold text-foreground">{get('Homepage', 'home_go_live_heading', 'Go Live in 24 Hours')}</div>
                   <div className="text-xs text-muted-foreground">From purchase to production — same day</div>
                 </div>
               </motion.div>
@@ -1596,7 +1625,24 @@ export function LandingPage() {
           </motion.div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {howItWorks.map((item, i) => (
+            {howItWorks.map((item, i) => {
+              // Wire the pipeline-step text into the Content Manager so an admin
+              // can edit them without touching code.
+              const stepHeading =
+                item.step === '03'
+                  ? get('Homepage', 'home_checkout_heading', item.title)
+                  : item.step === '04'
+                  ? get('Homepage', 'home_go_live_heading', item.title)
+                  : item.title
+              const stepSubtitle =
+                item.step === '02'
+                  ? get('Homepage', 'home_pricing_subtitle', item.desc)
+                  : item.step === '03'
+                  ? get('Homepage', 'home_checkout_subtitle', item.desc)
+                  : item.step === '04'
+                  ? get('Homepage', 'home_go_live_subtitle', item.desc)
+                  : item.desc
+              return (
               <motion.div
                 key={item.step}
                 initial={{ opacity: 0, y: 20 }}
@@ -1613,13 +1659,14 @@ export function LandingPage() {
                       <div className="w-12 h-12 rounded-xl bg-[var(--gg-vermillion)]/10 flex items-center justify-center mb-4 text-[var(--gg-vermillion)]">
                         {item.icon}
                       </div>
-                      <h3 className="text-base font-bold text-foreground mb-2">{item.title}</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+                      <h3 className="text-base font-bold text-foreground mb-2">{stepHeading}</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{stepSubtitle}</p>
                     </div>
                   </div>
                 </InteractiveCard>
               </motion.div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </section>
@@ -1760,10 +1807,10 @@ export function LandingPage() {
             >
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 text-center">
                 {[
-                  { value: activeErps.length, suffix: '', label: 'Industry ERPs' },
-                  { value: 99.9, suffix: '%', label: 'Uptime SLA' },
-                  { value: 24, suffix: 'h', label: 'Provisioning Time' },
-                  { value: 4, suffix: '+', label: 'Pricing Tiers' },
+                  { value: activeErps.length, suffix: '', label: get('Homepage', 'home_stats_label_1', 'Industry ERPs') },
+                  { value: 99.9, suffix: '%', label: get('Homepage', 'home_stats_label_3', 'Uptime SLA') },
+                  { value: 24, suffix: 'h', label: get('Homepage', 'home_stats_label_4', 'Provisioning Time') },
+                  { value: 4, suffix: '+', label: get('Homepage', 'home_pricing_heading', 'Pricing Tiers') },
                 ].map((stat, i) => (
                   <motion.div
                     key={stat.label}
@@ -1799,10 +1846,17 @@ export function LandingPage() {
               <span className="text-xs text-[var(--gg-vermillion)] font-medium tracking-wide">Ready to Start?</span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
-              Find the ERP That <span className="text-gradient-golden">Speaks Your Language</span>
+              {(() => {
+                const v = get('Homepage', 'home_final_cta_heading', 'Find the ERP That Speaks Your Language')
+                const d = 'Find the ERP That Speaks Your Language'
+                if (v === d) {
+                  return <>Find the ERP That <span className="text-gradient-golden">Speaks Your Language</span></>
+                }
+                return v
+              })()}
             </h2>
             <p className="mt-4 text-lg text-muted-foreground leading-relaxed">
-              21 industries. 21 purpose-built platforms. Each one ready to run your business from day one. No customization. No workarounds. No compromises.
+              {get('Homepage', 'home_final_cta_subtitle', '21 industries. 21 purpose-built platforms. Each one ready to run your business from day one. No customization. No workarounds. No compromises.')}
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button
@@ -1810,7 +1864,7 @@ export function LandingPage() {
                 className="btn-glow bg-[var(--gg-vermillion)] text-white font-semibold rounded-xl px-8 h-12 transition-all duration-200 group hover:bg-[var(--gg-vermillion-light)]"
                 onClick={() => navigate('pricing')}
               >
-                Get Started
+                {get('Homepage', 'home_final_cta_primary', 'Get Started')}
                 <ArrowRight className="w-4 h-4 ml-2 transition-transform duration-200 group-hover:translate-x-1" />
               </Button>
               <Button
@@ -1819,7 +1873,7 @@ export function LandingPage() {
                 className="border-[var(--gg-vermillion)]/30 text-[var(--gg-vermillion)] hover:bg-[var(--gg-vermillion)]/5 rounded-xl px-8 h-12 transition-all duration-200"
                 onClick={() => navigate('products')}
               >
-                Browse All Products
+                {get('Homepage', 'home_final_cta_secondary', 'Browse All Products')}
               </Button>
               <Button
                 size="lg"
@@ -1827,7 +1881,7 @@ export function LandingPage() {
                 className="border-border text-foreground hover:bg-secondary rounded-xl px-8 h-12 transition-all duration-200"
                 onClick={() => navigate('contact')}
               >
-                Talk to Sales
+                {get('Homepage', 'home_final_cta_tertiary', 'Talk to Sales')}
               </Button>
             </div>
           </motion.div>

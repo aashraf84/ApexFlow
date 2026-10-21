@@ -27,6 +27,7 @@ import { InteractiveCard } from '@/components/shared/interactive-card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { useContent } from '@/hooks/use-content'
 
 const CONTACT_INFO = [
   {
@@ -116,6 +117,7 @@ const CONTACT_ACCENTS = [
 
 export function ContactPage() {
   const { navigate } = useNavigate()
+  const { get } = useContent()
   const [openFaq, setOpenFaq] = useState<number | null>(null)
   const [focusedField, setFocusedField] = useState<string | null>(null)
   const [formData, setFormData] = useState({
@@ -200,10 +202,13 @@ export function ContactPage() {
                   transition={{ delay: 0.2, duration: 0.6 }}
                   className="text-3xl sm:text-4xl md:text-5xl font-extrabold leading-tight tracking-tight"
                 >
-                  Get in{' '}
-                  <span className="bg-gradient-to-r from-[var(--gg-vermillion)] to-[var(--gg-amber)] bg-clip-text text-transparent">
-                    Touch
-                  </span>
+                  {(() => {
+                    const v = get('Contact', 'contact_page_title', 'Get in Touch')
+                    if (v === 'Get in Touch') {
+                      return <>Get in{' '}<span className="bg-gradient-to-r from-[var(--gg-vermillion)] to-[var(--gg-amber)] bg-clip-text text-transparent">Touch</span></>
+                    }
+                    return v
+                  })()}
                 </motion.h1>
                 <motion.p
                   initial={{ opacity: 0, y: 20 }}
@@ -211,8 +216,7 @@ export function ContactPage() {
                   transition={{ delay: 0.3, duration: 0.6 }}
                   className="mt-3 text-muted-foreground max-w-lg leading-relaxed"
                 >
-                  Whether you have a question, need a demo, or want to discuss a custom solution —
-                  we&apos;re here to help.
+                  {get('Contact', 'contact_page_description', "Whether you have a question, need a demo, or want to discuss a custom solution — we're here to help.")}
                 </motion.p>
               </div>
 
@@ -446,7 +450,15 @@ export function ContactPage() {
               transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
               className="lg:col-span-2 space-y-4 pt-0 sm:pt-28 pb-16 sm:pb-24"
             >
-              {CONTACT_INFO.map((info, i) => (
+              {CONTACT_INFO.map((info, i) => {
+                // Wire contact info labels to the Content Manager so the admin
+                // can rename Email/Phone/Office/Hours without touching code.
+                const labelOverride =
+                  i === 0 ? get('Contact', 'contact_email_label', info.label)
+                  : i === 1 ? get('Contact', 'contact_phone_label', info.label)
+                  : i === 2 ? get('Contact', 'contact_address_label', info.label)
+                  : info.label
+                return (
                 <motion.div
                   key={info.label}
                   initial={{ opacity: 0, y: 15 }}
@@ -465,7 +477,7 @@ export function ContactPage() {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
-                            {info.label}
+                            {labelOverride}
                           </p>
                           <p className="text-foreground font-semibold mt-0.5 text-base">
                             {info.value}
@@ -476,7 +488,8 @@ export function ContactPage() {
                     </div>
                   </InteractiveCard>
                 </motion.div>
-              ))}
+                )
+              })}
 
               {/* Enterprise CTA Card — with gradient accent */}
               <motion.div

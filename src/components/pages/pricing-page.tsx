@@ -34,6 +34,7 @@ import { useState, useEffect, useRef } from 'react'
 import { InteractiveCard } from '@/components/shared/interactive-card'
 import { CheckoutModal } from '@/components/checkout/checkout-modal'
 import type { PlanId } from '@/lib/pricing-config'
+import { useContent } from '@/hooks/use-content'
 
 /* ------------------------------------------------------------------ */
 /*  macOS 27 Golden Gate Animation Easing                              */
@@ -752,6 +753,7 @@ function DotGridPattern() {
 
 export function PricingPage() {
   const { navigate } = useNavigate()
+  const { get } = useContent()
   const [isAnnual, setIsAnnual] = useState(false)
   const [currency, setCurrency] = useState<CurrencyCode>('PKR')
   const { activeErps, loading: erpsLoading } = useErpSystems()
@@ -874,15 +876,17 @@ export function PricingPage() {
             transition={{ duration: 0.6, ease: GG_EASE }}
           >
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-black leading-tight tracking-tight max-w-3xl mx-auto text-foreground">
-              Simple{' '}
-              <span className="text-gradient-golden">
-                Pricing
-              </span>
+              {(() => {
+                const v = get('Pricing', 'pricing_page_title', 'Simple Pricing')
+                if (v === 'Simple Pricing') {
+                  return <>Simple{' '}<span className="text-gradient-golden">Pricing</span></>
+                }
+                return v
+              })()}
             </h1>
 
             <p className="mt-5 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">
-              Start free. Scale as you grow. No hidden fees, no surprises — just powerful ERP
-              software at a price that makes sense for your business.
+              {get('Pricing', 'pricing_page_description', 'Start free. Scale as you grow. No hidden fees, no surprises — just powerful ERP software at a price that makes sense for your business.')}
             </p>
 
             {/* ── Billing Toggle + Currency Selector — temporarily hidden ── */}
@@ -941,8 +945,13 @@ export function PricingPage() {
             className="mb-10"
           >
             <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
-              Choose Your{' '}
-              <span className="text-gradient-cool">ERP Platforms</span>
+              {(() => {
+                const v = get('Pricing', 'pricing_plans_heading', 'Choose Your ERP Platforms')
+                if (v === 'Choose Your ERP Platforms') {
+                  return <>Choose Your{' '}<span className="text-gradient-cool">ERP Platforms</span></>
+                }
+                return v
+              })()}
             </h2>
             <p className="mt-3 text-muted-foreground max-w-xl">
               {activeErps.length} industry-specific ERPs, each purpose-built for real-world operations. Subscribe to each ERP separately at the plan tier that fits your needs.
@@ -1337,8 +1346,13 @@ export function PricingPage() {
             className="mb-10"
           >
             <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">
-              Frequently Asked{' '}
-              <span className="text-gradient-golden">Questions</span>
+              {(() => {
+                const v = get('Pricing', 'pricing_faq_heading', 'Frequently Asked Questions')
+                if (v === 'Frequently Asked Questions') {
+                  return <>Frequently Asked{' '}<span className="text-gradient-golden">Questions</span></>
+                }
+                return v
+              })()}
             </h2>
             <p className="mt-3 text-muted-foreground max-w-lg">
               Got questions? We&apos;ve got answers. If you don&apos;t find what you need, reach out

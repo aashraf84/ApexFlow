@@ -38,7 +38,12 @@ import {
   AlertCircle,
   Sparkles,
   X,
+  Navigation,
 } from 'lucide-react'
+import { LinkManager } from './link-manager'
+
+// ─── Top-level view: which tab of the Content Manager is active ──────────────
+type ManagerView = 'content' | 'links'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ContentBlock {
@@ -91,6 +96,11 @@ function isDirty(localValue: string | undefined, block: ContentBlock | undefined
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function ContentManager() {
+  // Top-level view: "Page Content" (the existing per-page editor) vs
+  // "Links & Navigation" (the LinkManager tab for nav/footer/social/CTA links).
+  // Both panels are kept mounted in the DOM and toggled via the `hidden`
+  // class so unsaved edits in either panel are preserved across toggles.
+  const [view, setView] = useState<ManagerView>('content')
   const [content, setContent] = useState<ContentMap>({})
   const [loading, setLoading] = useState(true)
   const [savingKey, setSavingKey] = useState<string | null>(null)
@@ -326,6 +336,73 @@ export function ContentManager() {
 
   return (
     <div className="space-y-6">
+      {/* ─── View Toggle: Page Content | Links & Navigation ─── */}
+      <div className="flex justify-center">
+        <div
+          role="tablist"
+          aria-label="Content Manager view"
+          className="inline-flex items-center justify-center rounded-xl p-[3px] gap-0.5"
+          style={{
+            background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+            border: '1px solid var(--gg-separator)',
+          }}
+        >
+          <button
+            role="tab"
+            aria-selected={view === 'content'}
+            onClick={() => setView('content')}
+            className={`inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-lg text-sm font-medium transition-all duration-200 ${
+              view === 'content'
+                ? 'text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            style={
+              view === 'content'
+                ? {
+                    background:
+                      'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))',
+                    color: '#fff',
+                    boxShadow: 'var(--gg-shadow-sm)',
+                  }
+                : undefined
+            }
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Page Content
+          </button>
+          <button
+            role="tab"
+            aria-selected={view === 'links'}
+            onClick={() => setView('links')}
+            className={`inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-lg text-sm font-medium transition-all duration-200 ${
+              view === 'links'
+                ? 'text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            style={
+              view === 'links'
+                ? {
+                    background:
+                      'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))',
+                    color: '#fff',
+                    boxShadow: 'var(--gg-shadow-sm)',
+                  }
+                : undefined
+            }
+          >
+            <Navigation className="h-3.5 w-3.5" />
+            Links &amp; Navigation
+          </button>
+        </div>
+      </div>
+
+      {/* ─── Links & Navigation view (separate, mount-preserved) ─── */}
+      <div className={view === 'links' ? '' : 'hidden'}>
+        <LinkManager />
+      </div>
+
+      {/* ─── Page Content view ─── */}
+      <div className={view === 'content' ? '' : 'hidden'}>
       {/* ─── Page Header ─── */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
@@ -680,6 +757,8 @@ export function ContentManager() {
           )}
         </div>
       </div>
+      </div>
+      {/* ─── End Page Content view ─── */}
     </div>
   )
 }

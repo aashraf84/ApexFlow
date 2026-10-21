@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { InteractiveCard } from '@/components/shared/interactive-card'
+import { useContent } from '@/hooks/use-content'
 
 const STATS = [
   { icon: <Building2 className="w-6 h-6 text-primary" />, value: '21', label: 'Industry ERPs', bgClass: 'bg-primary/10' },
@@ -103,6 +104,7 @@ const TIMELINE = [
 
 export function AboutPage() {
   const { navigate } = useNavigate()
+  const { get } = useContent()
 
   return (
     <PageLayout>
@@ -128,15 +130,31 @@ export function AboutPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.8 }}
             >
-              <h1 className="text-6xl sm:text-7xl lg:text-8xl font-black leading-none tracking-tighter">
-                <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 bg-clip-text text-transparent">
-                  About
-                </span>
-              </h1>
-              <div className="mt-4 flex items-center gap-3">
-                <div className="h-1 w-12 rounded-full bg-gradient-to-r from-amber-500 to-orange-500" />
-                <span className="text-2xl sm:text-3xl font-bold text-foreground">ApexFlow</span>
-              </div>
+              {(() => {
+                const v = get('About', 'about_page_title', 'About ApexFlow')
+                if (v === 'About ApexFlow') {
+                  return (
+                    <>
+                      <h1 className="text-6xl sm:text-7xl lg:text-8xl font-black leading-none tracking-tighter">
+                        <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 bg-clip-text text-transparent">
+                          About
+                        </span>
+                      </h1>
+                      <div className="mt-4 flex items-center gap-3">
+                        <div className="h-1 w-12 rounded-full bg-gradient-to-r from-amber-500 to-orange-500" />
+                        <span className="text-2xl sm:text-3xl font-bold text-foreground">ApexFlow</span>
+                      </div>
+                    </>
+                  )
+                }
+                return (
+                  <h1 className="text-6xl sm:text-7xl lg:text-8xl font-black leading-none tracking-tighter">
+                    <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 bg-clip-text text-transparent">
+                      {v}
+                    </span>
+                  </h1>
+                )
+              })()}
               <p className="mt-4 text-sm text-amber-600/70 font-medium tracking-wide uppercase">Industry-Specific ERP Ecosystem</p>
             </motion.div>
 
@@ -148,7 +166,7 @@ export function AboutPage() {
               className="text-left"
             >
               <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed">
-                We build enterprise software that runs entire industries — not adapts to them, but is built for them from the ground up. Each platform is purpose-engineered for the unique workflows, regulations, and challenges of its sector.
+                {get('About', 'about_page_description', 'We build enterprise software that runs entire industries — not adapts to them, but is built for them from the ground up. Each platform is purpose-engineered for the unique workflows, regulations, and challenges of its sector.')}
               </p>
               <div className="mt-6 flex items-center gap-2 text-amber-600/80">
                 <div className="w-8 h-px bg-amber-500/40" />
@@ -229,7 +247,7 @@ export function AboutPage() {
                     </motion.div>
                     <h3 className="text-xl font-bold text-foreground mb-3">Our Mission</h3>
                     <p className="text-muted-foreground leading-relaxed">
-                      Transform how industries operate through purpose-built technology. Every business deserves software that speaks its language, understands its workflows, and amplifies its potential — not software that forces it to compromise.
+                      {get('About', 'about_mission_statement', 'Transform how industries operate through purpose-built technology. Every business deserves software that speaks its language, understands its workflows, and amplifies its potential — not software that forces it to compromise.')}
                     </p>
                   </div>
                 </div>
@@ -262,7 +280,7 @@ export function AboutPage() {
                     </motion.div>
                     <h3 className="text-xl font-bold text-foreground mb-3">Our Vision</h3>
                     <p className="text-muted-foreground leading-relaxed">
-                      Become the operating system for every industry worldwide. We envision a future where no business has to settle for generic software — where every sector has technology built specifically for the way it works.
+                      {get('About', 'about_vision_statement', 'Become the operating system for every industry worldwide. We envision a future where no business has to settle for generic software — where every sector has technology built specifically for the way it works.')}
                     </p>
                   </div>
                 </div>
@@ -321,7 +339,7 @@ export function AboutPage() {
       <section className="py-20 border-t border-border">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-12">
-            <h2 className="text-2xl sm:text-3xl font-extrabold">Our Values</h2>
+            <h2 className="text-2xl sm:text-3xl font-extrabold">{get('About', 'about_values_heading', 'Our Values')}</h2>
             <p className="mt-3 text-muted-foreground">The principles that guide everything we build.</p>
           </motion.div>
           <div className="space-y-0">
