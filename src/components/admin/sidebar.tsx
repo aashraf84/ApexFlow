@@ -88,6 +88,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'ERP Systems', icon: Boxes, path: '/admin/erp' },
       { label: 'Reports', icon: BarChart3, path: '/admin/reports' },
+      { label: 'Content Manager', icon: FileText, path: '/admin/content', badge: 'NEW' },
       { label: 'Users & Roles', icon: KeyRound, path: '/admin/system/users' },
       { label: 'Audit Logs', icon: ScrollText, path: '/admin/audit-logs', badge: 'NEW' },
       { label: 'System Settings', icon: Settings, path: '/admin/system' },
