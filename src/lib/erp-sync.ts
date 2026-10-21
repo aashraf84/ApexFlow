@@ -716,6 +716,86 @@ export async function syncClientsFromErp(
 }
 
 // ============================================
+// Cleanup: mark clients whose ERP record was deleted as inactive
+// ============================================
+
+/** After a client sync, find SyncTenant records whose externalId no longer
+ *  exists in the ERP, mark the ApexFlow client as 'inactive', and remove the
+ *  stale SyncTenant so future syncs don't try to update a non-existent ERP row.
+ *  Returns the count of orphaned clients cleaned up. */
+export async function cleanupOrphanedClients(connectorId: string): Promise<number> {
+  try {
+    const connector = await withRetry((tx) =>
+      tx.integrationConnector.findUnique({ where: { id: connectorId } })
+    )
+    if (!connector?.connectionUrl) return 0
+    const mapping = parseMapping(connector.schemaMapping)
+    if (!mapping?.clientTable || !mapping.id) return 0
+
+    // 1. Get ALL current ERP client IDs
+    const erpSql = neon(connector.connectionUrl)
+    const colId = quoteIdent(mapping.id)
+    const table = quoteIdent(mapping.clientTable)
+    const erpRows = (await withTimeout(
+      erpSql.query(`SELECT ${colId} AS "id" FROM ${table}`, []),
+      SYNC_TIMEOUT_MS
+    )) as Array<{ id: string | number }>
+    const erpIds = new Set(erpRows.map((r) => String(r.id)))
+
+    // 2. Get all SyncTenant records for this connector
+    const tenants = await withRetry((tx) =>
+      tx.syncTenant.findMany({
+        where: { connectorId },
+        select: { id: true, externalId: true, clientId: true },
+      })
+    )
+
+    // 3. Find tenants whose externalId is no longer in the ERP
+    const orphaned = tenants.filter((t) => t.externalId && !erpIds.has(t.externalId))
+    if (orphaned.length === 0) return 0
+
+    // 4. Mark the orphaned clients as inactive (don't delete — preserve data)
+    const orphanedClientIds = orphaned.filter((t) => t.clientId).map((t) => t.clientId!)
+    if (orphanedClientIds.length > 0) {
+      await withRetry((tx) =>
+        tx.client.updateMany({
+          where: { id: { in: orphanedClientIds } },
+          data: { status: 'inactive' },
+        })
+      ).catch(() => {})
+    }
+
+    // 5. Delete the stale SyncTenant records
+    const orphanedTenantIds = orphaned.map((t) => t.id)
+    await withRetry((tx) =>
+      tx.syncTenant.deleteMany({ where: { id: { in: orphanedTenantIds } } })
+    ).catch(() => {})
+
+    // Log the cleanup
+    await withRetry((tx) =>
+      tx.syncLog.create({
+        data: {
+          erpSystemId: connector.erpSystemId || undefined,
+          erpSlug: connector.erpSlug,
+          erpName: connector.erpName,
+          direction: 'inbound',
+          status: 'success',
+          syncType: 'cleanup',
+          recordsSynced: orphaned.length,
+          recordsFailed: 0,
+          durationMs: 0,
+          metadata: JSON.stringify({ entity: 'cleanup', orphaned: orphaned.map((t) => ({ externalId: t.externalId, clientId: t.clientId })) }),
+        },
+      })
+    ).catch(() => {})
+
+    return orphaned.length
+  } catch {
+    return 0
+  }
+}
+
+// ============================================
 // Outbound: ApexFlow → ERP (register a client)
 // ============================================
 
@@ -1009,6 +1089,7 @@ export interface ConnectorSyncResult {
   serials: SyncResult
   devices: SyncResult
   subscriptions: SyncResult
+  cleanedUp?: number
 }
 
 // ============================================
@@ -1377,6 +1458,11 @@ export async function syncConnector(connectorId: string): Promise<ConnectorSyncR
   const mapping = parseMapping(connector?.schemaMapping)
   const isApi = mapping?.mode === 'api'
   const clients = isApi ? await syncClientsFromErpApi(connectorId) : await syncClientsFromErp(connectorId)
+  // After syncing clients, clean up orphans (clients deleted from the ERP)
+  let cleanedUp = 0
+  if (!isApi) {
+    cleanedUp = await cleanupOrphanedClients(connectorId)
+  }
   let serials: SyncResult = { synced: 0, failed: 0, total: 0 }
   let devices: SyncResult = { synced: 0, failed: 0, total: 0 }
   let subscriptions: SyncResult = { synced: 0, failed: 0, total: 0 }
@@ -1392,7 +1478,7 @@ export async function syncConnector(connectorId: string): Promise<ConnectorSyncR
       subscriptions = await syncSubscriptionsFromErp(connectorId)
     }
   }
-  return { connectorId, erpName: connector?.erpName || 'Unknown', clients, serials, devices, subscriptions }
+  return { connectorId, erpName: connector?.erpName || 'Unknown', clients, serials, devices, subscriptions, cleanedUp }
 }
 
 /**

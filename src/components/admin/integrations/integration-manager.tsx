@@ -530,7 +530,7 @@ export function IntegrationManager() {
         if (serials.synced) parts.push(`${serials.synced} serials`)
         if (devices.synced) parts.push(`${devices.synced} devices`)
         if (subscriptions.synced) parts.push(`${subscriptions.synced} subscriptions`)
-        toast.success(`${name}: synced ${parts.join(' + ')}${totalFailed ? ` (${totalFailed} failed)` : ''}`)
+        toast.success(`${name}: synced ${parts.join(' + ')}${totalFailed ? ` (${totalFailed} failed)` : ''}${json.cleanedUp ? ` · ${json.cleanedUp} orphaned client(s) marked inactive` : ''}`)
         // If some failed, also surface the reason as a warning
         if (totalFailed > 0 && firstError) {
           toast.warning(`${name}: ${firstError}`, { duration: 8000 })
