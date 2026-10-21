@@ -27,6 +27,7 @@ const PUBLIC_API_PATHS = new Set([
   '/api/erp-clients', // public testimonials on ERP detail pages
   '/api/stripe/webhook', // signature-verified by Stripe
   '/api/admin/sync-cron', // Vercel Cron — CRON_SECRET-verified in the route itself
+  '/api/content', // public content blocks (CMS — no auth, cached 60s)
 ])
 
 function isPublicApi(pathname: string): boolean {
