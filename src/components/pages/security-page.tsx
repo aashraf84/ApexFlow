@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { Shield, Lock, Eye, Server, CheckCircle2, AlertTriangle, ArrowRight, Mail, ExternalLink, ChevronRight } from 'lucide-react'
 import { useNavigate } from '@/lib/use-navigate'
 import { Button } from '@/components/ui/button'
+import { useContent } from '@/hooks/use-content'
 
 /* ------------------------------------------------------------------ */
 /*  Data                                                               */
@@ -125,6 +126,11 @@ const DISCLOSURE_GUIDELINES = [
 
 export function SecurityPage() {
   const { navigate } = useNavigate()
+  // Pull admin-editable content overrides. Falls back to the hardcoded
+  // APPROACH / PRACTICES / COMPLIANCE / DISCLOSURE values below when no
+  // override exists (or when the public /api/content fetch fails). Keys
+  // live under page='Security'.
+  const { get: getContent } = useContent()
 
   return (
     <PageLayout>
@@ -136,11 +142,15 @@ export function SecurityPage() {
               <Shield className="w-8 h-8 text-primary" />
             </div>
             <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight tracking-tight">
-              Security at{' '}
+              {getContent('Security', 'security_page_title', 'Security at')}{' '}
               <span className="text-primary">ApexFlow</span>
             </h1>
             <p className="mt-6 text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
-              Security isn&apos;t a feature — it&apos;s the foundation. Every layer of ApexFlow is built with enterprise-grade protection.
+              {getContent(
+                'Security',
+                'security_page_description',
+                "Security isn't a feature — it's the foundation. Every layer of ApexFlow is built with enterprise-grade protection."
+              )}
             </p>
           </motion.div>
         </div>
@@ -150,12 +160,24 @@ export function SecurityPage() {
       <section className="py-20 border-t border-border">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
-            <h2 className="text-2xl sm:text-3xl font-extrabold">Our Security Approach</h2>
-            <p className="mt-3 text-muted-foreground max-w-xl mx-auto">Four pillars that define how we protect your data and operations.</p>
+            <h2 className="text-2xl sm:text-3xl font-extrabold">{getContent('Security', 'security_section_0_title', 'Our Security Approach')}</h2>
+            <p className="mt-3 text-muted-foreground max-w-xl mx-auto">{getContent('Security', 'security_section_0_description', 'Four pillars that define how we protect your data and operations.')}</p>
           </motion.div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {APPROACH.map((item, i) => {
               const Icon = item.icon
+              // The 4 APPROACH pillars map to security_section_1..4
+              // (security_section_0 is the section heading above).
+              const pillarTitle = getContent(
+                'Security',
+                `security_section_${i + 1}_title`,
+                item.title
+              )
+              const pillarDesc = getContent(
+                'Security',
+                `security_section_${i + 1}_description`,
+                item.desc
+              )
               return (
                 <motion.div
                   key={item.title}
@@ -169,8 +191,8 @@ export function SecurityPage() {
                       <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
                         <Icon className={`w-6 h-6 ${item.color}`} />
                       </div>
-                      <h3 className="font-semibold mb-2">{item.title}</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+                      <h3 className="font-semibold mb-2">{pillarTitle}</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{pillarDesc}</p>
                     </div>
                   </InteractiveCard>
                 </motion.div>
@@ -184,8 +206,8 @@ export function SecurityPage() {
       <section className="py-20 border-t border-border">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
-            <h2 className="text-2xl sm:text-3xl font-extrabold">Security Practices</h2>
-            <p className="mt-3 text-muted-foreground">Detailed security measures across every layer of our platform.</p>
+            <h2 className="text-2xl sm:text-3xl font-extrabold">{getContent('Security', 'security_section_5_title', 'Security Practices')}</h2>
+            <p className="mt-3 text-muted-foreground">{getContent('Security', 'security_section_5_description', 'Detailed security measures across every layer of our platform.')}</p>
           </motion.div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {PRACTICES.map((practice, i) => {
@@ -228,8 +250,8 @@ export function SecurityPage() {
       <section className="py-20 border-t border-border">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
-            <h2 className="text-2xl sm:text-3xl font-extrabold">Compliance & Certifications</h2>
-            <p className="mt-3 text-muted-foreground">Independently verified security and compliance standards.</p>
+            <h2 className="text-2xl sm:text-3xl font-extrabold">{getContent('Security', 'security_section_6_title', 'Compliance & Certifications')}</h2>
+            <p className="mt-3 text-muted-foreground">{getContent('Security', 'security_section_6_description', 'Independently verified security and compliance standards.')}</p>
           </motion.div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             {COMPLIANCE_BADGES.map((badge, i) => (

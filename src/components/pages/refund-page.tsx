@@ -6,6 +6,7 @@ import { RotateCcw, ChevronDown, Mail, MapPin, ArrowRight, CreditCard, Clock, Sh
 import { useNavigate } from '@/lib/use-navigate'
 import { Button } from '@/components/ui/button'
 import { useState, useEffect, useCallback } from 'react'
+import { useContent } from '@/hooks/use-content'
 
 /* ------------------------------------------------------------------ */
 /*  Section Data                                                       */
@@ -228,6 +229,10 @@ const SECTIONS = [
 
 export function RefundPage() {
   const { navigate } = useNavigate()
+  // Pull admin-editable content overrides. Falls back to the hardcoded
+  // SECTIONS values below when no override exists (or when the public
+  // /api/content fetch fails). Keys live under page='Refund'.
+  const { get: getContent } = useContent()
   const [activeId, setActiveId] = useState<string>(SECTIONS[0].id)
   const [mobileTocOpen, setMobileTocOpen] = useState(false)
 
@@ -265,8 +270,8 @@ export function RefundPage() {
               <RotateCcw className="w-3.5 h-3.5 text-[var(--gg-amber)]" />
               <span className="text-xs text-muted-foreground">Legal</span>
             </div>
-            <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight tracking-tight">Refund Policy</h1>
-            <p className="mt-4 text-sm text-muted-foreground">Last updated: March 2025</p>
+            <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight tracking-tight">{getContent('Refund', 'refund_page_title', 'Refund Policy')}</h1>
+            <p className="mt-4 text-sm text-muted-foreground">{getContent('Refund', 'refund_page_description', 'Last updated: March 2025')}</p>
           </motion.div>
         </div>
       </section>
@@ -338,6 +343,17 @@ export function RefundPage() {
               <div className="space-y-16">
                 {SECTIONS.map((section, i) => {
                   const Icon = section.icon
+                  // ── Apply admin overrides per section ────────────────────
+                  const sectionTitle = getContent(
+                    'Refund',
+                    `refund_section_${i}_title`,
+                    section.title
+                  )
+                  const sectionParagraph0 = getContent(
+                    'Refund',
+                    `refund_section_${i}_paragraph_0`,
+                    section.paragraphs[0] ?? ''
+                  )
                   return (
                     <motion.div
                       key={section.id}
@@ -352,21 +368,36 @@ export function RefundPage() {
                         <div className="w-9 h-9 rounded-lg bg-[var(--gg-amber)]/10 border border-border flex items-center justify-center shrink-0">
                           <Icon className="w-4.5 h-4.5 text-[var(--gg-amber)]" />
                         </div>
-                        <h2 className="text-xl font-bold text-foreground">{section.title}</h2>
+                        <h2 className="text-xl font-bold text-foreground">{sectionTitle}</h2>
                       </div>
 
-                      {section.paragraphs.map((p, pi) => (
-                        <p key={pi} className="text-muted-foreground leading-relaxed mb-5">{p}</p>
+                      {section.paragraphs.length > 0 && (
+                        <p key={0} className="text-muted-foreground leading-relaxed mb-5">{sectionParagraph0}</p>
+                      )}
+                      {section.paragraphs.slice(1).map((p, pi) => (
+                        <p key={pi + 1} className="text-muted-foreground leading-relaxed mb-5">{p}</p>
                       ))}
 
                       {section.subsections.length > 0 && (
                         <div className="space-y-5">
-                          {section.subsections.map((sub) => (
-                            <div key={sub.title} className="gg-card bg-card border border-border rounded-xl p-5 shadow-[var(--gg-shadow-sm)]">
-                              <h3 className="text-sm font-semibold text-foreground mb-2">{sub.title}</h3>
-                              <p className="text-sm text-muted-foreground leading-relaxed">{sub.content}</p>
-                            </div>
-                          ))}
+                          {section.subsections.map((sub, si) => {
+                            const subTitle = getContent(
+                              'Refund',
+                              `refund_section_${i}_subsection_${si}_title`,
+                              sub.title
+                            )
+                            const subContent = getContent(
+                              'Refund',
+                              `refund_section_${i}_subsection_${si}_content`,
+                              sub.content
+                            )
+                            return (
+                              <div key={sub.title} className="gg-card bg-card border border-border rounded-xl p-5 shadow-[var(--gg-shadow-sm)]">
+                                <h3 className="text-sm font-semibold text-foreground mb-2">{subTitle}</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed">{subContent}</p>
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
 

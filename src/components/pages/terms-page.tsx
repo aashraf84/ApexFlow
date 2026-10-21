@@ -7,6 +7,7 @@ import { useNavigate } from '@/lib/use-navigate'
 import { Button } from '@/components/ui/button'
 import { useState, useEffect, useCallback } from 'react'
 import { InteractiveCard } from '@/components/shared/interactive-card'
+import { useContent } from '@/hooks/use-content'
 
 /* ------------------------------------------------------------------ */
 /*  Section Data                                                       */
@@ -205,6 +206,10 @@ const SECTIONS = [
 
 export function TermsPage() {
   const { navigate } = useNavigate()
+  // Pull admin-editable content overrides. Falls back to the hardcoded
+  // SECTIONS values below when no override exists (or when the public
+  // /api/content fetch fails). Keys live under page='Terms'.
+  const { get: getContent } = useContent()
   const [activeId, setActiveId] = useState<string>(SECTIONS[0].id)
   const [mobileTocOpen, setMobileTocOpen] = useState(false)
 
@@ -242,8 +247,8 @@ export function TermsPage() {
               <FileText className="w-3.5 h-3.5 text-[var(--gg-violet)]" />
               <span className="text-xs text-muted-foreground">Legal</span>
             </div>
-            <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight tracking-tight">Terms of Service</h1>
-            <p className="mt-4 text-sm text-muted-foreground">Last updated: March 2025</p>
+            <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight tracking-tight">{getContent('Terms', 'terms_page_title', 'Terms of Service')}</h1>
+            <p className="mt-4 text-sm text-muted-foreground">{getContent('Terms', 'terms_page_description', 'Last updated: March 2025')}</p>
           </motion.div>
         </div>
       </section>
@@ -315,6 +320,17 @@ export function TermsPage() {
               <div className="space-y-16">
                 {SECTIONS.map((section, i) => {
                   const Icon = section.icon
+                  // ── Apply admin overrides per section ────────────────────
+                  const sectionTitle = getContent(
+                    'Terms',
+                    `terms_section_${i}_title`,
+                    section.title
+                  )
+                  const sectionParagraph0 = getContent(
+                    'Terms',
+                    `terms_section_${i}_paragraph_0`,
+                    section.paragraphs[0] ?? ''
+                  )
                   return (
                     <motion.div
                       key={section.id}
@@ -329,22 +345,37 @@ export function TermsPage() {
                         <div className="w-9 h-9 rounded-lg bg-[var(--gg-violet)]/10 border border-border flex items-center justify-center shrink-0">
                           <Icon className="w-4.5 h-4.5 text-[var(--gg-violet)]" />
                         </div>
-                        <h2 className="text-xl font-bold text-foreground">{section.title}</h2>
+                        <h2 className="text-xl font-bold text-foreground">{sectionTitle}</h2>
                       </div>
 
-                      {section.paragraphs.map((p, pi) => (
-                        <p key={pi} className="text-muted-foreground leading-relaxed mb-5">{p}</p>
+                      {section.paragraphs.length > 0 && (
+                        <p key={0} className="text-muted-foreground leading-relaxed mb-5">{sectionParagraph0}</p>
+                      )}
+                      {section.paragraphs.slice(1).map((p, pi) => (
+                        <p key={pi + 1} className="text-muted-foreground leading-relaxed mb-5">{p}</p>
                       ))}
 
                       <div className="space-y-5">
-                        {section.subsections.map((sub) => (
-                          <InteractiveCard key={sub.title} variant="subtle" glowColor="var(--gg-teal)">
-                            <div className="bg-card rounded-xl p-5">
-                              <h3 className="text-sm font-semibold text-foreground mb-2">{sub.title}</h3>
-                              <p className="text-sm text-muted-foreground leading-relaxed">{sub.content}</p>
-                            </div>
-                          </InteractiveCard>
-                        ))}
+                        {section.subsections.map((sub, si) => {
+                          const subTitle = getContent(
+                            'Terms',
+                            `terms_section_${i}_subsection_${si}_title`,
+                            sub.title
+                          )
+                          const subContent = getContent(
+                            'Terms',
+                            `terms_section_${i}_subsection_${si}_content`,
+                            sub.content
+                          )
+                          return (
+                            <InteractiveCard key={sub.title} variant="subtle" glowColor="var(--gg-teal)">
+                              <div className="bg-card rounded-xl p-5">
+                                <h3 className="text-sm font-semibold text-foreground mb-2">{subTitle}</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed">{subContent}</p>
+                              </div>
+                            </InteractiveCard>
+                          )
+                        })}
                       </div>
 
                       {i < SECTIONS.length - 1 && (

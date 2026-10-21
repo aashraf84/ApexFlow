@@ -39,6 +39,9 @@ import {
   Sparkles,
   X,
   Navigation,
+  Shield,
+  Lock,
+  RefreshCw,
 } from 'lucide-react'
 import { LinkManager } from './link-manager'
 import { ErpContentEditor } from './erp-content-editor'
@@ -84,11 +87,16 @@ const PAGE_CATALOG: PageMeta[] = [
   { page: 'Contact', label: 'Contact', icon: Mail, description: 'Contact info labels' },
   { page: 'Solutions', label: 'Solutions', icon: Boxes, description: 'Page title & description' },
   { page: 'Industries', label: 'Industries', icon: Building2, description: 'Page title & description' },
+  { page: 'Products', label: 'Products', icon: Boxes, description: 'Product page headings & demo links' },
   { page: 'Careers', label: 'Careers', icon: Briefcase, description: 'Open positions & description' },
   { page: 'Resources', label: 'Resources', icon: BookOpen, description: 'Page title & description' },
   { page: 'Blog', label: 'Blog', icon: Newspaper, description: 'Page title & description' },
-  { page: 'Become Partner', label: 'Become Partner', icon: Handshake, description: 'Partner program copy' },
+  { page: 'Partner', label: 'Partner Program', icon: Handshake, description: 'Partner program copy' },
   { page: 'Reseller', label: 'Reseller', icon: Store, description: 'Reseller program copy' },
+  { page: 'Privacy', label: 'Privacy Policy', icon: Shield, description: 'Privacy policy sections' },
+  { page: 'Terms', label: 'Terms of Service', icon: FileText, description: 'Terms sections' },
+  { page: 'Refund', label: 'Refund Policy', icon: RefreshCw, description: 'Refund policy sections' },
+  { page: 'Security', label: 'Security', icon: Lock, description: 'Security page sections' },
   { page: 'Footer', label: 'Legal / Footer', icon: FileText, description: 'Copyright, blurb & link heading' },
   // ERP product pages — tagline, hero description, pricing, stats, modules,
   // pain points, workflow. Clicking this entry switches the main area to

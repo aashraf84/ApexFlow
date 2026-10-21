@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { toast } from 'sonner'
+import { useContent } from '@/hooks/use-content'
 
 /* ═══════════════════════════════════════════════════════════════
    ANIMATION CONSTANTS
@@ -297,6 +298,10 @@ function ApplicationForm() {
    ═══════════════════════════════════════════════════════════════ */
 export function PartnerPage() {
   const { navigate } = useNavigate()
+  // Pull admin-editable content overrides. Falls back to the hardcoded
+  // JSX values below when no override exists (or when the public
+  // /api/content fetch fails). Keys live under page='Partner'.
+  const { get: getContent } = useContent()
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null)
   const [activeSection, setActiveSection] = useState<'reseller' | 'investor'>('reseller')
   const stat1 = useAnimatedCounter(21, 1500)
@@ -317,7 +322,7 @@ export function PartnerPage() {
           <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: GG_EASE }} className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--gg-vermillion) 10%, transparent), color-mix(in srgb, var(--gg-amber) 8%, transparent))', border: '1px solid color-mix(in srgb, var(--gg-vermillion) 15%, transparent)' }}>
               <Handshake className="w-4 h-4" style={{ color: 'var(--gg-vermillion)' }} />
-              <span className="text-xs font-bold tracking-wide uppercase" style={{ color: 'var(--gg-vermillion)' }}>Become Partner</span>
+              <span className="text-xs font-bold tracking-wide uppercase" style={{ color: 'var(--gg-vermillion)' }}>{getContent('Partner', 'partner_page_title', 'Become Partner')}</span>
             </motion.div>
             <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1, ease: GG_EASE }} className="text-4xl sm:text-5xl lg:text-7xl font-extrabold tracking-tight text-foreground leading-[1.05]">
               Sell More,{' '}<span className="text-gradient-golden">Earn More</span>
@@ -356,7 +361,7 @@ export function PartnerPage() {
             <div className="text-center mb-14">
               <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, ease: GG_EASE }}>
                 <span className="text-xs font-bold tracking-[0.15em] uppercase" style={{ color: 'var(--gg-vermillion)' }}>Why Partner With Us</span>
-                <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">Your Success Is <span className="text-gradient-primary">Our Business</span></h2>
+                <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">{getContent('Partner', 'partner_benefits_heading', 'Your Success Is')} <span className="text-gradient-primary">Our Business</span></h2>
                 <p className="mt-4 text-muted-foreground max-w-2xl mx-auto text-lg">Whether you sell, invest, or both — we give you an entire ecosystem designed to make you money. No upfront costs, no technical burden, no limits.</p>
               </motion.div>
             </div>

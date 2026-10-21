@@ -42,7 +42,9 @@ import {
   RotateCcw,
   GripVertical,
   ExternalLink,
+  Boxes,
 } from 'lucide-react'
+import { ERP_DETAILS } from '@/lib/erp-detail-data'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types — mirror the API shape exactly
@@ -168,7 +170,11 @@ export function LinkManager() {
   const [savingSection, setSavingSection] = useState<string | null>(null)
   const [savingAll, setSavingAll] = useState(false)
   const [resettingSection, setResettingSection] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<LinkKey>('nav_links')
+  // activeTab accepts the four LinkKey sections PLUS a fifth pseudo-section
+  // 'demo_links' that renders the per-ERP demo URL editor (each row POSTs
+  // to the regular /api/admin/content endpoint with key=`erp_<slug>_website`
+  // — not the JSON link-array endpoint used by the other four sections).
+  const [activeTab, setActiveTab] = useState<LinkKey | 'demo_links'>('nav_links')
 
   // ─── Fetch all link sections ──────────────────────────────────────────────
   const fetchLinks = useCallback(async () => {
@@ -371,9 +377,11 @@ export function LinkManager() {
         <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="outline"
-            onClick={() => resetSection(activeTab)}
+            onClick={() => activeTab !== 'demo_links' && resetSection(activeTab)}
             disabled={
-              resettingSection === activeTab || !draft[activeTab].saved
+              activeTab === 'demo_links' ||
+              resettingSection === activeTab ||
+              !draft[activeTab].saved
             }
             className="border-border text-muted-foreground hover:text-foreground hover:bg-muted"
           >
@@ -382,7 +390,7 @@ export function LinkManager() {
             ) : (
               <RotateCcw className="h-4 w-4 mr-1.5" />
             )}
-            Reset {SECTION_META[activeTab].label}
+            Reset {activeTab === 'demo_links' ? 'Demo Links' : SECTION_META[activeTab].label}
           </Button>
           <Button
             onClick={saveAll}
@@ -413,7 +421,7 @@ export function LinkManager() {
       {/* ─── Tabs ─── */}
       <Tabs
         value={activeTab}
-        onValueChange={(v) => setActiveTab(v as LinkKey)}
+        onValueChange={(v) => setActiveTab(v as LinkKey | 'demo_links')}
         className="space-y-4"
       >
         <TabsList className="bg-muted/60">
@@ -434,6 +442,12 @@ export function LinkManager() {
               </TabsTrigger>
             )
           })}
+          {/* 5th tab — Demo Links: per-ERP demo URL editor (POSTs to the
+              regular content endpoint, NOT the JSON link-array endpoint). */}
+          <TabsTrigger value="demo_links" className="gap-1.5">
+            <Boxes className="h-3.5 w-3.5" />
+            Demo Links
+          </TabsTrigger>
         </TabsList>
 
         {/* ─── Navigation Links ─── */}
@@ -820,8 +834,227 @@ export function LinkManager() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ─── Demo Links (5th tab — per-ERP demo URL editor) ─── */}
+        <TabsContent value="demo_links" className="outline-none">
+          <DemoLinksEditor />
+        </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DemoLinksEditor — the 5th sub-tab inside LinkManager.
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Lists all 21 ERPs with an editable URL input per row. Each row reads its
+// current value from the public /api/content endpoint (page='erp_<slug>',
+// key='website' — the prefix is stripped automatically by the API), and
+// saves via POST /api/admin/content with key='erp_<slug>_website',
+// page=group='erp_<slug>', section='Hero Section'. This means the very same
+// SiteSetting row powers the "Explore Demo" button on /erp/<slug> and the
+// "Live Demo" button on /products.
+// ═══════════════════════════════════════════════════════════════════════════
+function DemoLinksEditor() {
+  const erpSlugs = Object.keys(ERP_DETAILS)
+  const [savedBySlug, setSavedBySlug] = useState<Record<string, string>>({})
+  const [edits, setEdits] = useState<Record<string, string>>({})
+  const [loading, setLoading] = useState(true)
+  const [savingSlug, setSavingSlug] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<Record<string, string>>({})
+
+  // Fetch every ERP's saved website override in a single call (the public
+  // /api/content endpoint returns the full content map — we just pick out
+  // the website field per ERP page).
+  const fetchSaved = useCallback(async () => {
+    try {
+      const res = await fetch('/api/content', { cache: 'no-store' })
+      if (!res.ok) throw new Error('fetch failed')
+      const data = (await res.json()) as {
+        content?: Record<string, Record<string, string>>
+      }
+      const out: Record<string, string> = {}
+      if (data.content) {
+        for (const slug of erpSlugs) {
+          const page = `erp_${slug}`
+          const v = data.content[page]?.['website']
+          if (v !== undefined && v !== '') out[slug] = v
+        }
+      }
+      setSavedBySlug(out)
+    } catch {
+      // Non-fatal — defaults will be used as fallbacks.
+    } finally {
+      setLoading(false)
+    }
+  }, [erpSlugs])
+
+  useEffect(() => {
+    fetchSaved()
+  }, [fetchSaved])
+
+  const onSave = useCallback(
+    async (slug: string) => {
+      const value = (edits[slug] ?? '').trim()
+      const defaultValue = ERP_DETAILS[slug]?.website ?? ''
+      const payload = value || defaultValue
+      setSavingSlug(slug)
+      try {
+        const res = await fetch('/api/admin/content', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: `erp_${slug}_website`,
+            value: payload,
+            page: `erp_${slug}`,
+            section: 'Hero Section',
+            label: 'Demo URL (website)',
+            type: 'text',
+            description:
+              'External demo URL the "Explore Demo" button opens on /erp/<slug> and the "Live Demo" button uses on /products.',
+            group: `erp_${slug}`,
+          }),
+        })
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}))
+          throw new Error(j.error || 'Save failed')
+        }
+        setSavedBySlug((prev) => ({ ...prev, [slug]: payload }))
+        setEdits((prev) => {
+          if (prev[slug] === undefined) return prev
+          const next = { ...prev }
+          delete next[slug]
+          return next
+        })
+        setSavedAt((prev) => ({ ...prev, [slug]: new Date().toISOString() }))
+        toast.success(
+          `Saved ${ERP_DETAILS[slug]?.name || slug} demo URL`
+        )
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to save demo URL')
+      } finally {
+        setSavingSlug(null)
+      }
+    },
+    [edits]
+  )
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--gg-vermillion)' }} />
+        <span className="ml-3 text-muted-foreground text-sm">
+          Loading ERP demo URLs…
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <Card
+      style={{
+        background: 'var(--card)',
+        borderColor: 'var(--gg-separator)',
+        boxShadow: 'var(--gg-shadow-card)',
+      }}
+    >
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <CardTitle className="text-base text-foreground flex items-center gap-2">
+              <Boxes className="h-4 w-4" style={{ color: 'var(--gg-vermillion)' }} />
+              Demo Links (per ERP)
+            </CardTitle>
+            <CardDescription className="text-xs mt-1">
+              {erpSlugs.length} ERPs. Each URL powers the &ldquo;Explore Demo&rdquo; button on
+              its ERP page AND the &ldquo;Live Demo&rdquo; button on /products.
+            </CardDescription>
+          </div>
+          <Badge
+            variant="outline"
+            className="text-[10px] font-mono border-border text-muted-foreground"
+          >
+            {erpSlugs.length} URLs
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2.5">
+        {erpSlugs.map((slug) => {
+          const meta = ERP_DETAILS[slug]
+          const defaultValue = meta?.website ?? ''
+          const savedValue = savedBySlug[slug] ?? defaultValue
+          const editValue = edits[slug] ?? savedValue
+          const dirty = (edits[slug] ?? savedValue) !== savedValue
+          const saving = savingSlug === slug
+          const updatedAt = savedAt[slug]
+          return (
+            <div
+              key={slug}
+              className="rounded-lg border border-border/60 bg-background/30 hover:bg-background/50 transition-colors p-3"
+            >
+              <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
+                <div className="min-w-0 flex-1">
+                  <Label
+                    htmlFor={`demo_url_${slug}`}
+                    className="text-sm font-semibold text-foreground"
+                  >
+                    {meta?.name || slug}
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                    {meta?.industry || ''} —{' '}
+                    <code className="text-foreground/70">/erp/{slug}</code>
+                  </p>
+                </div>
+                <code className="text-[10px] text-muted-foreground/60 font-mono bg-muted/40 px-1.5 py-0.5 rounded">
+                  erp_{slug}_website
+                </code>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                <div className="flex-1 min-w-0">
+                  <Input
+                    id={`demo_url_${slug}`}
+                    value={editValue}
+                    onChange={(e) =>
+                      setEdits((prev) => ({ ...prev, [slug]: e.target.value }))
+                    }
+                    className="bg-background border-border text-foreground h-9 font-mono text-sm"
+                    placeholder={defaultValue || 'https://…'}
+                    type="url"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => onSave(slug)}
+                  disabled={saving || !dirty}
+                  className="shrink-0 h-9 sm:w-[120px] justify-center text-white hover:opacity-90 disabled:opacity-40"
+                  style={{
+                    background: dirty
+                      ? 'linear-gradient(135deg, var(--gg-vermillion), var(--gg-amber))'
+                      : 'var(--muted)',
+                    color: dirty ? 'white' : 'var(--muted-foreground)',
+                  }}
+                >
+                  {saving ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : dirty ? (
+                    <Save className="h-3.5 w-3.5 mr-1.5" />
+                  ) : (
+                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  {saving ? 'Saving…' : dirty ? 'Save URL' : 'Saved'}
+                </Button>
+              </div>
+              {updatedAt && !dirty && (
+                <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+                  Last saved {new Date(updatedAt).toLocaleString()}
+                </p>
+              )}
+            </div>
+          )
+        })}
+      </CardContent>
+    </Card>
   )
 }
 

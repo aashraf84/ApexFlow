@@ -1078,6 +1078,7 @@ export function ErpDetailPage({ slug }: { slug: string }) {
           rawDetail.pricing !== undefined
             ? getContent(`erp_${slug}`, 'pricing', rawDetail.pricing)
             : rawDetail.pricing,
+        website: getContent(`erp_${slug}`, 'website', rawDetail.website ?? ''),
         pkrMonthly:
           rawDetail.pkrMonthly !== undefined
             ? Number(

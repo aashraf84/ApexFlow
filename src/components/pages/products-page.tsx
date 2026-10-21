@@ -7,6 +7,7 @@ import { useErpSystems, getErpIcon, getErpColor } from '@/lib/erp-data'
 import type { ErpSystemData } from '@/lib/erp-data'
 import { getErpDetail } from '@/lib/erp-detail-data'
 import type { ErpDetailData } from '@/lib/erp-detail-data'
+import { useContent } from '@/hooks/use-content'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle2, Clock, ChevronRight, ChevronDown, Loader2, AlertCircle,
@@ -281,6 +282,10 @@ function CategoryPillTabs({
 export function ProductsPage() {
   const { navigate } = useNavigate()
   const { activeErps, comingSoonErps, loading, error, industryVerticals } = useErpSystems()
+  // Pull admin-editable content overrides. Falls back to the hardcoded
+  // values from the JSX below when no override exists (or when the public
+  // /api/content fetch fails). Keys live under page='Products'.
+  const { get: getContent } = useContent()
 
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('all')
   const [expandedErp, setExpandedErp] = useState<string | null>(null)
@@ -347,7 +352,7 @@ export function ProductsPage() {
                 21
               </div>
               <p className="text-sm sm:text-base font-semibold text-muted-foreground mt-1 text-center lg:text-left tracking-wide">
-                AI-Powered Operating Systems
+                {getContent('Products', 'products_hero_badge', 'AI-Powered Operating Systems')}
               </p>
             </motion.div>
 
@@ -359,15 +364,18 @@ export function ProductsPage() {
               className="flex-1 text-center lg:text-left"
             >
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-black leading-tight tracking-tight text-foreground">
-                Purpose-Built ERPs
+                {getContent('Products', 'products_page_title', 'Purpose-Built ERPs')}
                 <br />
                 <span className="bg-gradient-to-r from-emerald-500 to-teal-500 bg-clip-text text-transparent">
                   For Every Industry
                 </span>
               </h1>
               <p className="mt-3 text-base text-muted-foreground max-w-xl mx-auto lg:mx-0 leading-relaxed">
-                From hospitality to manufacturing, each system is designed for the real world —
-                with full POS, CRM, inventory, and operational capabilities built in.
+                {getContent(
+                  'Products',
+                  'products_page_description',
+                  'From hospitality to manufacturing, each system is designed for the real world — with full POS, CRM, inventory, and operational capabilities built in.'
+                )}
               </p>
 
               {/* Stats in horizontal row */}
@@ -502,7 +510,13 @@ export function ProductsPage() {
                   <Button
                     variant="outline"
                     className="border-border text-foreground/80 hover:bg-secondary/50 rounded-xl px-5 h-10 transition-all duration-200"
-                    onClick={() => window.open('https://pharmaflowerp.vercel.app/', '_blank', 'noopener')}
+                    onClick={() =>
+                      window.open(
+                        getContent('erp_pharmaflow', 'website', 'https://pharmaflowerp.vercel.app/'),
+                        '_blank',
+                        'noopener'
+                      )
+                    }
                   >
                     <ExternalLink className="w-3.5 h-3.5 mr-2" />
                     Live Demo
@@ -641,7 +655,13 @@ export function ProductsPage() {
                   <Button
                     variant="outline"
                     className="border-border text-foreground/80 hover:bg-secondary/50 rounded-xl px-5 h-10 transition-all duration-200"
-                    onClick={() => window.open('https://fuelflowerp.vercel.app/', '_blank', 'noopener')}
+                    onClick={() =>
+                      window.open(
+                        getContent('erp_fuelflow', 'website', 'https://fuelflowerp.vercel.app/'),
+                        '_blank',
+                        'noopener'
+                      )
+                    }
                   >
                     <ExternalLink className="w-3.5 h-3.5 mr-2" />
                     Live Demo
