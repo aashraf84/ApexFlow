@@ -4,6 +4,7 @@ export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { requirePermission } from '@/lib/api-helpers'
+import { ERP_DETAILS } from '@/lib/erp-detail-data'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Exported so the PUBLIC /api/content route (no auth) can share the same
@@ -16,6 +17,11 @@ export interface ContentBlock {
   label: string
   type?: 'text' | 'textarea'
   description?: string
+  // Optional `group` for blocks stored under a different group than the page
+  // name (e.g. ERP content blocks use group='erp_<slug>' which matches their
+  // page name, but the field is included explicitly so the public /api/content
+  // route can bucket saved rows by group without round-tripping through page).
+  group?: string
 }
 
 // ─── Default content blocks seeded on first load ───────────────────────────────
@@ -520,6 +526,285 @@ export const DEFAULT_CONTENT: ContentBlock[] = [
     description: 'Heading shown above the quick links column in the footer.',
   },
 ]
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ERP PRODUCT CONTENT BLOCKS
+// ═══════════════════════════════════════════════════════════════════════════
+// Each ERP product page (e.g. /erp/pharmaflow) renders tagline, heroDescription,
+// pricing, pkrMonthly, stats[], modules[], painPoints[], workflow[] from the
+// hardcoded ERP_DETAILS map. These blocks let an admin override every one of
+// those fields from the Content Manager (under the "ERP Products" page in the
+// left sidebar).
+//
+// Key convention: `erp_<slug>_<field>` (e.g. `erp_pharmaflow_tagline`,
+// `erp_pharmaflow_module_0_name`). The full key is what's stored as the
+// SiteSetting row's `key` field.
+//
+// Page convention: `erp_<slug>` (e.g. `erp_pharmaflow`). The admin GET handler
+// groups blocks by `page` so each ERP shows up as its own "page" in the
+// Content Manager's ERP Products sub-nav.
+//
+// Group convention: same as the page (`erp_<slug>`). The POST handler stores
+// the body's `group` (defaulting to `page`) so DB rows are bucketed by ERP
+// slug.
+//
+// Variable-length arrays (stats / modules / painPoints / workflow) are
+// enumerated by index at module load time, so adding a new stat/module to the
+// hardcoded ERP_DETAILS map automatically produces a new editable block here.
+// (SalonFlow is missing some of these fields — its blocks are simply skipped.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildErpContentBlocks(): ContentBlock[] {
+  const out: ContentBlock[] = []
+  const erpSlugs = Object.keys(ERP_DETAILS)
+
+  for (const slug of erpSlugs) {
+    const d = ERP_DETAILS[slug]
+    if (!d) continue
+    const page = `erp_${slug}`
+    const group = page
+
+    // ── Hero Section ───────────────────────────────────────────────
+    out.push({
+      key: `erp_${slug}_tagline`,
+      value: d.tagline ?? '',
+      page,
+      group,
+      section: 'Hero Section',
+      label: 'Tagline',
+      type: 'text',
+      description: `Hero sub-headline shown beneath the ERP name on /erp/${slug}.`,
+    })
+    out.push({
+      key: `erp_${slug}_heroDescription`,
+      value: d.heroDescription ?? '',
+      page,
+      group,
+      section: 'Hero Section',
+      label: 'Hero Description',
+      type: 'textarea',
+      description: `Hero paragraph shown beneath the tagline on /erp/${slug}.`,
+    })
+
+    // Pricing fields — SalonFlow has no pricing/pkrMonthly, so skip.
+    if (d.pricing !== undefined) {
+      out.push({
+        key: `erp_${slug}_pricing`,
+        value: d.pricing,
+        page,
+        group,
+        section: 'Pricing Section',
+        label: 'Pricing Display',
+        type: 'text',
+        description: `Pricing blurb shown beneath the hero CTAs (e.g. "Starting from PKR 15,000/mo").`,
+      })
+    }
+    if (d.pkrMonthly !== undefined) {
+      out.push({
+        key: `erp_${slug}_pkrMonthly`,
+        value: String(d.pkrMonthly),
+        page,
+        group,
+        section: 'Pricing Section',
+        label: 'PKR Monthly Price',
+        type: 'text',
+        description: `Numeric monthly price in PKR (used to derive the 3 pricing tiers).`,
+      })
+    }
+
+    // ── Stats Section (variable count per ERP) ────────────────────
+    const stats = Array.isArray(d.stats) ? d.stats : []
+    stats.forEach((s, i) => {
+      out.push({
+        key: `erp_${slug}_stat_${i}_label`,
+        value: s.label,
+        page,
+        group,
+        section: 'Stats Section',
+        label: `Stat ${i + 1} Label`,
+        type: 'text',
+        description: `Label for the ${ordinal(i + 1)} hero stat card.`,
+      })
+      out.push({
+        key: `erp_${slug}_stat_${i}_value`,
+        value: s.value,
+        page,
+        group,
+        section: 'Stats Section',
+        label: `Stat ${i + 1} Value`,
+        type: 'text',
+        description: `Value for the ${ordinal(i + 1)} hero stat card (e.g. "40%" or "3x Faster").`,
+      })
+    })
+
+    // ── Modules Section (variable count per ERP) ──────────────────
+    const modules = Array.isArray(d.modules) ? d.modules : []
+    modules.forEach((m, i) => {
+      out.push({
+        key: `erp_${slug}_module_${i}_name`,
+        value: m.name,
+        page,
+        group,
+        section: 'Modules Section',
+        label: `Module ${i + 1} Name`,
+        type: 'text',
+        description: `Name of the ${ordinal(i + 1)} module shown in the Module Explorer.`,
+      })
+      out.push({
+        key: `erp_${slug}_module_${i}_description`,
+        value: m.description,
+        page,
+        group,
+        section: 'Modules Section',
+        label: `Module ${i + 1} Description`,
+        type: 'textarea',
+        description: `Description of the ${ordinal(i + 1)} module.`,
+      })
+    })
+
+    // ── Pain Points Section (variable count per ERP) ──────────────
+    const painPoints = Array.isArray(d.painPoints) ? d.painPoints : []
+    painPoints.forEach((p, i) => {
+      out.push({
+        key: `erp_${slug}_painPoint_${i}_title`,
+        value: p.title,
+        page,
+        group,
+        section: 'Pain Points Section',
+        label: `Pain Point ${i + 1} Title`,
+        type: 'text',
+        description: `Title for the ${ordinal(i + 1)} pain-point flip card.`,
+      })
+      out.push({
+        key: `erp_${slug}_painPoint_${i}_before`,
+        value: p.before,
+        page,
+        group,
+        section: 'Pain Points Section',
+        label: `Pain Point ${i + 1} — Before`,
+        type: 'textarea',
+        description: `"Before" copy for the ${ordinal(i + 1)} pain-point flip card.`,
+      })
+      out.push({
+        key: `erp_${slug}_painPoint_${i}_after`,
+        value: p.after,
+        page,
+        group,
+        section: 'Pain Points Section',
+        label: `Pain Point ${i + 1} — After`,
+        type: 'textarea',
+        description: `"After" copy for the ${ordinal(i + 1)} pain-point flip card.`,
+      })
+    })
+
+    // ── Workflow Section (variable count per ERP) ─────────────────
+    const workflow = Array.isArray(d.workflow) ? d.workflow : []
+    workflow.forEach((w, i) => {
+      out.push({
+        key: `erp_${slug}_workflow_${i}_step`,
+        value: w.step,
+        page,
+        group,
+        section: 'Workflow Section',
+        label: `Workflow ${i + 1} Step`,
+        type: 'text',
+        description: `Step number (e.g. "01") for the ${ordinal(i + 1)} workflow timeline step.`,
+      })
+      out.push({
+        key: `erp_${slug}_workflow_${i}_title`,
+        value: w.title,
+        page,
+        group,
+        section: 'Workflow Section',
+        label: `Workflow ${i + 1} Title`,
+        type: 'text',
+        description: `Title for the ${ordinal(i + 1)} workflow timeline step.`,
+      })
+      out.push({
+        key: `erp_${slug}_workflow_${i}_description`,
+        value: w.description,
+        page,
+        group,
+        section: 'Workflow Section',
+        label: `Workflow ${i + 1} Description`,
+        type: 'textarea',
+        description: `Description for the ${ordinal(i + 1)} workflow timeline step.`,
+      })
+    })
+  }
+
+  return out
+}
+
+// Helper: 1 → "1st", 2 → "2nd", 3 → "3rd", 4 → "4th"…
+function ordinal(n: number): string {
+  const v = n % 100
+  if (v >= 11 && v <= 13) return `${n}th`
+  switch (n % 10) {
+    case 1:
+      return `${n}st`
+    case 2:
+      return `${n}nd`
+    case 3:
+      return `${n}rd`
+    default:
+      return `${n}th`
+  }
+}
+
+// Built once at module load — ~1,200 blocks across 21 ERPs.
+export const ERP_CONTENT_BLOCKS: ContentBlock[] = buildErpContentBlocks()
+
+// Quick lookup: page → blocks[] (used by the dedicated /api/admin/content/erp
+// endpoint to return a single ERP's blocks without re-iterating the full map).
+const ERP_BLOCKS_BY_PAGE: Record<string, ContentBlock[]> = (() => {
+  const out: Record<string, ContentBlock[]> = {}
+  for (const block of ERP_CONTENT_BLOCKS) {
+    if (!out[block.page]) out[block.page] = []
+    out[block.page].push(block)
+  }
+  return out
+})()
+
+/**
+ * Return the ERP content blocks (defaults merged with DB overrides) for a
+ * single ERP slug. Returns `{ blocks, meta }` where meta contains the
+ * display name, slug and icon-name from ERP_DETAILS so the admin UI can
+ * render the ERP picker without importing the (large) erp-detail-data module
+ * on the client.
+ */
+export function getErpContentForSlug(
+  slug: string,
+  savedByKey: Map<string, { value: string; updatedAt: Date }>
+): {
+  blocks: Array<ContentBlock & { saved: boolean; updatedAt?: string }>
+  meta: { slug: string; name: string; icon: string; color: string; industry: string } | null
+} {
+  const page = `erp_${slug}`
+  const defaults = ERP_BLOCKS_BY_PAGE[page] || []
+  const d = ERP_DETAILS[slug]
+  const meta = d
+    ? {
+        slug: d.slug,
+        name: d.name,
+        icon: d.icon,
+        color: d.color,
+        industry: d.industry,
+      }
+    : null
+
+  const blocks = defaults.map((block) => {
+    const saved = savedByKey.get(block.key)
+    return {
+      ...block,
+      value: saved ? saved.value : block.value,
+      saved: !!saved,
+      updatedAt: saved ? saved.updatedAt.toISOString() : undefined,
+    } as ContentBlock & { saved: boolean; updatedAt?: string }
+  })
+
+  return { blocks, meta }
+}
 
 // Group defaults by page so the GET handler can merge them with DB rows.
 function defaultsByPage(): Record<string, ContentBlock[]> {

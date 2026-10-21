@@ -1,16 +1,94 @@
 'use client'
 
 import Link from 'next/link'
-import { getViewPath } from '@/lib/use-navigate'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Github, Twitter, Linkedin, Mail, MapPin, Phone,
   ArrowUp, Send, CheckCircle, Instagram, Youtube, Facebook, MessageCircle
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SiteLogo } from '@/components/shared/site-logo'
 import { useSiteSettings } from '@/lib/site-settings-store'
+import { useContent } from '@/hooks/use-content'
+
+/* ═══════════════════════════════════════════════════════════════
+   LINK MANAGER WIRING — types + icon map + fallbacks
+   The admin-managed Link Manager stores footer_links + social_links as
+   JSON arrays in SiteSetting rows (category='content', group='footer'/
+   'social'). The public /api/content endpoint serves them under their
+   group page, so `get('footer', 'footer_links', '[]')` returns the
+   JSON string. Hardcoded fallbacks keep the site working when the API
+   or DB is unreachable.
+   ═══════════════════════════════════════════════════════════════ */
+
+type StoredFooterLink = {
+  id: string
+  column: string
+  label: string
+  href: string
+  order?: number
+}
+
+type StoredSocialLink = {
+  id: string
+  platform: string
+  url: string
+  icon?: string
+}
+
+// ─── Icon string → lucide-react component ─────────────────────────────
+const SOCIAL_ICON_MAP: Record<string, LucideIcon> = {
+  github: Github,
+  twitter: Twitter,
+  x: Twitter,
+  linkedin: Linkedin,
+  facebook: Facebook,
+  instagram: Instagram,
+  youtube: Youtube,
+  discord: MessageCircle,
+  telegram: Send,
+  email: Mail,
+  mail: Mail,
+}
+
+function lookupSocialIcon(name?: string): LucideIcon {
+  if (!name) return MessageCircle
+  const key = name.toLowerCase().replace(/[-_\s]/g, '')
+  return SOCIAL_ICON_MAP[key] || MessageCircle
+}
+
+// ─── Hardcoded fallback footer links (mirror the pre-wire look) ────
+// Includes the four original "Security" legal entry so the bottom bar
+// stays identical when no override has been saved.
+const FALLBACK_FOOTER_LINKS: StoredFooterLink[] = [
+  // Company
+  { id: 'ftr_about', column: 'Company', label: 'About', href: '/about', order: 0 },
+  { id: 'ftr_become_partner', column: 'Company', label: 'Become Partner', href: '/become-partner', order: 1 },
+  { id: 'ftr_blog', column: 'Company', label: 'Blog', href: '/blog', order: 2 },
+  { id: 'ftr_contact', column: 'Company', label: 'Contact', href: '/contact', order: 3 },
+  // Resources
+  { id: 'ftr_docs', column: 'Resources', label: 'Documentation', href: '/resources', order: 0 },
+  { id: 'ftr_api', column: 'Resources', label: 'API Reference', href: '/resources', order: 1 },
+  { id: 'ftr_status', column: 'Resources', label: 'Status', href: '/resources', order: 2 },
+  { id: 'ftr_changelog', column: 'Resources', label: 'Changelog', href: '/resources', order: 3 },
+  // Legal — rendered in the bottom bar
+  { id: 'ftr_terms', column: 'Legal', label: 'Terms of Service', href: '/legal/terms', order: 0 },
+  { id: 'ftr_privacy', column: 'Legal', label: 'Privacy Policy', href: '/legal/privacy', order: 1 },
+  { id: 'ftr_refund', column: 'Legal', label: 'Refund Policy', href: '/legal/refund', order: 2 },
+  { id: 'ftr_security', column: 'Legal', label: 'Security', href: '/legal/security', order: 3 },
+]
+
+// ─── Hardcoded fallback social links ──────────────────────────────────
+const FALLBACK_SOCIAL_LINKS: StoredSocialLink[] = [
+  { id: 'soc_github', platform: 'GitHub', url: 'https://github.com/apexflowerp', icon: 'github' },
+  { id: 'soc_twitter', platform: 'Twitter/X', url: '', icon: 'twitter' },
+  { id: 'soc_linkedin', platform: 'LinkedIn', url: '', icon: 'linkedin' },
+  { id: 'soc_facebook', platform: 'Facebook', url: '', icon: 'facebook' },
+  { id: 'soc_instagram', platform: 'Instagram', url: '', icon: 'instagram' },
+  { id: 'soc_youtube', platform: 'YouTube', url: '', icon: 'youtube' },
+]
 
 /* ─────────────── Logo ─────────────── */
 function Logo() {
@@ -18,14 +96,12 @@ function Logo() {
 }
 
 /* ─────────────── Link Helpers ─────────────── */
-type FooterLink = { label: string; view: string; slug?: string }
-
 function FooterLinkColumn({
   title,
   links,
 }: {
   title: string
-  links: FooterLink[]
+  links: StoredFooterLink[]
 }) {
   return (
     <div>
@@ -34,9 +110,9 @@ function FooterLinkColumn({
       </h4>
       <ul className="space-y-3">
         {links.map((link) => (
-          <li key={link.label}>
+          <li key={link.id || link.label}>
             <Link
-              href={getViewPath(link.view, link.slug)}
+              href={link.href}
               className="text-sm text-muted-foreground hover:text-[var(--gg-vermillion)] transition-colors duration-300 ease-out"
             >
               {link.label}
@@ -84,24 +160,117 @@ export function SiteFooter() {
   const [subscribed, setSubscribed] = useState(false)
   const [showBackToTop, setShowBackToTop] = useState(false)
   const { getSetting } = useSiteSettings()
+  const { get: getContent } = useContent()
 
-  // Read footer settings
+  // Read footer settings from the site-settings store (contact info,
+  // theme toggles, etc. — these aren't part of the Link Manager scope).
   const companyDescription = getSetting('footer_company_description', 'AI Powered Operating Systems that run entire industries. Built for scale, designed for simplicity.')
   const footerEmail = getSetting('footer_email', 'info@apexflow.cloud')
   const footerPhone = getSetting('footer_phone', '+92 307 4903277')
   const footerAddress = getSetting('footer_address', 'Lahore, Pakistan')
-  const githubUrl = getSetting('social_github_url', 'https://github.com/apexflowerp')
-  const twitterUrl = getSetting('social_twitter_url', '')
-  const linkedinUrl = getSetting('social_linkedin_url', '')
-  const instagramUrl = getSetting('social_instagram_url', '')
-  const youtubeUrl = getSetting('social_youtube_url', '')
-  const facebookUrl = getSetting('social_facebook_url', '')
-  const discordUrl = getSetting('social_discord_url', '')
-  const telegramUrl = getSetting('social_telegram_url', '')
   const showNewsletter = getSetting('footer_show_newsletter', 'true') === 'true'
-  const copyrightText = getSetting('footer_copyright_text', '')
   const tagline = getSetting('footer_tagline', 'Built for industries that demand more.')
   const siteName = getSetting('site_name', 'ApexFlow')
+
+  /* ─── Link Manager — dynamic footer + social links + copyright ────
+     Pulls footer_links, social_links, and footer_copyright_text from
+     the public content endpoint via the useContent singleton hook.
+     On any failure (API down, malformed JSON, empty override), falls
+     back to FALLBACK_FOOTER_LINKS / FALLBACK_SOCIAL_LINKS / a
+     dynamic `© {year} {siteName}` string so the footer renders
+     identically to the pre-wire version. */
+  const footerLinks = useMemo<StoredFooterLink[]>(() => {
+    const raw = getContent('footer', 'footer_links', '[]')
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter(
+          (l) =>
+            l &&
+            typeof l.label === 'string' &&
+            typeof l.href === 'string' &&
+            typeof l.column === 'string'
+        )
+      }
+    } catch {
+      /* malformed JSON → fall through to defaults */
+    }
+    return FALLBACK_FOOTER_LINKS
+  }, [getContent])
+
+  const socialLinks = useMemo<StoredSocialLink[]>(() => {
+    const raw = getContent('social', 'social_links', '[]')
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter(
+          (l) => l && typeof l.platform === 'string' && typeof l.url === 'string'
+        )
+      }
+    } catch {
+      /* malformed JSON → fall through to defaults */
+    }
+    return FALLBACK_SOCIAL_LINKS
+  }, [getContent])
+
+  /* Copyright: prefer the Link Manager override (page='Footer'), then
+     fall back to the site-settings value, then to a dynamic
+     `© {year} {siteName}. All rights reserved.` string. This preserves
+     the pre-wire fallback chain. */
+  const copyrightText = useMemo(() => {
+    const fromContent = getContent('Footer', 'footer_copyright_text', '')
+    if (fromContent && fromContent.trim() !== '') return fromContent
+    const fromSettings = getSetting('footer_copyright_text', '')
+    if (fromSettings && fromSettings.trim() !== '') return fromSettings
+    return `© ${new Date().getFullYear()} ${siteName}. All rights reserved.`
+  }, [getContent, getSetting, siteName])
+
+  /* Group footer_links by `column`, sort each column's links by `order`,
+     then sort the columns themselves by their minimum link order so the
+     admin's intended column ordering is respected. The Legal column is
+     excluded here — it's rendered separately in the bottom bar. */
+  const footerColumns = useMemo(() => {
+    const groups: Record<string, StoredFooterLink[]> = {}
+    for (const l of footerLinks) {
+      if (!groups[l.column]) groups[l.column] = []
+      groups[l.column].push(l)
+    }
+    return Object.entries(groups)
+      .map(([column, links]) => ({
+        column,
+        links: links.sort(
+          (a, b) =>
+            (typeof a.order === 'number' ? a.order : 0) -
+            (typeof b.order === 'number' ? b.order : 0)
+        ),
+        minOrder: links.reduce(
+          (m, l) => Math.min(m, typeof l.order === 'number' ? l.order : 0),
+          0
+        ),
+      }))
+      .filter((g) => g.column !== 'Legal')
+      .sort((a, b) => a.minOrder - b.minOrder)
+  }, [footerLinks])
+
+  /* Legal links go in the bottom bar. Sorted by `order`. */
+  const legalLinks = useMemo(
+    () =>
+      footerLinks
+        .filter((l) => l.column === 'Legal')
+        .sort(
+          (a, b) =>
+            (typeof a.order === 'number' ? a.order : 0) -
+            (typeof b.order === 'number' ? b.order : 0)
+        ),
+    [footerLinks]
+  )
+
+  /* Social links with a non-empty URL — empty-URL entries are skipped
+     so the row doesn't render blank icons. */
+  const visibleSocialLinks = useMemo(
+    () => socialLinks.filter((s) => s.url && s.url.trim() !== ''),
+    [socialLinks]
+  )
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 400)
@@ -120,27 +289,6 @@ export function SiteFooter() {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-
-  const companyLinks: FooterLink[] = [
-    { label: 'About', view: 'about' },
-    { label: 'Become Partner', view: 'become-partner' },
-    { label: 'Blog', view: 'blog' },
-    { label: 'Contact', view: 'contact' },
-  ]
-
-  const resourceLinks: FooterLink[] = [
-    { label: 'Documentation', view: 'resources' },
-    { label: 'API Reference', view: 'resources' },
-    { label: 'Status', view: 'resources' },
-    { label: 'Changelog', view: 'resources' },
-  ]
-
-  const legalLinks: FooterLink[] = [
-    { label: 'Terms of Service', view: 'legal-terms' },
-    { label: 'Privacy Policy', view: 'legal-privacy' },
-    { label: 'Refund Policy', view: 'legal-refund' },
-    { label: 'Security', view: 'legal-security' },
-  ]
 
   return (
     <footer className="relative mt-auto" style={{ background: 'var(--background)' }}>
@@ -167,26 +315,31 @@ export function SiteFooter() {
             <p className="mt-5 text-sm text-muted-foreground leading-relaxed max-w-xs">
               {companyDescription}
             </p>
+            {/* Social links — sourced from the admin-managed Link Manager
+                (social_links JSON array). Empty-URL entries are skipped. */}
             <div className="flex items-center gap-2.5 mt-6">
-              {githubUrl && <SocialLink href={githubUrl} icon={Github} label="GitHub" />}
-              {twitterUrl && <SocialLink href={twitterUrl} icon={Twitter} label="Twitter" />}
-              {linkedinUrl && <SocialLink href={linkedinUrl} icon={Linkedin} label="LinkedIn" />}
-              {facebookUrl && <SocialLink href={facebookUrl} icon={Facebook} label="Facebook" />}
-              {instagramUrl && <SocialLink href={instagramUrl} icon={Instagram} label="Instagram" />}
-              {youtubeUrl && <SocialLink href={youtubeUrl} icon={Youtube} label="YouTube" />}
-              {discordUrl && <SocialLink href={discordUrl} icon={MessageCircle} label="Discord" />}
+              {visibleSocialLinks.map((s) => (
+                <SocialLink
+                  key={s.id}
+                  href={s.url}
+                  icon={lookupSocialIcon(s.icon)}
+                  label={s.platform}
+                />
+              ))}
             </div>
           </div>
 
-          {/* Column 2 — Company */}
-          <div className="lg:col-span-2">
-            <FooterLinkColumn title="Company" links={companyLinks} />
-          </div>
-
-          {/* Column 3 — Resources */}
-          <div className="lg:col-span-2">
-            <FooterLinkColumn title="Resources" links={resourceLinks} />
-          </div>
+          {/* Link columns — sourced from the admin-managed Link Manager
+              (footer_links JSON array, grouped by `column`). The Legal
+              column is rendered separately in the bottom bar. Each column
+              gets lg:col-span-2 to match the pre-wire 12-col grid layout;
+              if the admin configures more than 2 link columns the extra
+              ones wrap to a new row. */}
+          {footerColumns.map((col) => (
+            <div key={col.column} className="lg:col-span-2">
+              <FooterLinkColumn title={col.column} links={col.links} />
+            </div>
+          ))}
 
           {/* Column 4 — Contact Info */}
           <div className="lg:col-span-4">
@@ -311,14 +464,22 @@ export function SiteFooter() {
           className="py-6 flex flex-col sm:flex-row items-center justify-between gap-4"
           style={{ borderTop: '1px solid var(--gg-separator)' }}
         >
+          {/* Copyright — sourced from the Link Manager
+              (page='Footer', key='footer_copyright_text'), with a
+              dynamic `© {year} {siteName}` fallback when no override
+              exists. */}
           <p className="text-xs text-muted-foreground">
-            {copyrightText || `© ${new Date().getFullYear()} ${siteName}. All rights reserved.`}
+            {copyrightText}
           </p>
+          {/* Legal links — sourced from the admin-managed Link Manager
+              (footer_links filtered to column='Legal'). Falls back to
+              the four hardcoded entries in FALLBACK_FOOTER_LINKS when no
+              override exists. */}
           <div className="flex items-center gap-1 flex-wrap justify-center">
             {legalLinks.map((link, i) => (
-              <span key={link.label} className="flex items-center">
+              <span key={link.id || link.label} className="flex items-center">
                 <Link
-                  href={getViewPath(link.view)}
+                  href={link.href}
                   className="text-xs text-muted-foreground hover:text-[var(--gg-vermillion)] transition-colors duration-300 px-2.5 py-1.5 rounded-md"
                 >
                   {link.label}

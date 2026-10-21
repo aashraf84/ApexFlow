@@ -17,18 +17,165 @@ import {
   Rocket, Shield, Zap, BookOpen, Phone, LogIn, Compass,
   TrendingUp, Warehouse, Megaphone, Play, ChevronUp,
   CircleDot, LayoutGrid, Tag, Eye, Fuel, Scissors,
+  Boxes, Home, Mail,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SiteLogo } from '@/components/shared/site-logo'
 import { useSiteSettings } from '@/lib/site-settings-store'
+import { useContent } from '@/hooks/use-content'
 
 /* ═══════════════════════════════════════════════════════════════
    ANIMATION CONSTANTS
    ═══════════════════════════════════════════════════════════════ */
 const springTransition = { type: 'spring' as const, stiffness: 500, damping: 35 }
 const smoothEase = [0.23, 1, 0.32, 1] as const
+
+/* ═══════════════════════════════════════════════════════════════
+   LINK MANAGER WIRING — icon map + helpers + fallbacks
+   The admin-managed Link Manager stores nav_links / footer_links /
+   social_links / cta_links as JSON arrays in SiteSetting rows under
+   category='content' (group='navigation'/'footer'/'social'/'cta').
+   The public /api/content endpoint serves them under their group page,
+   so `get('navigation', 'nav_links', '[]')` returns the JSON string.
+   These helpers map the simple `{id,label,href,icon,order}` rows to the
+   rich DropdownItem shape the header already understands, with hardcoded
+   fallbacks so the site works even if the API/DB is unreachable.
+   ═══════════════════════════════════════════════════════════════ */
+
+// ─── Shape of a stored nav link (mirrors /api/admin/content/links) ───
+type StoredNavLink = {
+  id: string
+  label: string
+  href: string
+  icon?: string
+  order?: number
+  view?: string
+  slug?: string
+  description?: string
+  badge?: string
+  color?: string
+}
+
+type StoredCtaLink = {
+  id: string
+  key: string
+  label: string
+  href: string
+}
+
+// ─── Icon string → lucide-react component ─────────────────────────────
+// Covers every icon the Link Manager defaults use plus every ERP product
+// icon used in PRODUCTS_ITEMS, so dynamic nav links can render icons
+// even when the admin picks an ERP slug as a top-level nav entry.
+const ICON_MAP: Record<string, LucideIcon> = {
+  home: Home,
+  globe: Globe,
+  boxes: Boxes,
+  layers: Layers,
+  building2: Building2,
+  tag: Tag,
+  bookopen: BookOpen,
+  book: BookOpen,
+  mail: Mail,
+  phone: Phone,
+  shirt: Shirt,
+  hotel: Hotel,
+  graduationcap: GraduationCap,
+  pill: Pill,
+  shoppingcart: ShoppingCart,
+  factory: Factory,
+  truck: Truck,
+  hardhat: HardHat,
+  heartpulse: HeartPulse,
+  palette: Palette,
+  wrench: Wrench,
+  plane: Plane,
+  utensilscrossed: UtensilsCrossed,
+  textcursorinput: TextCursorInput,
+  route: RouteIcon,
+  zap: Zap,
+  compass: Compass,
+  fuel: Fuel,
+  scissors: Scissors,
+  package: Package,
+  sparkles: Sparkles,
+  star: Star,
+  crown: Crown,
+  rocket: Rocket,
+  shield: Shield,
+  users: Users,
+  briefcase: Briefcase,
+  settings: Settings,
+  barchart3: BarChart3,
+  linechart: LineChart,
+}
+
+function lookupIcon(name?: string): LucideIcon {
+  if (!name) return Globe
+  const key = name.toLowerCase().replace(/[-_\s]/g, '')
+  return ICON_MAP[key] || Globe
+}
+
+// ─── href → view + optional slug (for useNavigate) ───────────────────
+function hrefToView(href: string): { view: string; slug?: string } {
+  if (!href || href === '/' || href === '/home') return { view: 'home' }
+  if (href === '/products') return { view: 'products' }
+  if (href === '/solutions') return { view: 'solutions' }
+  if (href === '/industries') return { view: 'industries' }
+  if (href === '/pricing') return { view: 'pricing' }
+  if (href === '/resources') return { view: 'resources' }
+  if (href === '/contact') return { view: 'contact' }
+  if (href === '/about') return { view: 'about' }
+  if (href === '/careers') return { view: 'careers' }
+  if (href === '/blog') return { view: 'blog' }
+  if (href === '/become-partner') return { view: 'become-partner' }
+  if (href === '/login' || href === '/signin') return { view: 'signin' }
+  if (href === '/dashboard') return { view: 'dashboard' }
+  if (href.startsWith('/erp/')) return { view: 'erp-detail', slug: href.slice('/erp/'.length) }
+  if (href.startsWith('/industry/')) return { view: 'industry-detail', slug: href.slice('/industry/'.length) }
+  if (href.startsWith('/legal/')) {
+    const tail = href.slice('/legal/'.length)
+    if (tail === 'terms') return { view: 'legal-terms' }
+    if (tail === 'privacy') return { view: 'legal-privacy' }
+    if (tail === 'refund') return { view: 'legal-refund' }
+    if (tail === 'security') return { view: 'legal-security' }
+  }
+  // Unknown href → fall back to home so the link is always clickable.
+  return { view: 'home' }
+}
+
+// ─── href → which dropdown (if any) the link should trigger ──────────
+function hrefToDropdown(href: string): DropdownType {
+  const { view } = hrefToView(href)
+  if (view === 'products') return 'products'
+  if (view === 'solutions') return 'solutions'
+  if (view === 'industries') return 'industries'
+  if (view === 'pricing') return 'pricing'
+  return null
+}
+
+// ─── Hardcoded fallback nav links (mirror Link Manager defaults) ────
+// Label uses 'Ecosystem' for the home entry so the no-override case
+// preserves the existing header look verbatim.
+const FALLBACK_NAV_LINKS: StoredNavLink[] = [
+  { id: 'nav_home', label: 'Ecosystem', href: '/', icon: 'globe', order: 0 },
+  { id: 'nav_products', label: 'Products', href: '/products', icon: 'boxes', order: 1 },
+  { id: 'nav_solutions', label: 'Solutions', href: '/solutions', icon: 'layers', order: 2 },
+  { id: 'nav_industries', label: 'Industries', href: '/industries', icon: 'building2', order: 3 },
+  { id: 'nav_pricing', label: 'Pricing', href: '/pricing', icon: 'tag', order: 4 },
+  { id: 'nav_resources', label: 'Resources', href: '/resources', icon: 'bookopen', order: 5 },
+  { id: 'nav_contact', label: 'Contact', href: '/contact', icon: 'mail', order: 6 },
+]
+
+// ─── Hardcoded fallback CTA links ────────────────────────────────────
+const FALLBACK_CTA_LINKS: StoredCtaLink[] = [
+  { id: 'cta_get_started', key: 'get_started', label: 'Get Started', href: '/pricing' },
+  { id: 'cta_explore_products', key: 'explore_products', label: 'Explore Products', href: '/products' },
+  { id: 'cta_contact_sales', key: 'contact_sales', label: 'Contact Sales', href: '/contact' },
+  { id: 'cta_become_partner', key: 'become_partner', label: 'Become a Partner', href: '/become-partner' },
+]
 
 /* ═══════════════════════════════════════════════════════════════
    DROPDOWN ITEM TYPE
@@ -1263,6 +1410,27 @@ function MobileMenu({
 }) {
   const [expandedSection, setExpandedSection] = useState<string | null>('products')
   const { activeErps, comingSoonErps } = useErpSystems()
+  const { get: getContent } = useContent()
+
+  // ─── CTA links (admin-managed) ────────────────────────────────────
+  // Used for the bottom "Explore Products" button. Falls back to the
+  // hardcoded label/href if the Link Manager hasn't been saved or the
+  // API is down.
+  const exploreCta = useMemo<StoredCtaLink | null>(() => {
+    const raw = getContent('cta', 'cta_links', '[]')
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        const found = parsed.find((c) => c && c.key === 'explore_products')
+        if (found && typeof found.label === 'string' && typeof found.href === 'string') {
+          return found
+        }
+      }
+    } catch {
+      /* malformed JSON → fall through to default */
+    }
+    return FALLBACK_CTA_LINKS.find((c) => c.key === 'explore_products') || null
+  }, [getContent])
 
   const sections = useMemo(() => [
     {
@@ -1468,9 +1636,16 @@ function MobileMenu({
               <Button
                 variant="outline"
                 className="w-full font-semibold rounded-xl h-10 border-border/60"
-                onClick={() => { onNavigate('products'); onClose() }}
+                onClick={() => {
+                  // Follow the admin-managed CTA href (defaults to
+                  // /products → view 'products'). Falls back to
+                  // 'products' if hrefToView can't parse the saved href.
+                  const target = exploreCta ? hrefToView(exploreCta.href) : { view: 'products' }
+                  onNavigate(target.view, target.slug)
+                  onClose()
+                }}
               >
-                Explore Products
+                {exploreCta?.label || 'Explore Products'}
               </Button>
             </div>
           </motion.div>
@@ -1487,6 +1662,7 @@ export function SiteHeader() {
   const { mobileMenuOpen, setMobileMenuOpen } = useAppStore()
   const { navigate: navigateToView, isActive } = useNavigate()
   const { getSetting } = useSiteSettings()
+  const { get: getContent } = useContent()
   const [openDropdown, setOpenDropdown] = useState<DropdownType>(null)
   const [scrolled, setScrolled] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
@@ -1494,6 +1670,29 @@ export function SiteHeader() {
 
   const showSearch = getSetting('header_show_search', 'true') === 'true'
   const showThemeToggle = getSetting('header_show_theme_toggle', 'true') === 'true'
+
+  /* ─── Link Manager — dynamic nav + CTA links ─────────────────────────
+     Pulls `nav_links` and `cta_links` JSON arrays from the public content
+     endpoint via the useContent singleton hook. On any failure (API down,
+     malformed JSON, empty override), falls back to FALLBACK_NAV_LINKS /
+     FALLBACK_CTA_LINKS so the header renders identically to the pre-wire
+     version. useMemo'd against the live `getContent` closure so admin
+     saves propagate on the next 60s cache refresh. */
+  const navLinks = useMemo<StoredNavLink[]>(() => {
+    const raw = getContent('navigation', 'nav_links', '[]')
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Sort by `order` if present, falling back to the natural array order.
+        return parsed
+          .filter((l) => l && typeof l.label === 'string' && typeof l.href === 'string')
+          .sort((a, b) => (typeof a.order === 'number' ? a.order : 0) - (typeof b.order === 'number' ? b.order : 0))
+      }
+    } catch {
+      /* malformed JSON → fall through to defaults */
+    }
+    return FALLBACK_NAV_LINKS
+  }, [getContent])
 
   /* Navigate helper */
   const navigate = useCallback(
@@ -1610,85 +1809,101 @@ export function SiteHeader() {
           </div>
 
           {/* ─── Desktop Navigation ─── */}
+          {/* Links are loaded dynamically from the admin Link Manager
+              (nav_links JSON array in SiteSetting). Falls back to
+              FALLBACK_NAV_LINKS on any failure. Each link is mapped to
+              the right NavLink variant — dropdown-wrapped for the four
+              mega-menu pages, ERP-styled for /erp/[slug] entries, plain
+              for everything else. */}
           <nav className="hidden lg:flex items-center gap-0.5 mx-auto">
-            {/* Ecosystem */}
-            <NavLink isActive={isActive('home')} onClick={() => navigate('home')}>
-              <Globe className="w-3.5 h-3.5 mr-1" />
-              Ecosystem
-            </NavLink>
+            {navLinks.map((link) => {
+              const { view, slug } = hrefToView(link.href)
+              const dropdownType = hrefToDropdown(link.href)
+              const hasDropdown = dropdownType !== null
 
-            {/* Products — Mega Menu */}
-            <div
-              onMouseEnter={() => handleDropdownEnter('products')}
-              onMouseLeave={handleDropdownLeave}
-            >
-              <NavLink
-                isActive={isActive('products') || isActive('erp-detail')}
-                onClick={() => navigate('products')}
-                hasDropdown
-                isOpen={openDropdown === 'products'}
-                badge={
+              // Active-state: products also lights up on erp-detail pages,
+              // industries on industry-detail pages.
+              let active = isActive(view)
+              if (view === 'products') active = active || isActive('erp-detail')
+              if (view === 'industries') active = active || isActive('industry-detail')
+
+              // Badge: "21" count on the Products entry (preserves the
+              // pre-wire look), ERP badge (LIVE/NEW) on /erp/[slug] entries.
+              let badgeNode: React.ReactNode = null
+              if (view === 'products') {
+                badgeNode = (
                   <span className="ml-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-[var(--gg-vermillion)]/15 to-[var(--gg-amber)]/15 text-[var(--gg-vermillion)] border border-[var(--gg-vermillion)]/20 leading-none">
-                    21
+                    {PRODUCTS_ITEMS.length}
                   </span>
+                )
+              } else if (view === 'erp-detail' && slug) {
+                const erp = PRODUCTS_ITEMS.find((p) => p.slug === slug)
+                if (erp?.badge) {
+                  badgeNode = (
+                    <span className="ml-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-[var(--gg-vermillion)]/15 to-[var(--gg-amber)]/15 text-[var(--gg-vermillion)] border border-[var(--gg-vermillion)]/20 leading-none">
+                      {erp.badge}
+                    </span>
+                  )
                 }
-              >
-                Products
-              </NavLink>
-            </div>
+              }
 
-            {/* Solutions */}
-            <div
-              onMouseEnter={() => handleDropdownEnter('solutions')}
-              onMouseLeave={handleDropdownLeave}
-            >
-              <NavLink
-                isActive={isActive('solutions')}
-                onClick={() => navigate('solutions')}
-                hasDropdown
-                isOpen={openDropdown === 'solutions'}
-              >
-                Solutions
-              </NavLink>
-            </div>
+              // Icon: render for the Ecosystem/home entry (matches the
+              // pre-wire header look) and for ERP product entries (use the
+              // ERP's own icon + color so a top-level /erp/apparelflow nav
+              // link looks consistent with the mega-menu tiles).
+              const isHome = view === 'home'
+              const isErp = view === 'erp-detail' && !!slug
+              const showIcon = isHome || isErp
+              const IconComp = isErp
+                ? (PRODUCTS_ITEMS.find((p) => p.slug === slug)?.icon || lookupIcon(link.icon))
+                : lookupIcon(link.icon)
+              const iconColor = isErp
+                ? erpColorHex(PRODUCTS_ITEMS.find((p) => p.slug === slug)?.color)
+                : undefined
 
-            {/* Industries */}
-            <div
-              onMouseEnter={() => handleDropdownEnter('industries')}
-              onMouseLeave={handleDropdownLeave}
-            >
-              <NavLink
-                isActive={isActive('industries') || isActive('industry-detail')}
-                onClick={() => navigate('industries')}
-                hasDropdown
-                isOpen={openDropdown === 'industries'}
-              >
-                Industries
-              </NavLink>
-            </div>
+              const inner = (
+                <>
+                  {showIcon && (
+                    <IconComp
+                      className="w-3.5 h-3.5 mr-1"
+                      style={iconColor ? { color: iconColor } : undefined}
+                    />
+                  )}
+                  {link.label}
+                </>
+              )
 
-            {/* Pricing */}
-            <div
-              onMouseEnter={() => handleDropdownEnter('pricing')}
-              onMouseLeave={handleDropdownLeave}
-            >
-              <NavLink
-                isActive={isActive('pricing')}
-                onClick={() => navigate('pricing')}
-                hasDropdown
-                isOpen={openDropdown === 'pricing'}
-              >
-                Pricing
-              </NavLink>
-            </div>
+              if (hasDropdown && dropdownType) {
+                return (
+                  <div
+                    key={link.id}
+                    onMouseEnter={() => handleDropdownEnter(dropdownType)}
+                    onMouseLeave={handleDropdownLeave}
+                  >
+                    <NavLink
+                      isActive={active}
+                      onClick={() => navigate(view, slug)}
+                      hasDropdown
+                      isOpen={openDropdown === dropdownType}
+                      badge={badgeNode}
+                    >
+                      {inner}
+                    </NavLink>
+                  </div>
+                )
+              }
 
-            {/* Simple Links */}
-            <NavLink isActive={isActive('resources')} onClick={() => navigate('resources')}>
-              Resources
-            </NavLink>
-            <NavLink isActive={isActive('contact')} onClick={() => navigate('contact')}>
-              Contact
-            </NavLink>
+              return (
+                <NavLink
+                  key={link.id}
+                  isActive={active}
+                  onClick={() => navigate(view, slug)}
+                  badge={badgeNode}
+                >
+                  {inner}
+                </NavLink>
+              )
+            })}
           </nav>
 
           {/* ─── Right Side Actions ─── */}

@@ -10,6 +10,7 @@ import {
   getErpIcon,
   getErpColor,
 } from '@/lib/erp-data'
+import { useContent } from '@/hooks/use-content'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -1048,11 +1049,86 @@ function TestimonialsCarousel({
 export function ErpDetailPage({ slug }: { slug: string }) {
   const { navigate } = useNavigate()
   const { activeErps } = useErpSystems()
+  // Pull admin-editable content overrides. Falls back to the hardcoded ERP_DETAILS
+  // values when no override exists (or when the public /api/content fetch fails).
+  // See /api/admin/content/erp/route.ts for the editable field schema.
+  const { get: getContent } = useContent()
   const [activeSection, setActiveSection] = useState('')
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
   const [integrationFilter, setIntegrationFilter] = useState('All')
 
-  const detail = getErpDetail(slug)
+  const rawDetail = getErpDetail(slug)
+
+  // ── Apply admin overrides on top of the hardcoded ERP_DETAILS shape ────────
+  // The public content API stores overrides under page='erp_<slug>' with the
+  // `erp_<slug>_` prefix stripped from the key, so `get('erp_pharmaflow',
+  // 'tagline', fallback)` returns the override (or the hardcoded fallback).
+  // We rebuild a fully-typed ErpDetailData-shaped object so the render path
+  // below stays unchanged — only the data source is swapped.
+  const detail = rawDetail
+    ? {
+        ...rawDetail,
+        tagline: getContent(`erp_${slug}`, 'tagline', rawDetail.tagline ?? ''),
+        heroDescription: getContent(
+          `erp_${slug}`,
+          'heroDescription',
+          rawDetail.heroDescription ?? ''
+        ),
+        pricing:
+          rawDetail.pricing !== undefined
+            ? getContent(`erp_${slug}`, 'pricing', rawDetail.pricing)
+            : rawDetail.pricing,
+        pkrMonthly:
+          rawDetail.pkrMonthly !== undefined
+            ? Number(
+                getContent(
+                  `erp_${slug}`,
+                  'pkrMonthly',
+                  String(rawDetail.pkrMonthly)
+                )
+              ) || rawDetail.pkrMonthly
+            : rawDetail.pkrMonthly,
+        stats: (rawDetail.stats ?? []).map((s, i) => ({
+          ...s,
+          label: getContent(
+            `erp_${slug}`,
+            `stat_${i}_label`,
+            s.label
+          ),
+          value: getContent(
+            `erp_${slug}`,
+            `stat_${i}_value`,
+            s.value
+          ),
+        })),
+        modules: (rawDetail.modules ?? []).map((m, i) => ({
+          ...m,
+          name: getContent(`erp_${slug}`, `module_${i}_name`, m.name),
+          description: getContent(
+            `erp_${slug}`,
+            `module_${i}_description`,
+            m.description
+          ),
+        })),
+        painPoints: (rawDetail.painPoints ?? []).map((p, i) => ({
+          ...p,
+          title: getContent(`erp_${slug}`, `painPoint_${i}_title`, p.title),
+          before: getContent(`erp_${slug}`, `painPoint_${i}_before`, p.before),
+          after: getContent(`erp_${slug}`, `painPoint_${i}_after`, p.after),
+        })),
+        workflow: (rawDetail.workflow ?? []).map((w, i) => ({
+          ...w,
+          step: getContent(`erp_${slug}`, `workflow_${i}_step`, w.step),
+          title: getContent(`erp_${slug}`, `workflow_${i}_title`, w.title),
+          description: getContent(
+            `erp_${slug}`,
+            `workflow_${i}_description`,
+            w.description
+          ),
+        })),
+      }
+    : rawDetail
+
   const colors = getErpColor(detail?.color || 'cyan')
   const erpIconComponent = detail ? getErpIcon(detail.icon) : Building2
   const relatedErps = activeErps.filter((e) => e.slug !== slug).slice(0, 6)
@@ -1090,7 +1166,7 @@ export function ErpDetailPage({ slug }: { slug: string }) {
         setLiveClients(json.clients)
 
         // Generate testimonials from real client data
-        const erpName = detail?.heroTitle || slug
+        const erpName = detail?.name || slug
         const quotes: Record<string, string[]> = {
           apparelflow: [
             `${erpName} transformed our operations. Real-time inventory tracking and production planning have completely eliminated the chaos we used to face.`,
@@ -1148,7 +1224,7 @@ export function ErpDetailPage({ slug }: { slug: string }) {
     }
     fetchClients()
     return () => { cancelled = true }
-  }, [slug, detail?.heroTitle])
+  }, [slug, detail?.name])
 
   // Use real testimonials from the database when available, otherwise fall back to static data
   const testimonials = liveTestimonials.length > 0 ? liveTestimonials : (detail?.testimonials ?? [])
@@ -2182,10 +2258,10 @@ export function ErpDetailPage({ slug }: { slug: string }) {
                 <span className="text-xs text-muted-foreground">Trusted By</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-extrabold mb-4 text-foreground">
-                Trusted by <span className="text-[var(--gg-vermillion)]">{liveClients.filter((c) => c.isActive).length}</span> {detail?.heroTitle || 'Businesses'}
+                Trusted by <span className="text-[var(--gg-vermillion)]">{liveClients.filter((c) => c.isActive).length}</span> {detail?.name || 'Businesses'}
               </h2>
               <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                Real companies running their operations on {detail?.heroTitle || slug} every day.
+                Real companies running their operations on {detail?.name || slug} every day.
               </p>
             </motion.div>
 

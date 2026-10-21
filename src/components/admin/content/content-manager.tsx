@@ -41,12 +41,15 @@ import {
   Navigation,
 } from 'lucide-react'
 import { LinkManager } from './link-manager'
+import { ErpContentEditor } from './erp-content-editor'
 
 // ─── Top-level view: which tab of the Content Manager is active ──────────────
-type ManagerView = 'content' | 'links'
+type ManagerView = 'content' | 'links' | 'erp'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface ContentBlock {
+// Exported so the ErpContentEditor (separate file) can reuse the same shape
+// and the shared ContentField sub-component.
+export interface ContentBlock {
   key: string
   value: string
   page: string
@@ -56,6 +59,7 @@ interface ContentBlock {
   description?: string
   saved?: boolean
   updatedAt?: string
+  group?: string
 }
 
 type ContentMap = Record<string, ContentBlock[]>
@@ -67,6 +71,11 @@ interface PageMeta {
   icon: typeof Home
   description: string
 }
+
+// Sentinel page name that triggers the ErpContentEditor sub-view. The
+// admin's left nav shows it as a 13th entry; when active the main area
+// renders <ErpContentEditor /> instead of the regular block grid.
+export const ERP_PRODUCTS_PAGE = '__erp_products__'
 
 const PAGE_CATALOG: PageMeta[] = [
   { page: 'Homepage', label: 'Homepage', icon: Home, description: 'Hero, stats, sections & footer copyright' },
@@ -81,6 +90,11 @@ const PAGE_CATALOG: PageMeta[] = [
   { page: 'Become Partner', label: 'Become Partner', icon: Handshake, description: 'Partner program copy' },
   { page: 'Reseller', label: 'Reseller', icon: Store, description: 'Reseller program copy' },
   { page: 'Footer', label: 'Legal / Footer', icon: FileText, description: 'Copyright, blurb & link heading' },
+  // ERP product pages — tagline, hero description, pricing, stats, modules,
+  // pain points, workflow. Clicking this entry switches the main area to
+  // <ErpContentEditor /> which lazily fetches ~1,200 ERP blocks from
+  // /api/admin/content/erp so opening the Content Manager stays fast.
+  { page: ERP_PRODUCTS_PAGE, label: 'ERP Products', icon: Boxes, description: 'Tagline, hero, pricing, stats, modules, pain points & workflow per ERP' },
 ]
 
 const PAGE_BY_KEY: Record<string, PageMeta> = Object.fromEntries(
@@ -404,6 +418,34 @@ export function ContentManager() {
       {/* ─── Page Content view ─── */}
       <div className={view === 'content' ? '' : 'hidden'}>
       {/* ─── Page Header ─── */}
+      {/* When the admin has picked "ERP Products" in the left sidebar, the
+          ERP editor renders its own header (with its own Reset/Save buttons
+          and ERP picker). Hide the regular Page Header buttons + search bar
+          to avoid duplicating controls. The page title is still shown. */}
+      {activePage === ERP_PRODUCTS_PAGE ? (
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground flex items-center gap-2.5">
+              <span
+                className="h-9 w-9 rounded-xl flex items-center justify-center"
+                style={{
+                  background:
+                    'linear-gradient(135deg, color-mix(in srgb, var(--gg-vermillion) 14%, transparent), color-mix(in srgb, var(--gg-amber) 8%, transparent))',
+                }}
+              >
+                <Boxes className="h-5 w-5" style={{ color: 'var(--gg-vermillion)' }} />
+              </span>
+              Content Manager
+            </h2>
+            <p className="text-muted-foreground mt-1.5 max-w-2xl text-sm">
+              Editing <strong className="text-foreground/80">ERP Products</strong> — pick an ERP
+              from the sub-nav below to edit its tagline, hero, pricing, stats, modules, pain
+              points &amp; workflow.
+            </p>
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground flex items-center gap-2.5">
@@ -487,6 +529,8 @@ export function ContentManager() {
           </button>
         )}
       </div>
+      </>
+      )}
 
       {/* ─── Body: sidebar + main area ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5 items-start">
@@ -574,6 +618,16 @@ export function ContentManager() {
         </Card>
 
         {/* ── Main Content Area ── */}
+        {/* When the admin picked "ERP Products" in the left sidebar, hand the
+            main area over to the ErpContentEditor — it has its own ERP picker,
+            search, per-block Save, per-ERP Reset and Save All. The left nav
+            stays mounted so the admin can switch back to any of the other
+            12 pages without resetting their ERP-picker state. */}
+        {activePage === ERP_PRODUCTS_PAGE ? (
+          <div className="min-w-0">
+            <ErpContentEditor />
+          </div>
+        ) : (
         <div className="space-y-5 min-w-0">
           <AnimatePresence mode="wait">
             {isSearching ? (
@@ -756,6 +810,7 @@ export function ContentManager() {
             </div>
           )}
         </div>
+        )}
       </div>
       </div>
       {/* ─── End Page Content view ─── */}
@@ -764,7 +819,10 @@ export function ContentManager() {
 }
 
 // ─── Single content field (Input or Textarea + Save button) ───────────────────
-interface ContentFieldProps {
+// Exported so the ErpContentEditor (separate file) can reuse the same UX
+// pattern (label + saved/unsaved badges + Save button with gradient when
+// dirty, muted when committed).
+export interface ContentFieldProps {
   block: ContentBlock
   localValue?: string
   saving: boolean
@@ -774,7 +832,7 @@ interface ContentFieldProps {
   pageLabel?: string
 }
 
-function ContentField({
+export function ContentField({
   block,
   localValue,
   saving,
